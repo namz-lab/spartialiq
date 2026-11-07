@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <!--
+      viewport-fit=cover lets the app paint into the notch / home-indicator
+      area; src/styles/responsive.css then pads chrome back off it with the
+      --ent-safe-* tokens. Without cover, env(safe-area-inset-*) always
+      resolves to 0 and the bottom navigation sits under the iOS home
+      indicator. No maximum-scale and no user-scalable=no: pinch zoom is a
+      WCAG 1.4.4 requirement, not a layout bug to suppress.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
+    <meta name="description" content="Vungu Rural District Council — spatial data, planning applications, and public records portal." />
+    <title>Vungu Spatial Data Portal</title>
+    <!--
+      One typeface family. Geist for everything; Fraunces only for ceremonial
+      display moments (home hero, about). Public Sans + JetBrains Mono serve
+      only the Citizen Services Portal (.cp-root); Playfair/DM Sans the
+      payment receipt. ALL faces are self-hosted from /fonts/webfonts — no
+      external font/CDN requests anywhere in the portal.
+    -->
+    <link href="/fonts/webfonts/fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

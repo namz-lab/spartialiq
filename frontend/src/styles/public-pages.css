@@ -1,0 +1,2007 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   VUNGU RDC — PUBLIC SITE
+   Home, About, Services, Contact, /council/:slug, and the shared
+   SiteHeader / SiteFooter.
+
+   RELATIONSHIP TO THE DESIGN SYSTEM
+   Everything here is derived from the `--ent-*` tokens in enterprise.css —
+   same accent, same neutrals, same radii, same easing. What differs is
+   density and ambition, and the difference is deliberate: the signed-in
+   consoles are a tool someone uses for six hours and must be quiet, while
+   these pages are the council's front door and have thirty seconds to
+   establish that this is a real institution that has its act together.
+
+   So: larger type, more air, real depth in the hero, and a motion layer.
+   No new colours, no gradients in the chrome, no decoration that is not
+   carrying information.
+
+   MOTION
+   The `.reveal` family at the bottom is driven by `v-reveal` (see
+   src/composables/reveal.ts) — the directive adds `.is-revealed` when an
+   element first crosses into view and CSS does the rest. Under
+   `prefers-reduced-motion` the directive marks everything revealed at mount,
+   and the media query at the very bottom neutralises the transitions, so
+   nothing is ever left invisible waiting for an animation that will not run.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Public-page scale. Named separately from --ent-* so widening the public
+     measure never reflows a table in the planner workspace. */
+  --pub-max:        1200px;
+  --pub-gutter:     clamp(1rem, 4vw, 2.5rem);
+  --pub-section-y:  clamp(3.5rem, 8vw, 6.5rem);
+  --pub-header-h:   68px;
+
+  --pub-r:          10px;
+  --pub-r-lg:       16px;
+
+  /* One ease for everything that moves. Strong arrival, no overshoot —
+     a council's chrome should settle, not bounce. */
+  --pub-ease:       cubic-bezier(0.22, 1, 0.36, 1);
+  --pub-ease-soft:  cubic-bezier(0.4, 0, 0.2, 1);
+  --pub-dur:        200ms;
+  --pub-dur-lg:     620ms;
+
+  /* Ink on the hero, which sits over the live map. */
+  --pub-ink:        #0d1826;
+  --pub-ink-2:      #3b4a5c;
+  --pub-ink-3:      #667588;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   PAGE SHELL
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.home-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--ent-surface);
+  color: var(--ent-text);
+  font-family: var(--ent-font);
+}
+
+.main-stage {
+  flex: 1;
+  width: 100%;
+}
+
+/* Keyboard users land here first. Visually hidden until focused. */
+.skip-link {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -120%);
+  z-index: 200;
+  padding: 0.6rem 1.1rem;
+  background: var(--ent-accent);
+  color: #fff;
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-semibold);
+  border-radius: 0 0 var(--ent-r) var(--ent-r);
+  transition: transform var(--pub-dur) var(--pub-ease);
+}
+.skip-link:focus-visible { transform: translate(-50%, 0); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   HEADER
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.home-header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: color-mix(in srgb, var(--ent-surface) 88%, transparent);
+  backdrop-filter: saturate(150%) blur(14px);
+  -webkit-backdrop-filter: saturate(150%) blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--pub-dur) var(--pub-ease),
+              box-shadow var(--pub-dur) var(--pub-ease),
+              background-color var(--pub-dur) var(--pub-ease);
+}
+
+/* The hairline only appears once the page has moved. At rest the header is
+   part of the hero; in motion it is a bar over content, and the separation
+   is what stops the two reading as one smeared surface. */
+.home-header.is-scrolled {
+  background: color-mix(in srgb, var(--ent-surface) 96%, transparent);
+  border-bottom-color: var(--ent-line);
+  box-shadow: var(--ent-e1);
+}
+
+.home-header-inner {
+  max-width: var(--pub-max);
+  margin: 0 auto;
+  padding: 0 var(--pub-gutter);
+  height: var(--pub-header-h);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.home-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-decoration: none;
+  color: inherit;
+  flex-shrink: 0;
+  border-radius: var(--ent-r);
+}
+
+.home-logo-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 7px;
+  background: var(--ent-accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: transform var(--pub-dur) var(--pub-ease);
+}
+.home-brand:hover .home-logo-icon { transform: rotate(-6deg) scale(1.06); }
+
+.home-brand-block { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+
+.home-brand-text {
+  font-size: 0.875rem;
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: -0.012em;
+  color: var(--ent-text);
+  white-space: nowrap;
+}
+
+.home-brand-sub {
+  font-size: var(--ent-fs-micro);
+  color: var(--ent-text-3);
+  white-space: nowrap;
+}
+
+.home-nav {
+  display: none;
+  align-items: center;
+  gap: 0.125rem;
+  margin-left: auto;
+}
+@media (min-width: 1024px) { .home-nav { display: flex; } }
+
+.home-nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--ent-fs-base);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text-2);
+  text-decoration: none;
+  border-radius: var(--ent-r);
+  cursor: pointer;
+  transition: color var(--pub-dur) var(--pub-ease),
+              background-color var(--pub-dur) var(--pub-ease);
+}
+.home-nav-link:hover { color: var(--ent-text); background: var(--ent-surface-2); }
+
+/* The active marker is a rule under the word, drawn from the centre out.
+   scaleX on a pseudo-element: no layout, no reflow of the nav. */
+.home-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.22rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ent-accent);
+  transform: scaleX(0);
+  transition: transform 260ms var(--pub-ease);
+}
+.home-nav-link.router-link-exact-active::after,
+.home-nav-link.is-active::after { transform: scaleX(1); }
+.home-nav-link.router-link-exact-active,
+.home-nav-link.is-active { color: var(--ent-text); }
+
+.home-nav-dropdown { position: relative; }
+
+.home-nav-trigger svg { transition: transform var(--pub-dur) var(--pub-ease); }
+.home-nav-trigger svg.is-flipped { transform: rotate(180deg); }
+
+.home-nav-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  min-width: 15rem;
+  padding: 0.35rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r-md);
+  box-shadow: var(--ent-e3);
+  display: flex;
+  flex-direction: column;
+  animation: pub-menu-in 180ms var(--pub-ease) both;
+}
+
+@keyframes pub-menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+.home-nav-menu a {
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--ent-r-sm);
+  font-size: var(--ent-fs-sm);
+  color: var(--ent-text-2);
+  text-decoration: none;
+  transition: background-color 120ms var(--pub-ease), color 120ms var(--pub-ease);
+}
+.home-nav-menu a:hover,
+.home-nav-menu a.router-link-active {
+  background: var(--ent-accent-soft);
+  color: var(--ent-accent);
+}
+
+.home-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+@media (min-width: 1024px) { .home-header-actions { margin-left: 1rem; } }
+
+.nav-cta {
+  padding: 0.44rem 0.85rem;
+  font-size: var(--ent-fs-sm);
+  white-space: nowrap;
+}
+/* Below 640px only the menu button remains — two CTAs and a hamburger do not
+   fit beside a two-line brand without the brand truncating to nothing, and
+   both CTAs are in the drawer anyway.
+   `.home-header-actions .nav-cta` rather than `.nav-cta`: the button rules
+   below set `display: inline-flex` at the same specificity and later in the
+   file, so a bare `.nav-cta { display: none }` lost and "Create account" was
+   rendered clipped off the right edge of a 390px screen. */
+@media (max-width: 639px) {
+  .home-header-actions .nav-cta { display: none; }
+}
+
+.home-menu-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r);
+  background: var(--ent-surface);
+  color: var(--ent-text-2);
+  cursor: pointer;
+  transition: background-color var(--pub-dur) var(--pub-ease),
+              border-color var(--pub-dur) var(--pub-ease);
+}
+.home-menu-btn:hover { background: var(--ent-surface-2); border-color: var(--ent-line-strong); }
+@media (min-width: 1024px) { .home-menu-btn { display: none; } }
+
+/* ── Mobile menu (inside UiSheet) ─────────────────────────────────────── */
+
+.site-menu { display: flex; flex-direction: column; gap: 0.35rem; padding-bottom: 1rem; }
+
+.site-menu-council {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-semibold);
+  color: var(--ent-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.site-menu-heading {
+  margin: 1.1rem 0 0.35rem;
+  font-size: var(--ent-fs-micro);
+  font-weight: var(--ent-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ent-text-3);
+}
+
+.site-menu-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.site-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 0.6rem;
+  border: 0;
+  border-radius: var(--ent-r);
+  background: none;
+  font: inherit;
+  font-size: var(--ent-fs-base);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 140ms var(--pub-ease);
+}
+.site-menu-item:hover, .site-menu-item:active { background: var(--ent-surface-2); }
+.site-menu-item--sub { font-weight: var(--ent-fw-normal); color: var(--ent-text-2); font-size: var(--ent-fs-sm); }
+.site-menu-item svg:first-child { color: var(--ent-text-3); flex-shrink: 0; }
+.site-menu-chev { margin-left: auto; color: var(--ent-text-3); flex-shrink: 0; }
+
+.site-menu-ctas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--ent-line);
+}
+.site-menu-cta { width: 100%; justify-content: center; padding: 0.7rem 1rem; }
+
+.council-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ent-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ent-success) 60%, transparent);
+  animation: pub-pulse 2.6s var(--pub-ease-soft) infinite;
+}
+
+@keyframes pub-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ent-success) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   BUTTONS — shared by every public page
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.hero-btn-primary,
+.hero-btn-secondary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.15rem;
+  border-radius: var(--ent-r);
+  font-size: var(--ent-fs-base);
+  font-weight: var(--ent-fw-semibold);
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: transform 180ms var(--pub-ease),
+              box-shadow 180ms var(--pub-ease),
+              background-color 140ms var(--pub-ease),
+              border-color 140ms var(--pub-ease);
+}
+
+.hero-btn-primary {
+  background: var(--ent-accent);
+  color: var(--ent-text-on-accent);
+  box-shadow: var(--ent-e1);
+}
+.hero-btn-primary:hover {
+  background: var(--ent-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--ent-e2);
+}
+
+.hero-btn-secondary {
+  background: var(--ent-surface);
+  color: var(--ent-text);
+  border-color: var(--ent-line-strong);
+}
+.hero-btn-secondary:hover {
+  background: var(--ent-surface-2);
+  border-color: var(--ent-text-3);
+  transform: translateY(-1px);
+}
+
+.hero-btn-lg { padding: 0.8rem 1.5rem; font-size: var(--ent-fs-md); }
+.btn-sm { padding: 0.42rem 0.8rem; font-size: var(--ent-fs-sm); }
+
+.hero-btn-primary.is-disabled,
+.hero-btn-secondary.is-disabled,
+.hero-btn-primary:disabled,
+.hero-btn-secondary:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   HERO
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.hero {
+  --px: 50%;
+  --py: 40%;
+  --scroll-depth: 0;
+  position: relative;
+  isolation: isolate;
+  min-height: min(92vh, 860px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(3rem, 9vh, 6rem) var(--pub-gutter) clamp(4rem, 10vh, 7rem);
+  overflow: hidden;
+  background: var(--ent-surface);
+}
+
+/* The live map. It drifts under the copy; the scrim below guarantees the
+   contrast the copy needs regardless of what the camera is over. */
+.hero-backdrop { position: absolute; inset: 0; z-index: -2; }
+
+.district-backdrop-map {
+  opacity: 0;
+  transition: opacity 600ms var(--pub-ease-soft);
+}
+.district-backdrop-map.is-painted { opacity: 1; }
+
+/* Everything below is backdrop-only. Scoped to `.is-backdrop` because the
+   same component draws the interactive panel map, and a CSS transform on a
+   MapLibre container scales the canvas past its frame and throws every
+   pointer event off its true coordinate — a drag or click lands on the
+   wrong spot. The panel map gets none of it. */
+.is-backdrop .district-backdrop-map {
+  /* Desaturated, not greyed: the cartography's own hierarchy (water, roads,
+     land use) still has to read as a map rather than as noise. */
+  filter: saturate(0.8) contrast(0.97);
+  transition-duration: 1400ms;
+  /* Parallax: the map falls away more slowly than the page scrolls, which is
+     what reads as distance. translate3d keeps it on the compositor. */
+  transform: translate3d(0, calc(var(--scroll-depth, 0) * 40px), 0) scale(1.04);
+  will-change: transform, opacity;
+}
+.is-backdrop .district-backdrop-map.is-painted { opacity: 0.85; }
+
+/* Three layers, each doing one job:
+   1. the pointer light, which follows the cursor;
+   2. a HORIZONTAL wash, heavy on the left where the headline sits and
+      clearing to the right so the map is actually legible in the space the
+      copy does not occupy — this is what stops the right half reading as
+      an empty white panel;
+   3. a vertical fade into the next section so the hero ends rather than
+      being cut off.
+   The wash is the contrast guarantee for the hero copy: the map underneath
+   is not a fixed colour, so the text cannot rely on it. */
+.district-backdrop-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 60% at var(--px, 50%) var(--py, 40%),
+      color-mix(in srgb, var(--ent-accent) 12%, transparent) 0%,
+      transparent 62%),
+    linear-gradient(100deg,
+      var(--ent-surface) 0%,
+      color-mix(in srgb, var(--ent-surface) 94%, transparent) 26%,
+      color-mix(in srgb, var(--ent-surface) 62%, transparent) 52%,
+      color-mix(in srgb, var(--ent-surface) 34%, transparent) 100%),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--ent-surface) 55%, transparent) 0%,
+      transparent 28%,
+      transparent 62%,
+      color-mix(in srgb, var(--ent-surface) 88%, transparent) 88%,
+      var(--ent-surface) 100%);
+  transition: background 400ms var(--pub-ease-soft);
+}
+
+/* On a phone the copy runs the full width, so the horizontal wash would
+   put the headline over bare map. Flat opaque wash instead. */
+@media (max-width: 767px) {
+  .district-backdrop-scrim {
+    background:
+      linear-gradient(180deg,
+        color-mix(in srgb, var(--ent-surface) 86%, transparent) 0%,
+        color-mix(in srgb, var(--ent-surface) 76%, transparent) 58%,
+        var(--ent-surface) 100%);
+  }
+}
+
+/* The hero once carried a faint 64px survey grid over the map, on the theory
+   that it read as a plan sheet. It did not earn its place, and on a MAP it is
+   worse than merely decorative: a graticule whose cell is a fixed number of
+   screen pixels corresponds to no distance on the ground, so it implies a
+   measurement it cannot make, and it does so on top of a real basemap that
+   already has its own structure. Removed rather than tuned. */
+
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: var(--pub-max);
+  margin: 0 auto;
+  /* The copy rises slightly slower than the page falls — the counterpart to
+     the backdrop's parallax, and what makes the two read as separate planes. */
+  transform: translate3d(0, calc(var(--scroll-depth, 0) * -18px), 0);
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+  padding: 0.35rem 0.8rem 0.35rem 0.6rem;
+  background: color-mix(in srgb, var(--ent-surface) 80%, transparent);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r-pill);
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ent-text-2);
+  backdrop-filter: blur(6px);
+}
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(2.6rem, 8.5vw, 5.25rem);
+  font-weight: var(--ent-fw-bold);
+  line-height: 0.98;
+  letter-spacing: -0.038em;
+  color: var(--pub-ink);
+}
+
+/* Each line is its own clipping window so the reveal wipes up from the
+   baseline rather than fading a whole block. */
+.hero-line { display: block; }
+
+.hero-motto {
+  margin: 1rem 0 0;
+  font-size: clamp(1.05rem, 2.5vw, 1.45rem);
+  font-weight: var(--ent-fw-medium);
+  font-style: italic;
+  letter-spacing: -0.01em;
+  color: var(--ent-accent);
+}
+
+.hero-lede {
+  margin: 1.35rem 0 0;
+  max-width: 44ch;
+  font-size: clamp(1rem, 1.6vw, 1.125rem);
+  line-height: 1.6;
+  color: var(--pub-ink-2);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.hero-visitor-note {
+  margin: 1.1rem 0 0;
+  font-size: var(--ent-fs-sm);
+  color: var(--pub-ink-3);
+}
+.hero-visitor-note a { color: var(--ent-accent); font-weight: var(--ent-fw-medium); }
+
+.hero-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(1.25rem, 4vw, 3rem);
+  margin: clamp(2.5rem, 6vh, 4rem) 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--ent-line);
+  max-width: 46rem;
+}
+
+.hero-stat { margin: 0; }
+
+.hero-stat-label {
+  margin: 0;
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--pub-ink-3);
+  order: 2;
+}
+
+.hero-stat-value {
+  margin: 0 0 0.15rem;
+  font-size: clamp(1.5rem, 3.2vw, 2.1rem);
+  font-weight: var(--ent-fw-bold);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--pub-ink);
+  font-variant-numeric: tabular-nums;
+}
+.hero-stat { display: flex; flex-direction: column; }
+
+.hero-scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 1.5rem;
+  translate: -50% 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--ent-line-strong);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ent-surface) 85%, transparent);
+  color: var(--ent-text-2);
+  backdrop-filter: blur(6px);
+  opacity: calc(1 - var(--scroll-depth, 0) * 2.2);
+  pointer-events: none;
+  animation: pub-cue 2.4s var(--pub-ease-soft) infinite;
+}
+@media (min-width: 768px) { .hero-scroll-cue { pointer-events: auto; } }
+
+@keyframes pub-cue {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(5px); }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   SECTIONS
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.section { padding: var(--pub-section-y) var(--pub-gutter); }
+.section-inner { max-width: var(--pub-max); margin: 0 auto; }
+
+.section--register { background: var(--ent-canvas); border-block: 1px solid var(--ent-line); }
+.section--services { background: var(--ent-surface); }
+.section--map      { background: var(--ent-canvas); border-block: 1px solid var(--ent-line); }
+.section--depts    { background: var(--ent-surface); }
+.section--gov      { background: var(--ent-canvas); border-top: 1px solid var(--ent-line); }
+
+/* The one dark surface on the site. It marks the investment pitch as
+   addressed to a different reader than the rest of the page, which is
+   cheaper than saying so. */
+.section--invest {
+  background: #101b2b;
+  color: #e6ecf4;
+}
+
+.section-head { max-width: 46rem; margin-bottom: clamp(2rem, 5vw, 3.25rem); }
+.section-head--light .ds-heading { color: #f3f7fb; }
+.section-head--light .ds-subtext { color: #a9bacd; }
+.section-head--light .ds-eyebrow { color: #7fb0e8; }
+
+.ds-eyebrow {
+  margin: 0 0 0.6rem;
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ent-accent);
+}
+
+.ds-heading {
+  margin: 0;
+  font-size: clamp(1.7rem, 4vw, 2.6rem);
+  font-weight: var(--ent-fw-bold);
+  line-height: 1.12;
+  letter-spacing: -0.028em;
+  color: var(--ent-text);
+}
+
+.ds-subtext {
+  margin: 0.85rem 0 0;
+  font-size: clamp(0.95rem, 1.4vw, 1.0625rem);
+  line-height: 1.62;
+  color: var(--ent-text-2);
+}
+
+/* Kept for pages still using the older header wrapper. */
+.section-heading, .datasets-header { max-width: 46rem; margin-bottom: clamp(2rem, 5vw, 3.25rem); }
+.section-heading.text-center, .datasets-header.text-center { margin-inline: auto; text-align: center; }
+/* Alternate on adjacency, not on :nth-of-type. The page hero is also a
+   <section>, so `nth-of-type(even)` made the FIRST content section on every
+   page the tinted one — running it straight into the tinted hero above it
+   with no edge between them. */
+.datasets-section { padding: var(--pub-section-y) var(--pub-gutter); background: var(--ent-surface); }
+.datasets-section + .datasets-section { background: var(--ent-canvas); border-block: 1px solid var(--ent-line); }
+.datasets-section + .datasets-section + .datasets-section { background: var(--ent-surface); border-block: 0; }
+.datasets-inner { max-width: var(--pub-max); margin: 0 auto; }
+
+/* ── Page hero (About / Services / Council / Contact / Legal) ─────────── */
+
+.page-hero {
+  padding: clamp(3rem, 8vw, 5rem) var(--pub-gutter) clamp(2rem, 5vw, 3.25rem);
+  background:
+    radial-gradient(90% 140% at 15% 0%,
+      color-mix(in srgb, var(--ent-accent) 7%, transparent) 0%, transparent 62%),
+    var(--ent-canvas);
+  border-bottom: 1px solid var(--ent-line);
+}
+.page-hero-inner { max-width: var(--pub-max); margin: 0 auto; }
+.page-hero-inner .ds-subtext { max-width: 56ch; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   CARD GRID — Services, datasets, council pages
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.ds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
+  gap: 1.1rem;
+}
+
+.dataset-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.4rem 1.4rem 1.15rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  text-decoration: none;
+  color: inherit;
+  overflow: hidden;
+  transition: transform 260ms var(--pub-ease),
+              box-shadow 260ms var(--pub-ease),
+              border-color 200ms var(--pub-ease);
+}
+
+.dataset-card.ds-card-link:hover {
+  transform: translateY(-3px);
+  border-color: var(--ent-accent-line);
+  box-shadow: var(--ent-e3);
+}
+
+/* A rule that draws itself across the top edge on hover. transform-origin
+   left so it reads as an underline being written, not a bar appearing. */
+.ds-card-accent {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: block;
+  height: 3px;
+  background: var(--ent-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 340ms var(--pub-ease);
+}
+.dataset-card:hover .ds-card-accent,
+.dataset-card:focus-visible .ds-card-accent { transform: scaleX(1); }
+
+.ds-card-body { display: flex; gap: 0.95rem; align-items: flex-start; }
+
+.ds-card-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: var(--ent-r-md);
+  background: var(--ent-accent-soft);
+  color: var(--ent-accent);
+  transition: transform 300ms var(--pub-ease), background-color 200ms var(--pub-ease);
+}
+.dataset-card:hover .ds-card-icon { transform: scale(1.07) rotate(-4deg); }
+
+.ds-card-text { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+
+.ds-card-title {
+  display: block;
+  margin: 0;
+  font-size: var(--ent-fs-lg);
+  font-weight: var(--ent-fw-semibold);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--ent-text);
+}
+
+.ds-card-desc {
+  display: block;
+  margin: 0;
+  font-size: var(--ent-fs-sm);
+  line-height: 1.55;
+  color: var(--ent-text-2);
+}
+
+.ds-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--ent-line);
+}
+
+.ds-card-meta {
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ent-text-3);
+}
+
+.ds-card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-semibold);
+  color: var(--ent-accent);
+}
+.ds-card-cta svg { transition: transform 240ms var(--pub-ease); }
+.dataset-card:hover .ds-card-cta svg { transform: translateX(3px); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   LIVE FIGURES
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Four columns, not `auto-fit`. There are eight figures and auto-fit packs
+   six onto the first row at this width, leaving a two-tile row beside an
+   empty grey block — a hole in the middle of the council's own numbers.
+   4 and 2 both divide 8. */
+.figure-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--ent-line);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  overflow: hidden;
+}
+@media (min-width: 820px) {
+  .figure-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* A hairline grid rather than eight floating cards: these are readings from
+   one table and they should look like one table, not eight announcements. */
+.figure-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1.35rem 1.25rem;
+  background: var(--ent-surface);
+  transition: background-color 220ms var(--pub-ease);
+}
+.figure-tile:hover { background: var(--ent-surface-2); }
+
+.figure-tile-value {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.4vw, 2.15rem);
+  font-weight: var(--ent-fw-bold);
+  line-height: 1;
+  letter-spacing: -0.032em;
+  color: var(--ent-text);
+  font-variant-numeric: tabular-nums;
+  /* The number changes width as it counts; without this the label under it
+     shifts sixty times a second. */
+  min-height: 1em;
+}
+
+.figure-tile-unit {
+  margin-left: 0.22em;
+  font-size: 0.5em;
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text-3);
+  letter-spacing: 0;
+}
+
+.figure-tile-label {
+  margin: 0.35rem 0 0;
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-semibold);
+  color: var(--ent-text);
+}
+
+.figure-tile-source {
+  margin: 0;
+  font-size: var(--ent-fs-xs);
+  line-height: 1.45;
+  color: var(--ent-text-3);
+}
+
+.figure-skeleton {
+  display: inline-block;
+  width: 4.5ch;
+  height: 0.8em;
+  border-radius: var(--ent-r-sm);
+  background: linear-gradient(90deg,
+    var(--ent-surface-2) 25%, var(--ent-surface-sunken) 50%, var(--ent-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: pub-shimmer 1.4s linear infinite;
+}
+.figure-skeleton--sm { width: 3.5ch; }
+
+@keyframes pub-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.register-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  background: var(--ent-warning-soft);
+  border: 1px solid var(--ent-tone-warning-line);
+  border-radius: var(--pub-r);
+  color: var(--ent-warning);
+}
+.register-error p { margin: 0; flex: 1; min-width: 14rem; font-size: var(--ent-fs-sm); }
+.register-error svg { flex-shrink: 0; }
+
+.register-asof {
+  margin: 1.25rem 0 0;
+  font-size: var(--ent-fs-xs);
+  color: var(--ent-text-3);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   MAP SECTION
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  gap: 1.25rem;
+  /* stretch, not start: with no search typed the rail is a third the height
+     of the map and `start` leaves a column of empty grey beneath it. */
+  align-items: stretch;
+}
+@media (max-width: 899px) { .map-layout { grid-template-columns: 1fr; } }
+
+.map-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.15rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+}
+
+.map-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.map-search-icon {
+  position: absolute;
+  left: 0.7rem;
+  display: grid;
+  place-items: center;
+  color: var(--ent-text-3);
+  pointer-events: none;
+}
+
+.map-search-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 2.25rem 0 2.3rem;
+  font: inherit;
+  font-size: var(--ent-fs-base);
+  color: var(--ent-text);
+  background: var(--ent-surface-2);
+  border: 1px solid var(--ent-line-strong);
+  border-radius: var(--ent-r);
+  transition: border-color 160ms var(--pub-ease), box-shadow 160ms var(--pub-ease),
+              background-color 160ms var(--pub-ease);
+}
+.map-search-input::placeholder { color: var(--ent-text-3); }
+.map-search-input:focus {
+  outline: none;
+  background: var(--ent-surface);
+  border-color: var(--ent-accent);
+  box-shadow: var(--ent-focus-ring);
+}
+/* The browser's own clear affordance duplicates ours and is unstyleable. */
+.map-search-input::-webkit-search-cancel-button { display: none; }
+
+.map-search-clear {
+  position: absolute;
+  right: 0.45rem;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--ent-r-sm);
+  background: none;
+  color: var(--ent-text-3);
+  cursor: pointer;
+  transition: background-color 140ms var(--pub-ease), color 140ms var(--pub-ease);
+}
+.map-search-clear:hover { background: var(--ent-surface-sunken); color: var(--ent-text); }
+
+.map-note {
+  margin: 0;
+  font-size: var(--ent-fs-sm);
+  line-height: 1.5;
+  color: var(--ent-text-2);
+}
+
+.map-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+
+.map-examples-label {
+  font-size: var(--ent-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ent-text-3);
+}
+
+.map-chip {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--ent-line-strong);
+  border-radius: var(--ent-r-pill);
+  background: var(--ent-surface);
+  font: inherit;
+  font-size: var(--ent-fs-xs);
+  color: var(--ent-text-2);
+  cursor: pointer;
+  transition: background-color 140ms var(--pub-ease), color 140ms var(--pub-ease),
+              border-color 140ms var(--pub-ease), transform 140ms var(--pub-ease);
+}
+.map-chip:hover {
+  background: var(--ent-accent-soft);
+  border-color: var(--ent-accent-line);
+  color: var(--ent-accent);
+  transform: translateY(-1px);
+}
+
+.map-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 20rem;
+  overflow-y: auto;
+  border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r);
+}
+
+.map-hit {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.7rem;
+  border: 0;
+  border-bottom: 1px solid var(--ent-line);
+  background: var(--ent-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 130ms var(--pub-ease);
+}
+.map-hits li:last-child .map-hit { border-bottom: 0; }
+.map-hit:hover { background: var(--ent-accent-soft); }
+
+.map-hit-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ent-text-3);
+}
+/* The gazetteer's own type vocabulary, so a ward and a farm are told apart
+   at a glance. Colours come from the semantic set, not a new palette. */
+.map-hit-dot[data-type='ward']   { background: var(--ent-accent); }
+.map-hit-dot[data-type='place']  { background: var(--ent-success); }
+.map-hit-dot[data-type='farm'],
+.map-hit-dot[data-type='parcel'] { background: var(--ent-warning); }
+.map-hit-dot[data-type='stand']  { background: var(--ent-danger); }
+.map-hit-dot[data-type='road']   { background: var(--ent-text-2); }
+.map-hit-dot[data-type='zone']   { background: #6b4fa8; }
+
+.map-hit-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.map-hit-label {
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-hit-sub { font-size: var(--ent-fs-xs); color: var(--ent-text-3); }
+
+.map-hit-flag {
+  flex-shrink: 0;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--ent-r-pill);
+  background: var(--ent-tone-neutral-bg);
+  font-size: var(--ent-fs-micro);
+  color: var(--ent-tone-neutral-fg);
+}
+
+.map-layers { border-top: 1px solid var(--ent-line); padding-top: 0.85rem; }
+
+.map-layers-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  margin-left: -0.5rem;
+  border: 0;
+  border-radius: var(--ent-r-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text-2);
+  cursor: pointer;
+}
+.map-layers-toggle:hover { background: var(--ent-surface-2); color: var(--ent-text); }
+.map-layers-toggle svg.is-flipped { transform: rotate(180deg); }
+.map-layers-toggle svg:last-child { transition: transform var(--pub-dur) var(--pub-ease); }
+
+.map-layers-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.65rem; }
+
+.map-layer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid var(--ent-line-strong);
+  border-radius: var(--ent-r-pill);
+  font-size: var(--ent-fs-xs);
+  color: var(--ent-text-2);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 140ms var(--pub-ease), border-color 140ms var(--pub-ease);
+}
+.map-layer-chip:has(input:checked) {
+  background: var(--ent-accent-soft);
+  border-color: var(--ent-accent-line);
+  color: var(--ent-accent);
+}
+.map-layer-chip input { accent-color: var(--ent-accent); width: 13px; height: 13px; margin: 0; }
+
+.map-rail-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  /* Sits on the floor of the rail, so the rail reads as a panel with a
+     footer rather than as a short card with dead space under it. */
+  margin-top: auto;
+  padding-top: 0.5rem;
+  gap: 0.35rem;
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-semibold);
+  color: var(--ent-accent);
+  text-decoration: none;
+}
+.map-rail-link svg { transition: transform 200ms var(--pub-ease); }
+.map-rail-link:hover svg { transform: translateX(3px); }
+
+.map-frame {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  overflow: hidden;
+  background: var(--ent-surface);
+  box-shadow: var(--ent-e2);
+}
+
+.map-frame-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--ent-surface-2);
+  border-bottom: 1px solid var(--ent-line);
+}
+
+.map-frame-label {
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-frame-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  font-size: var(--ent-fs-micro);
+  font-weight: var(--ent-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ent-success);
+}
+
+.map-frame-body { height: clamp(24rem, 58vh, 34rem); position: relative; background: #f5f3ee; }
+
+.map-frame-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: var(--ent-fs-sm);
+  color: var(--ent-text-3);
+}
+.map-frame-body > * { position: absolute; inset: 0; }
+
+/* The map canvas. In panel mode it sits flush in its frame; in backdrop mode
+   `.district-map-root.is-backdrop` is positioned by `.hero-backdrop`. */
+.district-map-root { position: absolute; inset: 0; }
+.district-backdrop-map { position: absolute; inset: 0; }
+.district-map-root.is-backdrop .district-backdrop-map { inset: -6%; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   DEPARTMENTS
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.dept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
+  gap: 0.9rem;
+}
+
+.dept-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1.1rem 1.15rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 240ms var(--pub-ease), border-color 180ms var(--pub-ease),
+              box-shadow 240ms var(--pub-ease);
+}
+.dept-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--ent-accent-line);
+  box-shadow: var(--ent-e2);
+}
+
+.dept-icon {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  flex-shrink: 0;
+  border-radius: var(--ent-r);
+  background: var(--ent-surface-sunken);
+  color: var(--ent-text-2);
+  transition: background-color 200ms var(--pub-ease), color 200ms var(--pub-ease);
+}
+.dept-card:hover .dept-icon { background: var(--ent-accent-soft); color: var(--ent-accent); }
+
+.dept-text { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1; }
+.dept-name { font-size: var(--ent-fs-base); font-weight: var(--ent-fw-semibold); color: var(--ent-text); }
+.dept-desc { font-size: var(--ent-fs-sm); line-height: 1.5; color: var(--ent-text-2); }
+
+.dept-arrow {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--ent-text-3);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 200ms var(--pub-ease), transform 200ms var(--pub-ease);
+}
+.dept-card:hover .dept-arrow { opacity: 1; transform: none; color: var(--ent-accent); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   INVESTMENT (dark section)
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Three columns, not auto-fit. There are five sectors; auto-fit fits four
+   across at this measure and leaves Tourism alone on a row of its own,
+   reading as an afterthought. 3 + 2 is balanced. */
+.invest-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 640px)  { .invest-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 980px)  { .invest-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.invest-card {
+  padding: 1.5rem 1.35rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--pub-r);
+  transition: transform 260ms var(--pub-ease), background-color 220ms var(--pub-ease),
+              border-color 220ms var(--pub-ease);
+}
+.invest-card:hover {
+  transform: translateY(-3px);
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(127, 176, 232, 0.4);
+}
+
+.invest-icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--ent-r-md);
+  background: rgba(127, 176, 232, 0.16);
+  color: #9cc4ee;
+  margin-bottom: 0.9rem;
+}
+
+.invest-title {
+  margin: 0 0 0.4rem;
+  font-size: var(--ent-fs-lg);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: -0.015em;
+  color: #f3f7fb;
+}
+
+.invest-desc { margin: 0; font-size: var(--ent-fs-sm); line-height: 1.6; color: #a9bacd; }
+
+.invest-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.invest-cta p { margin: 0; font-size: var(--ent-fs-md); color: #cfdbe8; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   GOVERNANCE + CONTACT
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.gov-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: start;
+}
+@media (max-width: 899px) { .gov-layout { grid-template-columns: 1fr; } }
+
+.gov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1.25rem 1rem;
+  margin: 2rem 0 0;
+}
+
+.gov-stat { margin: 0; }
+.gov-stat-num {
+  margin: 0;
+  font-size: 1.85rem;
+  font-weight: var(--ent-fw-bold);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ent-accent);
+  font-variant-numeric: tabular-nums;
+}
+.gov-stat-label { margin: 0.3rem 0 0; font-size: var(--ent-fs-sm); line-height: 1.4; color: var(--ent-text-2); }
+
+.gov-links { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 2rem; }
+
+.gov-contact {
+  padding: 1.6rem 1.5rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  box-shadow: var(--ent-e1);
+}
+
+.gov-contact-title {
+  margin: 0 0 1.15rem;
+  font-size: var(--ent-fs-lg);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: -0.015em;
+  color: var(--ent-text);
+}
+
+.gov-contact-list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; flex-direction: column; gap: 1rem; }
+.gov-contact-list li { display: flex; gap: 0.7rem; align-items: flex-start; }
+.gov-contact-list li > svg { flex-shrink: 0; margin-top: 0.15rem; color: var(--ent-accent); }
+.gov-contact-list li > span { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+
+.gov-contact-label {
+  font-size: var(--ent-fs-micro);
+  font-weight: var(--ent-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ent-text-3);
+}
+.gov-contact-list a, .gov-contact-list span > span:last-child {
+  font-size: var(--ent-fs-sm);
+  line-height: 1.5;
+  color: var(--ent-text);
+}
+.gov-contact-list a { text-decoration: none; }
+.gov-contact-list a:hover { color: var(--ent-accent); text-decoration: underline; }
+.gov-contact-cta { width: 100%; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   CONTACT PAGE
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.contact-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: start;
+}
+@media (max-width: 899px) { .contact-layout { grid-template-columns: 1fr; } }
+
+.contact-list { list-style: none; margin: 1.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 1.25rem; }
+.contact-list li { display: flex; gap: 0.85rem; align-items: flex-start; }
+.contact-list li > span:last-child { display: flex; flex-direction: column; gap: 0.2rem; }
+
+.contact-ico {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex-shrink: 0;
+  border-radius: var(--ent-r);
+  background: var(--ent-accent-soft);
+  color: var(--ent-accent);
+}
+
+.contact-label {
+  font-size: var(--ent-fs-micro);
+  font-weight: var(--ent-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ent-text-3);
+}
+.contact-value { font-size: var(--ent-fs-base); color: var(--ent-text); text-decoration: none; }
+a.contact-value:hover { color: var(--ent-accent); text-decoration: underline; }
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.6rem 1.5rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  box-shadow: var(--ent-e1);
+}
+
+.contact-field { display: flex; flex-direction: column; gap: 0.35rem; }
+
+.contact-field-label {
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text);
+}
+
+.contact-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+  font-size: var(--ent-fs-base);
+  color: var(--ent-text);
+  background: var(--ent-surface-2);
+  border: 1px solid var(--ent-line-strong);
+  border-radius: var(--ent-r);
+  transition: border-color 160ms var(--pub-ease), box-shadow 160ms var(--pub-ease),
+              background-color 160ms var(--pub-ease);
+}
+.contact-input::placeholder { color: var(--ent-text-3); }
+.contact-input:focus {
+  outline: none;
+  background: var(--ent-surface);
+  border-color: var(--ent-accent);
+  box-shadow: var(--ent-focus-ring);
+}
+.contact-input[aria-invalid='true'] {
+  border-color: var(--ent-danger);
+  background: var(--ent-danger-soft);
+}
+
+.contact-error {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: var(--ent-fs-xs);
+  color: var(--ent-danger);
+}
+
+.contact-hint { margin: 0; font-size: var(--ent-fs-xs); color: var(--ent-text-3); }
+
+.contact-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--ent-r);
+  font-size: var(--ent-fs-sm);
+  line-height: 1.5;
+  background: var(--ent-accent-soft);
+  border: 1px solid var(--ent-accent-line);
+  color: var(--ent-accent);
+}
+.contact-status svg { flex-shrink: 0; margin-top: 0.1rem; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   COUNCIL PAGE BLOCKS (/council/:slug)
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.council-block-head { max-width: 46rem; margin-bottom: 1.5rem; }
+.council-block-title {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: -0.02em;
+  color: var(--ent-text);
+}
+
+.council-prose { max-width: 68ch; font-size: var(--ent-fs-md); line-height: 1.7; color: var(--ent-text-2); }
+.council-prose p { margin: 0 0 1rem; }
+.council-prose p:last-child { margin-bottom: 0; }
+.council-prose strong { color: var(--ent-text); font-weight: var(--ent-fw-semibold); }
+
+.council-list { max-width: 68ch; margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.council-list li { font-size: var(--ent-fs-md); line-height: 1.6; color: var(--ent-text-2); }
+.council-list--numbered { list-style: decimal; }
+
+.council-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  -webkit-overflow-scrolling: touch;
+}
+.council-table { width: 100%; border-collapse: collapse; font-size: var(--ent-fs-sm); }
+.council-table th, .council-table td {
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--ent-line);
+}
+.council-table th {
+  background: var(--ent-surface-2);
+  font-weight: var(--ent-fw-semibold);
+  color: var(--ent-text);
+  white-space: nowrap;
+}
+.council-table td { color: var(--ent-text-2); }
+.council-table tr:last-child td { border-bottom: 0; }
+
+.council-staff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  gap: 0.9rem;
+}
+
+.council-staff-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+}
+
+.council-staff-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--ent-accent-soft);
+  color: var(--ent-accent);
+  font-size: var(--ent-fs-base);
+  font-weight: var(--ent-fw-semibold);
+}
+.council-staff-name { display: block; font-size: var(--ent-fs-base); font-weight: var(--ent-fw-semibold); color: var(--ent-text); }
+.council-staff-role { display: block; font-size: var(--ent-fs-sm); color: var(--ent-text-2); }
+
+.council-docs { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.council-doc {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--pub-r);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 180ms var(--pub-ease), transform 180ms var(--pub-ease),
+              box-shadow 180ms var(--pub-ease);
+}
+.council-doc:hover {
+  border-color: var(--ent-accent-line);
+  transform: translateX(2px);
+  box-shadow: var(--ent-e1);
+}
+
+.council-doc-icon {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  flex-shrink: 0;
+  border-radius: var(--ent-r);
+  background: var(--ent-surface-sunken);
+  color: var(--ent-text-2);
+}
+.council-doc-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1; }
+.council-doc-name { font-size: var(--ent-fs-base); font-weight: var(--ent-fw-medium); color: var(--ent-text); }
+.council-doc-meta { font-size: var(--ent-fs-xs); color: var(--ent-text-3); }
+.council-doc-dl { flex-shrink: 0; font-size: var(--ent-fs-sm); font-weight: var(--ent-fw-semibold); color: var(--ent-accent); }
+
+.council-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: var(--ent-accent-soft);
+  border: 1px solid var(--ent-accent-line);
+  border-radius: var(--pub-r);
+}
+
+/* Published profile figures on a council page (`CouncilBlocks` "stats"
+   block). These are the council's OWN published numbers — 609,589 ha,
+   24,127 households — not live readings, and they read differently from
+   `.figure-tile` on the home page, which is live: separate bordered cards
+   here, one hairline grid there. That difference is the whole distinction,
+   and it is enough. An earlier cut also put a 3px accent bar down the left
+   edge of each card to underline it; the card shape already says it, and
+   the bar was decoration carrying no information. */
+.stats-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: -0.02em;
+  color: var(--ent-text);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column-reverse;   /* value reads first, label beneath */
+  gap: 0.2rem;
+  padding: 1.1rem 1.15rem;
+  background: var(--ent-surface);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r-md);
+}
+
+.stat-card dt {
+  margin: 0;
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ent-text-3);
+}
+
+.stat-card dd {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: var(--ent-fw-bold);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--ent-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-note {
+  margin: 1rem 0 0;
+  font-size: var(--ent-fs-xs);
+  line-height: 1.5;
+  color: var(--ent-text-3);
+}
+
+/* Button row. Shared by the council CTA blocks and anything else that puts
+   two actions side by side. */
+.hero-buttons { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+.council-staff-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   LEGAL PAGES
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.legal-page .page-stage { max-width: 48rem; margin: 0 auto; padding: 0 var(--pub-gutter) var(--pub-section-y); }
+.legal-page .prose { font-size: var(--ent-fs-md); line-height: 1.75; color: var(--ent-text-2); }
+.legal-page .prose h2 {
+  margin: 2.25rem 0 0.75rem;
+  font-size: var(--ent-fs-xl);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: -0.02em;
+  color: var(--ent-text);
+}
+.legal-page .prose p { margin: 0 0 1rem; }
+.legal-page .prose a, .legal-page .link { color: var(--ent-accent); }
+.legal-page .mono { font-family: var(--ent-font-mono); font-size: 0.95em; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   404
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.not-found-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: clamp(3rem, 12vh, 7rem) var(--pub-gutter);
+  text-align: center;
+}
+/* Scoped to the view so it beats `.not-found-view p` below — an
+   element-qualified selector outranks a bare class, and a bare
+   `.not-found-code` lost, rendering "404" as 15px body text. */
+.not-found-view .not-found-code {
+  margin: 0;
+  font-size: clamp(3.5rem, 12vw, 6rem);
+  font-weight: var(--ent-fw-bold);
+  letter-spacing: -0.05em;
+  line-height: 1;
+  color: var(--ent-accent-line);
+}
+.not-found-view h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  font-weight: var(--ent-fw-bold);
+  letter-spacing: -0.025em;
+  color: var(--ent-text);
+}
+.not-found-view > p { margin: 0; max-width: 42ch; font-size: var(--ent-fs-md); line-height: 1.6; color: var(--ent-text-2); }
+.not-found-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-top: 1rem; }
+.not-found-suggest { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--ent-line); width: min(100%, 34rem); }
+.not-found-suggest p { margin: 0 auto 0.75rem; font-size: var(--ent-fs-sm); color: var(--ent-text-3); }
+.not-found-links { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; list-style: none; margin: 0; padding: 0; }
+.not-found-links a {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--ent-line-strong);
+  border-radius: var(--ent-r-pill);
+  font-size: var(--ent-fs-sm);
+  color: var(--ent-text-2);
+  text-decoration: none;
+  transition: background-color 140ms var(--pub-ease), color 140ms var(--pub-ease);
+}
+.not-found-links a:hover { background: var(--ent-accent-soft); color: var(--ent-accent); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   FOOTER
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.site-footer {
+  background: #0d1622;
+  color: #cfdbe8;
+  padding: clamp(3rem, 7vw, 4.5rem) var(--pub-gutter) 1.75rem;
+}
+
+.footer-inner { max-width: var(--pub-max); margin: 0 auto; }
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: clamp(1.75rem, 4vw, 3rem);
+}
+@media (max-width: 1023px) { .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 599px)  { .footer-grid { grid-template-columns: 1fr; } }
+
+.footer-logo { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.9rem; }
+
+.footer-logo-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e6ecf4;
+  flex-shrink: 0;
+}
+
+.footer-logo-text { font-size: var(--ent-fs-base); font-weight: var(--ent-fw-semibold); color: #f3f7fb; letter-spacing: -0.012em; }
+.footer-brand-desc { margin: 0 0 0.9rem; font-size: var(--ent-fs-sm); line-height: 1.65; color: #93a5b9; max-width: 34ch; }
+.footer-motto { margin: 0; font-size: var(--ent-fs-sm); font-style: italic; color: #7fb0e8; }
+
+.footer-col-heading {
+  margin: 0 0 0.85rem;
+  font-size: var(--ent-fs-micro);
+  font-weight: var(--ent-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #6d8099;
+}
+
+.footer-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+
+.footer-link {
+  font-size: var(--ent-fs-sm);
+  line-height: 1.45;
+  color: #b9c7d7;
+  text-decoration: none;
+  transition: color 150ms var(--pub-ease);
+}
+.footer-link:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+
+.footer-contact { display: inline-flex; align-items: flex-start; gap: 0.5rem; }
+.footer-contact svg { flex-shrink: 0; margin-top: 0.18rem; color: #6d8099; }
+.footer-contact--static { font-size: var(--ent-fs-sm); color: #b9c7d7; }
+
+.footer-staff-link {
+  display: inline-block;
+  margin-top: 1.1rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--ent-r);
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-medium);
+  color: #cfdbe8;
+  text-decoration: none;
+  transition: background-color 150ms var(--pub-ease), border-color 150ms var(--pub-ease);
+}
+.footer-staff-link:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.32); }
+
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-top: clamp(2rem, 5vw, 3rem);
+  padding-top: 1.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.footer-copy { margin: 0; font-size: var(--ent-fs-xs); color: #7d90a6; }
+.footer-bottom-links { display: flex; flex-wrap: wrap; gap: 1rem; }
+.footer-bottom-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--ent-fs-xs);
+  color: #93a5b9;
+  text-decoration: none;
+}
+.footer-bottom-link:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Focus on the two dark surfaces needs its own ring — the global
+   accent-blue one has nowhere near enough contrast against #0d1622. */
+.site-footer :where(a, button):focus-visible,
+.section--invest :where(a, button):focus-visible {
+  outline: 2px solid #9cc4ee;
+  outline-offset: 2px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   MOTION LAYER
+   Driven by v-reveal / v-stagger (src/composables/reveal.ts).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition:
+    opacity var(--pub-dur-lg) var(--pub-ease) var(--reveal-delay, 0ms),
+    transform var(--pub-dur-lg) var(--pub-ease) var(--reveal-delay, 0ms),
+    filter var(--pub-dur-lg) var(--pub-ease) var(--reveal-delay, 0ms);
+  /* Promote only while it is waiting to animate. Leaving will-change on
+     forty elements for the life of the page is how a landing page ends up
+     holding forty compositor layers it no longer needs. */
+  will-change: opacity, transform;
+}
+
+.reveal--down  { transform: translate3d(0, -22px, 0); }
+.reveal--left  { transform: translate3d(-26px, 0, 0); }
+.reveal--right { transform: translate3d(26px, 0, 0); }
+.reveal--scale { transform: scale(0.96); }
+.reveal--blur  { filter: blur(8px); }
+.reveal--clip  { clip-path: inset(0 0 100% 0); transform: none; }
+
+.reveal.is-revealed {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  clip-path: none;
+  will-change: auto;
+}
+
+/* Printing does not scroll, so nothing would ever be revealed and the sheet
+   would come out with a header, a footer and eight blank pages. */
+@media print {
+  .reveal,
+  .reveal--down, .reveal--left, .reveal--right, .reveal--scale, .reveal--blur, .reveal--clip {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+  }
+  .home-header, .hero-scroll-cue, .district-backdrop { display: none; }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   RESPONSIVE
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  :root { --pub-header-h: 60px; }
+
+  .hero { min-height: auto; padding-top: 2.5rem; padding-bottom: 3.5rem; }
+  .hero-title { font-size: clamp(2.25rem, 11vw, 3.25rem); }
+  .hero-actions { flex-direction: column; align-items: stretch; }
+  .hero-actions > * { justify-content: center; }
+  /* Four figures wrap 3 + 1 when they are allowed to flow, leaving
+     "Buildings" stranded. Two columns divides four evenly. */
+  .hero-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem 1.5rem;
+  }
+  .hero-scroll-cue { display: none; }
+
+  .home-brand-sub { display: none; }
+  .home-brand-text { font-size: 0.8125rem; white-space: normal; max-width: 12ch; line-height: 1.2; }
+
+  .map-frame-body { height: 22rem; }
+  .figure-tile { padding: 1.1rem 1rem; }
+  .invest-cta { flex-direction: column; align-items: flex-start; }
+}
+
+/* Coarse pointers get no hover-lift: on touch the :hover state sticks after
+   a tap and the card is left floating until something else is touched. */
+@media (hover: none) {
+  .dataset-card.ds-card-link:hover,
+  .dept-card:hover,
+  .invest-card:hover,
+  .hero-btn-primary:hover,
+  .hero-btn-secondary:hover { transform: none; }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   REDUCED MOTION
+   main.css already neutralises durations globally. What it cannot do is undo
+   a starting state, so anything that begins hidden or displaced is reset to
+   its resting position here. Nothing on this site may depend on an animation
+   running in order to be visible.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal--down, .reveal--left, .reveal--right, .reveal--scale, .reveal--blur, .reveal--clip {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    clip-path: none;
+    will-change: auto;
+  }
+
+  /* Backdrop only — the interactive map must stay fully legible. */
+  .is-backdrop .district-backdrop-map { transform: none; opacity: 0.32; }
+  .is-backdrop .district-backdrop-map.is-painted { opacity: 0.32; }
+  .hero-inner { transform: none; }
+  .council-badge-dot, .hero-scroll-cue, .figure-skeleton { animation: none; }
+  .ds-card-accent { transform: scaleX(1); }
+  .dept-arrow { opacity: 1; transform: none; }
+}

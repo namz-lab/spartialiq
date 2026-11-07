@@ -1,0 +1,965 @@
+/**
+ * Vungu Master Plan - Unified Backend Server
+ * Single consolidated server for all API endpoints
+ */
+
+// Load .env so DATABASE_URL / JWT_SECRET / etc. reach process.env before any
+// route module reads them. The dotenv dependency was installed but never wired.
+require('dotenv').config()
+// The runtime login (APP_DATABASE_URL, scripts/create-runtime-role.js) takes over DATABASE_URL for this process; the owner stays for scripts.
+require('dotenv').config({ path: require('path').join(__dirname, '.env.runtime'), quiet: true })
+require('./src/lib/runtimeDb').adoptRuntimeUrl()
+
+const Fastify = require('fastify')
+
+// Clear require cache for OGC services to force reload of .env configuration
+delete require.cache[require.resolve('./src/routes/ogcServices')]
+delete require.cache[require.resolve('./src/services/admin/refinedOGCBridge')]
+
+// Import Smart QGIS Extractor
+const { SmartQGISExtractor } = require('./src/services/admin/smartQGISExtractor')
+
+// Import OGC Services Routes (WMS/WFS/WMTS)
+const ogcServicesRoutes = require('./src/routes/ogcServices')
+const { createWFSTransactionRoutes } = require('./src/routes/wfsTransaction')
+
+// Import Auth Routes
+const { authRoutes } = require('./src/routes/auth')
+
+// Import Stands + Planning Assistant routes (Turn A foundation).
+// These power: citizens picking stands on the public map, and the
+// planner's "what can be developed here" assistant. Both endpoints read
+// from the existing zone_land_use_controls + planning_assistant_templates.
+const { standsRoutes } = require('./src/routes/stands')
+const { planningAssistantRoutes } = require('./src/routes/planning-assistant')
+const plannerRoutes = require('./src/routes/planner')
+const { zonesRoutes } = require('./src/routes/zones')
+const { planModelRoutes } = require('./src/routes/planModel')
+const { parcelZoningRoutes } = require('./src/routes/parcelZoning')
+const { planLookupRoutes } = require('./src/routes/planLookup')
+const { planWorkbenchRoutes } = require('./src/routes/planWorkbench')
+const { analyticsRoutes } = require('./src/routes/analytics')
+const { catalogueRoutes } = require('./src/routes/catalogue')
+
+// Turn B: inspection bookings + photos + status notifications.
+// These plug into the existing development_applications table.
+const { inspectionRoutes } = require('./src/routes/inspections')
+const { applicationStatusRoutes } = require('./src/routes/application-status')
+
+// Turn C: payments (USD/ZiG) + citizen-document verification.
+const { paymentRoutes } = require('./src/routes/payments')
+const { financeRoutes } = require('./src/routes/finance')
+const { documentRoutes } = require('./src/routes/documents')
+
+// Editable public-site content (CMS) — replaces the static vungurdc.org.zw
+// pages so the IT Admin can change wording, staff lists and committee duties.
+const { siteContentRoutes } = require('./src/routes/site-content')
+
+// Cross-dept notifications + KYC identity verification (migration 075).
+const { notificationsRoutes } = require('./src/routes/notifications')
+const { kycRoutes } = require('./src/routes/kyc')
+
+// Citizen residency verification + mock Ministry of Lands deeds registry
+// (migration 115).
+const { residencyRoutes } = require('./src/routes/residency')
+
+// Turn D: plan auto-review (PDF + CAD upload + deterministic checks).
+const { planReviewRoutes } = require('./src/routes/plan-review')
+
+// Turn E: DM Handbook 2021 v1.2 — permit applications, enforcement, building plans,
+// stage inspections, and certificates of occupation (spatial_planning schema).
+const { developmentManagementRoutes } = require('./src/routes/development-management')
+const { inspectorGisRoutes } = require('./src/routes/inspector-gis')
+const { inspectorRoutingRoutes } = require('./src/routes/inspector-routing')
+// Statutory appeals against a determination (RTCP Act s.38, migration 070).
+const { appealRoutes } = require('./src/routes/appeals')
+// Public reports of unauthorised or dangerous building work (migration 120).
+const { buildingComplaintRoutes } = require('./src/routes/building-complaints')
+const { environmentalHealthRoutes } = require('./src/routes/environmental-health')
+const { environmentalHealthOpsRoutes } = require('./src/routes/environmental-health-ops')
+// The IT Administrator's console: audit trail, sessions, sign-in security,
+// settings, system health, outbox, announcements and the org structure (127).
+const { adminConsoleRoutes } = require('./src/routes/admin-console')
+const { planningClerkRoutes } = require('./src/routes/planning-clerk')
+
+// Import Public Routes
+const { publicRoutes } = require('./src/routes/public')
+
+// Import Spatial Routes
+const { spatialRoutes } = require('./src/routes/spatial')
+
+// Vector tile service — serves zimbabwe.gpkg PostGIS layers as MVT.
+const { tilesRoutes } = require('./src/routes/tiles')
+const { parcelsRoutes } = require('./src/routes/parcels')
+const { statutoryPlansRoutes } = require('./src/routes/statutory-plans')
+// QGIS Desktop plugin sync API (/api/qgis/sync/upload, /health, etc.). This
+// was only wired in the unused src/index.ts entry point, so the plugin's
+// endpoints 404'd on the running server.js. Register it here so the plugin works.
+const { createQGISRoutes } = require('./src/routes/qgis')
+const { gisRoutes } = require('./src/routes/gis')
+// Enterprise GIS symbology registry (migration 114). Serves the ONE published
+// style per layer that QGIS Server, the web map and any future client all
+// render from, plus the versioning/approval/rollback lifecycle.
+const { gisStyleRoutes } = require('./src/routes/gisStyles')
+const { planningRoutes } = require('./src/routes/planning')
+const { planningSuggestRoutes } = require('./src/routes/planning-suggest')
+const { citizenPortalRoutes } = require('./src/routes/citizen-portal')
+const { surveyorRoutes } = require('./src/routes/surveyor')
+const { surveyorComputeRoutes } = require('./src/routes/surveyorCompute')
+const { controlPointRoutes } = require('./src/routes/controlPoints')
+const { propertyRoutes } = require('./src/routes/properties')
+const { councilOpsRoutes } = require('./src/routes/council-ops')
+const { councilRegistersRoutes } = require('./src/routes/council-registers')
+const { custodianBoundaryRoutes } = require('./src/routes/custodian-boundary')
+const { titleNoticeRoutes } = require('./src/routes/title-notices')
+const { publicObjectionRoutes } = require('./src/routes/public-objections')
+const { serviceDeskRoutes } = require('./src/routes/service-desk')
+const { gmsRoutes } = require('./src/routes/gms')
+const { gmsIntegrationRoutes } = require('./src/routes/gms-integration')
+const { gmsEditingRoutes } = require('./src/routes/gms-editing')
+const { gmsMapRoutes } = require('./src/routes/gms-map')
+const { contextRoutes } = require('./src/routes/context')
+
+// map-search endpoints are registered inside tilesRoutes (avoid duplicate).
+
+// spatial-data.ts was a TypeScript rewrite of spatial.js and registers the same
+// routes (e.g. /api/coordinate-points). Since spatial.js is already loaded above,
+// loading spatial-data would cause a duplicate-route error. Skip it.
+const spatialDataRoutes = undefined
+
+// Import Development Control Routes
+let developmentControlRoutes
+try {
+  developmentControlRoutes = require('./src/routes/development-control-refactored.js')
+} catch (tsError) {
+  try {
+    // Fallback to JavaScript if available
+    developmentControlRoutes = require('./src/routes/development-control-refactored.js')
+  } catch (jsError) {
+    console.warn('Could not load Development Control routes (both .ts and .js failed):', jsError.message)
+  }
+}
+
+// Import Enhanced Land Use Management Routes
+let enhancedLandUseManagementRoutes
+try {
+  enhancedLandUseManagementRoutes = require('./src/routes/land-use-management-enhanced.js')
+} catch (error) {
+  console.warn('Could not load Enhanced Land Use Management routes:', error.message)
+}
+
+// The enhanced version (land-use-management-enhanced.js) supersedes the old file.
+// landUseManagementRoutes kept as undefined so the registration block below is skipped cleanly.
+const landUseManagementRoutes = undefined
+
+// Import Dynamic Layers Routes
+let dynamicLayerRoutes
+try {
+  dynamicLayerRoutes = require('./src/routes/dynamic-layers')
+} catch (error) {
+  console.warn('Could not load Dynamic Layers routes:', error.message)
+}
+
+// Import Static Exports Routes (Stream D seam)
+let staticExportsRoutes
+try {
+  staticExportsRoutes = require('./src/routes/staticExports').staticExportsRoutes
+} catch (error) {
+  console.warn('Could not load Static Exports routes:', error.message)
+}
+
+// Import QGIS Server Routes
+let qgisServerRoutes
+try {
+  qgisServerRoutes = require('./src/routes/qgisServer')
+} catch (error) {
+  console.warn('Could not load QGIS Server routes:', error.message)
+}
+
+// Import WFS Publisher Routes
+let wfsPublisherRoutes
+try {
+  const WFSPublisherRoutes = require('./src/routes/wfsPublisher')
+  wfsPublisherRoutes = new WFSPublisherRoutes()
+} catch (error) {
+  console.warn('Could not load WFS Publisher routes:', error.message)
+}
+
+// Import Development Application Routes
+let developmentApplicationRoutes
+try {
+  developmentApplicationRoutes = require('./src/routes/development-applications.js')
+} catch (error) {
+  console.warn('Could not load Development Application routes:', error.message)
+}
+
+async function build() {
+  const server = Fastify({
+    logger: true,
+    // Which proxies may set X-Forwarded-For. Default 'loopback' = a reverse
+    // proxy (nginx/Caddy) on the same machine; request.ip is then the real
+    // client. Behind a proxy on another host set TRUST_PROXY to its IP/CIDR.
+    // Never `true`: that lets any caller spoof their IP past rate limits.
+    trustProxy: process.env.TRUST_PROXY || 'loopback'
+  })
+
+  // Payment provider webhooks (Paynow, EcoCash, Stripe) verify HMAC/hash
+  // signatures against the raw request body. Fastify's JSON/urlencoded parsers
+  // consume the stream, so capture the bytes before parsing on webhook routes.
+  const { Readable } = require('node:stream')
+  server.addHook('preParsing', async (request, _reply, payload) => {
+    const url = request.raw?.url || request.url || ''
+    if (!url.includes('/payments/webhook/')) return payload
+
+    const chunks = []
+    for await (const chunk of payload) {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+    }
+    const raw = Buffer.concat(chunks)
+    request.rawBody = raw.toString('utf8')
+    return Readable.from([raw])
+  })
+
+  const localOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:5175',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:58487',
+    'http://tauri.localhost',
+    'https://tauri.localhost',
+    'tauri://localhost',
+  ]
+  const configuredOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+  // The desktop window is http://tauri.localhost and calls the API on
+  // 127.0.0.1:3000. Without this origin the browser drops every response,
+  // so PostGIS layers and the QGIS catalogue look disconnected.
+  const devOriginAllowed = (origin) => {
+    if (!origin) return true
+    if (localOrigins.includes(origin) || configuredOrigins.includes(origin)) return true
+    try {
+      const url = new URL(origin)
+      if (url.protocol === 'tauri:') return true
+      if (url.hostname === 'tauri.localhost') return true
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true
+    } catch { /* not a URL */ }
+    return false
+  }
+  const corsOrigins = process.env.NODE_ENV === 'production'
+    ? (configuredOrigins.length ? configuredOrigins : ['https://vungu-rdc.org'])
+    : (origin, cb) => { cb(null, devOriginAllowed(origin) ? true : false) }
+
+  // ── Security headers (@fastify/helmet) ──────────────────────────────────
+  // Was installed but never registered. Without this, browsers receive no
+  // X-Content-Type-Options, X-Frame-Options, Referrer-Policy, or
+  // Content-Security-Policy headers — leaving the app open to clickjacking,
+  // MIME sniffing, and data leakage.
+  await server.register(require('@fastify/helmet'), {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc:    ["'self'"],
+        scriptSrc:     ["'self'", "'unsafe-inline'", 'https://challenges.cloudflare.com'], // Vue inline; Turnstile bot check
+        styleSrc:      ["'self'", "'unsafe-inline'"],
+        imgSrc:        ["'self'", 'data:', 'blob:', '*.openstreetmap.org', '*.cartocdn.com'],
+        connectSrc:    ["'self'", 'https://api.maptiler.com', 'https://basemaps.cartocdn.com'],
+        workerSrc:     ["'self'", 'blob:'],
+        frameSrc:      ['https://challenges.cloudflare.com'], // Turnstile widget iframe only
+        objectSrc:     ["'none'"],
+        upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,  // MapLibre workers need this off
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // tile CDN sharing
+  })
+
+  // Register CORS. Methods are listed explicitly so the preflight
+  // Access-Control-Allow-Methods header includes PATCH/DELETE — the EO
+  // determination (PATCH /permit-applications/:id/status) and other writes
+  // are blocked otherwise when the browser calls :3000 directly (i.e. when
+  // VITE_API_BASE_URL bypasses the Vite dev proxy).
+  await server.register(require('@fastify/cors'), {
+    origin: corsOrigins,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true,
+  })
+
+  // Cookie support for httpOnly session cookies (auth.js / jwtAuth.js).
+  // Replaces localStorage token storage — OWASP advises against storing
+  // session/JWT/refresh tokens in localStorage (XSS can read it directly).
+  await server.register(require('@fastify/cookie'), {
+    secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET,
+  })
+
+  // Register Compression
+  await server.register(require('@fastify/compress'), {
+    global: true,
+    threshold: 1024,          // only compress responses > 1 KB
+    encodings: ['gzip', 'deflate'],
+  })
+
+  // Register Rate Limiting.
+  // - Global cap bumped from 100/min to 1000/min: a map app legitimately
+  //   issues bursts of tile + feature requests when the user pans, zooms,
+  //   or clicks across many overlapping layers.
+  // - Skip /api/tiles/* and /api/wards entirely. They are read-only,
+  //   already cache-controlled (1d on tiles, 1h on wards), and a single
+  //   viewport easily blows past any sane per-IP cap on slow networks.
+  //   Write endpoints (auth, applications, etc.) keep the global limit.
+  await server.register(require('@fastify/rate-limit'), {
+    max: 1000,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => req.ip,
+    // statusCode is mandatory here: the built object is thrown, and the global
+    // error handler reads error.statusCode — without it every rate-limited
+    // request answered 500, which reads as "the server broke", not "slow down".
+    errorResponseBuilder: (_req, context) => ({
+      statusCode: 429,
+      success: false,
+      error: 'too_many_requests',
+      message: `Rate limit exceeded. Retry after ${Math.ceil(context.ttl / 1000)}s.`,
+    }),
+    allowList: (req) =>
+      req.url === '/health' ||
+      req.url === '/ready' ||
+      req.url.startsWith('/api/health') ||
+      req.url.startsWith('/api/ready') ||
+      req.url.startsWith('/api/tiles/') ||
+      req.url.startsWith('/api/wards') ||
+      req.url.startsWith('/api/map-search'),
+  })
+
+  // Register PostgreSQL. DATABASE_URL is required in production (no hardcoded
+  // credentials in source). Local dev falls back to a standard password-less
+  // localhost role so a leaked repo never ships a real password.
+  const databaseUrl = process.env.DATABASE_URL
+  if (!databaseUrl && process.env.NODE_ENV === 'production') {
+    throw new Error('[db] DATABASE_URL must be set in production')
+  }
+  await server.register(require('@fastify/postgres'), {
+    connectionString: databaseUrl || 'postgresql://postgres:postgres@localhost:5432/vungu_master_db_v1',
+    // node-pg defaults to max 10 connections. A cold map load fires dozens
+    // of concurrent ST_AsMVT tile queries across the 24 basemap layers,
+    // which saturated the pool and queued interactive queries (single-
+    // feature popups, auth) past the client's 30 s timeout. 30 connections
+    // lets tile bursts and interactive traffic coexist; Postgres'
+    // max_connections=100 still has headroom for the survey pool (20).
+    max: 30,
+  })
+
+  await require('./src/lib/runtimeDb').assertRuntimeRole(server.pg.pool, { log: server.log })
+
+  // The database connection follows the person asking (TENANCY_MODE: off | warn | strict; docs/TENANCY.md). Strict is the default.
+  // Installed here, before any route, so every route gets the same decoration; work that is the system's own
+  // (sign-in, the audit log, notifications, jobs) says so with systemOf(fastify.pg).
+  const dbContext = require('./src/lib/dbContext')
+  const tenancy = dbContext.install(server)
+  server.addHook('onRequest', (_request, _reply, done) => dbContext.runWithRequest(done))
+  server.log.info({ mode: tenancy.mode }, 'tenancy mode')
+
+  // Register Redis when REDIS_URL is set. Used by the MVT tile route as the
+  // L2 cache behind its in-process LRU; survives restarts and is shared
+  // across replicas. Without REDIS_URL the tile cache silently degrades to
+  // L1-only, which is still fast — Redis is an optimisation, not a
+  // requirement.
+  if (process.env.REDIS_URL) {
+    try {
+      await server.register(require('@fastify/redis'), {
+        url: process.env.REDIS_URL,
+        closeClient: true,
+      })
+      server.log.info('Redis registered for tile L2 cache')
+    } catch (err) {
+      server.log.warn({ err }, 'Redis registration failed; continuing with L1-only cache')
+    }
+  }
+
+  // Multipart form support — required by the inspection-photo upload route
+  // and the Survey Task Manager document/plan uploads (scanned survey plan
+  // PDFs run large, hence the 50 MB cap; files:1 was dropped for the same
+  // reason — survey CSV/document endpoints accept multiple parts).
+  const path = require('node:path')
+  await server.register(require('@fastify/multipart'), {
+    limits: { fileSize: 50 * 1024 * 1024 },
+  })
+
+  // Uploaded files (IDs, deeds, plans, inspection photos) are NOT served
+  // statically — that exposed every citizen's documents to anyone with the
+  // URL. /uploads/* is answered by protected-uploads.js, which requires a
+  // session and releases a file only to staff or the record's owner.
+  const uploadsRoot = path.resolve(process.cwd(), 'uploads')
+  try { require('node:fs').mkdirSync(uploadsRoot, { recursive: true }) } catch { /* noop */ }
+  await server.register(require('./src/routes/protected-uploads').protectedUploadRoutes)
+
+  // Static build artifacts (PMTiles / FlatGeobuf for the Stream D tier) are
+  // public reference data, not citizen records, so they are served directly.
+  const { STATIC_ROOT } = require('./src/services/staticTiles')
+  try { require('node:fs').mkdirSync(STATIC_ROOT, { recursive: true }) } catch { /* noop */ }
+  await server.register(require('@fastify/static'), {
+    root: STATIC_ROOT,
+    prefix: '/static/',
+    decorateReply: false,
+  })
+
+  // (Removed) onRoute debug log — was extremely noisy at startup and
+  // leaked the entire route surface to stdout. Use `server.printRoutes()`
+  // (already called below) for a one-shot summary.
+
+  // ── HTTP caching (Cache-Control headers + server-side LRU) ──────────
+  const { httpCachePlugin } = require('./src/middleware/httpCache')
+  await server.register(httpCachePlugin)
+
+  // ── Audit logging (onResponse hook — never delays requests) ─────────
+  // Writes every authenticated mutating request to public.admin_audit_event
+  // (migration 124). Required for Zimbabwe municipal compliance (RTCP Act
+  // traceability). It previously targeted security_audit_log, a table that
+  // migration 041 never managed to create — see the header of auditLog.js.
+  const { auditLogPlugin } = require('./src/middleware/auditLog')
+  await server.register(auditLogPlugin)
+
+  // ── Maintenance mode (preHandler — returns early on every GET) ──────
+  // Holds writes to the council record while system.maintenance_mode is on,
+  // exempting the IT Admin so the window can be ended from inside it.
+  const { maintenanceModePlugin } = require('./src/middleware/maintenanceMode')
+  await server.register(maintenanceModePlugin)
+
+  // ── OpenAPI / Swagger (H4) ──────────────────────────────────────────
+  // @fastify/swagger was installed but never registered, so no API docs
+  // were served. Registered here — before the route plugins — so it can
+  // collect every route's schema into the generated spec. The interactive
+  // UI is gated: a government deployment should not publish its full API
+  // surface anonymously, so /api/docs is served only outside production
+  // unless ENABLE_API_DOCS=true is set explicitly.
+  await server.register(require('@fastify/swagger'), {
+    openapi: {
+      info: {
+        title: 'Vungu RDC Planning Portal API',
+        description: 'Municipal GIS planning platform — development control, GIS tiles, survey, and citizen services.',
+        version: '2.0.0',
+      },
+      components: {
+        securitySchemes: {
+          // Browser clients authenticate with the httpOnly vungu_at cookie;
+          // the QGIS plugin / integrations use a Bearer API token.
+          cookieAuth: { type: 'apiKey', in: 'cookie', name: 'vungu_at' },
+          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        },
+      },
+    },
+  })
+  if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true') {
+    await server.register(require('@fastify/swagger-ui'), {
+      routePrefix: '/api/docs',
+      uiConfig: { docExpansion: 'list', deepLinking: true },
+    })
+    server.log.info('API docs served at /api/docs')
+  }
+
+  // Health check - cheap liveness (process up). Use /ready for probes that
+  // need PostGIS before sending traffic.
+  server.get('/health', async (request, reply) => {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      service: 'spartialiq-backend',
+      version: '2.0.0'
+    }
+  })
+
+  server.get('/ready', async (request, reply) => {
+    const checks = { database: false, postgis: false, council_ops: false }
+    try {
+      if (!server.pg) {
+        return reply.code(503).send({ status: 'not_ready', checks, error: 'postgres_plugin_missing' })
+      }
+      await server.pg.query('SELECT 1')
+      checks.database = true
+      const pgis = await server.pg.query(`SELECT extname FROM pg_extension WHERE extname = 'postgis'`)
+      checks.postgis = pgis.rows.length > 0
+      const ops = await server.pg.query(`SELECT to_regclass('council_ops.wash_asset') AS t`)
+      checks.council_ops = !!ops.rows[0]?.t
+      const ready = checks.database && checks.postgis
+      if (!ready) {
+        return reply.code(503).send({ status: 'not_ready', checks, timestamp: new Date().toISOString() })
+      }
+      return {
+        status: 'ready',
+        checks,
+        timestamp: new Date().toISOString(),
+        service: 'spartialiq-backend',
+        version: '2.0.0',
+      }
+    } catch (err) {
+      request.log.error({ err }, 'ready check failed')
+      return reply.code(503).send({
+        status: 'not_ready',
+        checks,
+        error: 'database_unreachable',
+        timestamp: new Date().toISOString(),
+      })
+    }
+  })
+
+  // Also expose under /api for proxies that only forward /api/*
+  server.get('/api/health', async () => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'spartialiq-backend',
+    version: '2.0.0',
+  }))
+  server.get('/api/ready', async (request, reply) => {
+    // Delegate to the same logic by re-invoking via inject would be heavy;
+    // duplicate the cheap checks.
+    const checks = { database: false, postgis: false, council_ops: false }
+    try {
+      if (!server.pg) return reply.code(503).send({ status: 'not_ready', checks })
+      await server.pg.query('SELECT 1')
+      checks.database = true
+      const pgis = await server.pg.query(`SELECT extname FROM pg_extension WHERE extname = 'postgis'`)
+      checks.postgis = pgis.rows.length > 0
+      const ops = await server.pg.query(`SELECT to_regclass('council_ops.wash_asset') AS t`)
+      checks.council_ops = !!ops.rows[0]?.t
+      if (!(checks.database && checks.postgis)) {
+        return reply.code(503).send({ status: 'not_ready', checks })
+      }
+      return { status: 'ready', checks, timestamp: new Date().toISOString() }
+    } catch {
+      return reply.code(503).send({ status: 'not_ready', checks, error: 'database_unreachable' })
+    }
+  })
+
+  // Test route
+  server.get('/api/test', async () => {
+    return { message: 'Unified backend server working', timestamp: new Date().toISOString() }
+  })
+
+  /*
+    REMOVED:
+      - /simple-test (debug only)
+      - /api/auth/test (debug only)
+      - /api/auth/register-direct
+          The previous 'direct' register endpoint stored passwords as the
+          string `'hashed_' + password` and accepted any role from the body,
+          allowing unauthenticated role escalation. The proper /api/auth/register
+          (registered below) replaces it with bcrypt + a hard-pinned customer
+          role allow-list.
+  */
+
+  // Register Public Routes
+  try {
+    await server.register(publicRoutes, { prefix: '/api' })
+    console.log('✅ Public routes registered')
+  } catch (error) {
+    console.error('❌ Failed to register public routes:', error.message)
+  }
+
+  // Register Auth Routes — hardened JWT + bcrypt; see src/routes/auth.js.
+  // The auth scope gets a tighter rate limit than the rest of the API.
+  // Default global limit (1000/min) is fine for read endpoints; bursts on
+  // /auth/login or /auth/register are almost always abusive.
+  //
+  // WHY THIS IS 60 AND NOT 10
+  // keyGenerator above is the client IP, and a council office is one public
+  // address: every officer in the building shares this budget. At 10/min the
+  // eleventh person to sign in at 8am was told "Rate limit exceeded" — an
+  // answer that reads as an outage and that no amount of waiting explains,
+  // because nothing on the screen could say the limit belonged to the
+  // building rather than to them. Brute force is not what this number stops
+  // anyway: the per-email lockout (security.max_failed_attempts, five
+  // failures, checked before the password) is, and a script wanting a
+  // password wants thousands of tries, not sixty. Override per deployment —
+  // a council behind a busier gateway raises it, a single-user install can
+  // lower it.
+  const authRateMax = Number(process.env.AUTH_RATE_LIMIT_MAX) > 0
+    ? Number(process.env.AUTH_RATE_LIMIT_MAX)
+    : 60
+  try {
+    await server.register(async (scope) => {
+      const strict = server.rateLimit({
+        max: authRateMax,
+        timeWindow: '1 minute',
+        errorResponseBuilder: (_req, context) => ({
+          statusCode: 429,
+          success: false,
+          error: 'too_many_requests',
+          message: `Too many auth attempts. Retry after ${Math.ceil(context.ttl / 1000)}s.`,
+        }),
+      })
+      scope.addHook('onRequest', strict)
+      await scope.register(authRoutes)
+    }, { prefix: '/api' })
+  } catch (authError) {
+    server.log.error({ err: authError }, 'Failed to register auth routes')
+  }
+
+  // Register Stands + Planning Assistant routes (Turn A).
+  // These mount under /api and respect the global rate-limit.
+  try {
+    await server.register(standsRoutes,            { prefix: '/api' })
+    await server.register(zonesRoutes,             { prefix: '/api' })
+    await server.register(planModelRoutes,         { prefix: '/api' })
+    await server.register(parcelZoningRoutes,      { prefix: '/api' })
+    await server.register(planLookupRoutes,        { prefix: '/api' })
+    await server.register(planWorkbenchRoutes,     { prefix: '/api' })
+    await server.register(analyticsRoutes,         { prefix: '/api' })
+    await server.register(catalogueRoutes,         { prefix: '/api' })
+    await server.register(planningAssistantRoutes, { prefix: '/api' })
+    await server.register(planningSuggestRoutes,   { prefix: '/api' })
+    await server.register(plannerRoutes,           { prefix: '/api' })
+    console.log('✅ Stands + Zones + Planning Assistant + Planner routes registered')
+  } catch (error) {
+    server.log.error({ err: error }, 'Failed to register stands/planning routes')
+  }
+
+  // Register Inspection routes (Turn B): bookings, photos, notifications.
+  try {
+    await server.register(inspectionRoutes,         { prefix: '/api' })
+    await server.register(applicationStatusRoutes,  { prefix: '/api' })
+    console.log('✅ Inspection + status-change routes registered')
+  } catch (error) {
+    server.log.error({ err: error }, 'Failed to register inspection routes')
+  }
+
+  // Register Payments + Documents (Turn C).
+  try {
+    await server.register(paymentRoutes,   { prefix: '/api' })
+    await server.register(financeRoutes,   { prefix: '/api' })
+    await server.register(documentRoutes,  { prefix: '/api' })
+    await server.register(siteContentRoutes, { prefix: '/api' })
+    console.log('✅ Payment + finance + document + site-content routes registered')
+  } catch (error) {
+    server.log.error({ err: error }, 'Failed to register payment/document routes')
+  }
+
+  // Register cross-dept notifications + KYC (migration 075).
+  try {
+    await server.register(notificationsRoutes, { prefix: '/api' })
+    await server.register(kycRoutes,           { prefix: '/api' })
+    await server.register(residencyRoutes,     { prefix: '/api' })
+    console.log('✅ Notifications + KYC + residency routes registered')
+  } catch (error) {
+    server.log.error({ err: error }, 'Failed to register notifications/kyc routes')
+  }
+
+  // Register Plan Review (Turn D).
+  try {
+    await server.register(planReviewRoutes, { prefix: '/api' })
+    console.log('✅ Plan review routes registered')
+  } catch (error) {
+    server.log.error({ err: error }, 'Failed to register plan review routes')
+  }
+
+  // Register Development Management — DM Handbook 2021 v1.2 (Turn E).
+  // Covers: permit applications, consultations, objections, appeals,
+  // enforcement orders, prohibition orders, building plans,
+  // stage inspections (Annexures 12/14), and certificates of occupation.
+  try {
+    await server.register(developmentManagementRoutes, { prefix: '/api' })
+    // Building Inspector GIS: site resolution, site checks, identify, field
+    // events with server-side geofence, evidence geo-verification.
+    await server.register(inspectorGisRoutes, { prefix: '/api' })
+    // Road corridor for in-app turn-by-turn navigation (routing runs client-side).
+    await server.register(inspectorRoutingRoutes, { prefix: '/api' })
+    // Appeals to the Administrative Court against a determination. The table
+    // shipped in migration 070; until now nothing served it, so both the
+    // citizen's "Lodge appeal" and the staff register called a 404.
+    await server.register(appealRoutes, { prefix: '/api' })
+    // The half of the inspector's inbox that does not start with an
+    // application: reports of unauthorised or dangerous building work.
+    await server.register(buildingComplaintRoutes, { prefix: '/api' })
+    // The EHO's four registers — premises, outbreaks, water quality, nuisance
+    // complaints — and the spatial questions asked of them (migration 121).
+    await server.register(environmentalHealthRoutes, { prefix: '/api' })
+    // The EHO's operational record — inspections carried out, certificates
+    // and permits issued, licence clearances and field programmes (122).
+    await server.register(environmentalHealthOpsRoutes, { prefix: '/api' })
+    // The IT Admin console. Registered last in this block and guarded by the
+    // same try: the council's planning work must not be unavailable because
+    // an administration endpoint failed to mount.
+    // The Planning Clerk's nine statutory registers (migration 128). Until
+    // this existed, seven of them lived in one browser's localStorage.
+    await server.register(planningClerkRoutes, { prefix: '/api' })
+    await server.register(adminConsoleRoutes, { prefix: '/api' })
+    console.log('✅ Development Management (DM Handbook v1.2) + Inspector GIS + Environmental Health + Admin console routes registered')
+  } catch (error) {
+    server.log.error({ err: error }, 'Failed to register development management routes')
+  }
+
+  // Register Spatial Routes
+  try {
+    await server.register(spatialRoutes, { prefix: '/api' })
+    console.log('✅ Spatial routes registered')
+  } catch (error) {
+    console.error('❌ Failed to register spatial routes:', error.message)
+  }
+
+  try {
+    await server.register(tilesRoutes, { prefix: '/api' })
+    await server.register(parcelsRoutes, { prefix: '/api' })
+    await server.register(statutoryPlansRoutes, { prefix: '/api' })
+    await server.register(citizenPortalRoutes, { prefix: '/api' })
+    await server.register(surveyorRoutes, { prefix: '/api' })
+    await server.register(surveyorComputeRoutes, { prefix: '/api' })
+    await server.register(controlPointRoutes, { prefix: '/api' })
+    await server.register(propertyRoutes, { prefix: '/api' })
+    await server.register(gisRoutes, { prefix: '/api' })
+    await server.register(gisStyleRoutes, { prefix: '/api' })
+    await server.register(planningRoutes, { prefix: '/api' })
+    await server.register(councilOpsRoutes, { prefix: '/api' })
+    await server.register(councilRegistersRoutes, { prefix: '/api' })
+    await server.register(custodianBoundaryRoutes, { prefix: '/api' })
+    await server.register(titleNoticeRoutes, { prefix: '/api' })
+    await server.register(publicObjectionRoutes, { prefix: '/api' })
+    await server.register(serviceDeskRoutes, { prefix: '/api' })
+    // GIS Management System, phase 1: parcel register + ERP integration
+    // (migration 132). The integration plugin owns the outbox worker.
+    await server.register(gmsRoutes, { prefix: '/api' })
+    await server.register(gmsIntegrationRoutes, { prefix: '/api' })
+    // Phase 2 (migration 133): editing, QA, map workspace.
+    await server.register(gmsEditingRoutes, { prefix: '/api' })
+    await server.register(gmsMapRoutes, { prefix: '/api' })
+    // What VunGIS tells SurveyPro about the register (service-token authenticated, read-only): the layout check
+    await server.register(contextRoutes, { prefix: '/api' })
+    // map-search lives in tilesRoutes (do not double-register mapSearchRoutes)
+    console.log('✅ Vector tile + property register + GIS editing + symbology registry + planning + council ops + planning clerk + service desk routes registered')
+  } catch (error) {
+    server.log.error({ err: error }, 'Failed to register tile routes')
+  }
+
+  // Surveying is done in SurveyPro (docs/SURVEYPRO-INTEGRATION.md). The Survey Task Manager that used to be embedded here, mounted at
+  // /api/survey, is gone; a job is opened in SurveyPro from POST /api/surveyor/jobs/:id/launch (routes/surveyor.js).
+
+  // Register OGC Services Routes (WMS/WFS/WMTS)
+  try {
+    await server.register(ogcServicesRoutes, { prefix: '/api' })
+    await server.register(async (s) => { await createWFSTransactionRoutes(s) })
+    console.log('✅ OGC Services routes registered')
+  } catch (error) {
+    console.error('❌ Failed to register OGC Services routes:', error.message)
+  }
+
+  // Register QGIS Desktop plugin sync API. NO prefix: qgis.js declares
+  // absolute /api/qgis/* and /api/qgis-plugin/* paths (a prefix here would
+  // double-prefix them, 404ing the admin dashboard and the PyQGIS plugin).
+  try {
+    await server.register(async (s) => { await createQGISRoutes(s) })
+    console.log('✅ QGIS plugin sync routes registered')
+  } catch (error) {
+    console.error('❌ Failed to register QGIS plugin sync routes:', error.message)
+  }
+
+  // Register Development Control Routes
+  if (developmentControlRoutes) {
+    await server.register(developmentControlRoutes, { prefix: '/api/development-control' })
+    console.log('✅ Development Control routes registered')
+  }
+
+  // Register Enhanced Land Use Management Routes
+  // The plugin function signature is: (fastify, { auth }) so we must pass the
+  // auth helpers in the options object, not just the prefix.
+  if (enhancedLandUseManagementRoutes) {
+    try {
+      const { requireAuth, requireRole } = require('./src/middleware/jwtAuth')
+      await server.register(enhancedLandUseManagementRoutes, {
+        prefix: '/api/land-use',
+        auth: { requireAuth, requireRole },
+      })
+      console.log('✅ Enhanced Land Use Management routes registered')
+    } catch (error) {
+      console.error('❌ Failed to register Enhanced Land Use Management routes:', error.message)
+    }
+  }
+
+
+  // Register Dynamic Layers Routes
+  if (dynamicLayerRoutes) {
+    try {
+      await server.register(dynamicLayerRoutes, { prefix: '/api/dynamic-layers' })
+      console.log('✅ Dynamic Layers routes registered')
+    } catch (error) {
+      console.error('❌ Failed to register Dynamic Layers routes:', error.message)
+    }
+  }
+
+  // Register Static Exports Routes (Stream D seam)
+  if (staticExportsRoutes) {
+    try {
+      await server.register(staticExportsRoutes, { prefix: '/api/static' })
+      console.log('✅ Static Exports routes registered')
+    } catch (error) {
+      console.error('❌ Failed to register Static Exports routes:', error.message)
+    }
+  }
+
+  // Register QGIS Server Routes
+  if (qgisServerRoutes && qgisServerRoutes.createQGISServerRoutes) {
+    try {
+      const { requireAuth, requireRole } = require('./src/middleware/jwtAuth')
+      await qgisServerRoutes.createQGISServerRoutes(server, {
+        auth: { requireAuth, requireRole },
+      })
+      console.log('✅ QGIS Server routes registered')
+    } catch (error) {
+      console.error('❌ Failed to register QGIS Server routes:', error.message)
+    }
+  }
+
+  // Register WFS Publisher Routes
+  if (wfsPublisherRoutes) {
+    await wfsPublisherRoutes.registerRoutes(server)
+    console.log('✅ WFS Publisher routes registered')
+  }
+
+  // Register Development Application Routes
+  if (developmentApplicationRoutes) {
+    await server.register(developmentApplicationRoutes, { prefix: '/api' })
+    console.log('✅ Development Application routes registered')
+  }
+
+
+  // Print the route summary in development only — useful when adding new
+  // route plugins, but it shouldn't surface in production logs.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('\n📋 Registered Routes:')
+    console.log(server.printRoutes())
+  }
+
+  // Hosted demo: the built Vue app sits next to the API. Real files are
+  // served; any other page URL returns the app shell so the router can open it.
+  const publicDir = process.env.PUBLIC_DIR
+    ? require('path').resolve(process.env.PUBLIC_DIR)
+    : ''
+  if (publicDir) {
+    await server.register(require('@fastify/static'), {
+      root: publicDir,
+      prefix: '/',
+      decorateReply: false,
+      index: false,
+    })
+  }
+
+  // 404 handler
+  server.setNotFoundHandler(async (request, reply) => {
+    const pagePath = String(request.url || '').split('?')[0]
+    if (
+      publicDir &&
+      request.method === 'GET' &&
+      !pagePath.startsWith('/api') &&
+      !pagePath.startsWith('/uploads')
+    ) {
+      try {
+        const html = require('node:fs').readFileSync(require('path').join(publicDir, 'index.html'))
+        return reply.type('text/html; charset=utf-8').send(html)
+      } catch { /* no shell yet */ }
+    }
+    reply.status(404).send({
+      error: 'Not Found',
+      message: `Route ${request.method} ${request.url} not found`,
+      timestamp: new Date().toISOString()
+    })
+  })
+
+  // Global error handler. 4xx (validation / client) errors keep their
+  // message; 5xx errors return a generic message so DB/driver internals and
+  // stack traces are never leaked to the client (audit fix F10). Full detail
+  // is logged server-side.
+  server.setErrorHandler(async (error, request, reply) => {
+    server.log.error({ err: error }, 'Unhandled error')
+
+    const statusCode = error.statusCode || 500
+    const isClientError = statusCode >= 400 && statusCode < 500
+    reply.status(statusCode).send({
+      error: isClientError ? (error.name || 'Error') : 'Internal Server Error',
+      message: isClientError ? (error.message || 'Request error') : 'An unexpected error occurred',
+      timestamp: new Date().toISOString(),
+    })
+  })
+
+  return server
+}
+
+async function start() {
+  console.log('🚀 Starting Vungu Unified Backend Server...')
+
+  try {
+    const server = await build()
+    const port = parseInt(process.env.PORT || '3000')
+    console.log('🚀 About to listen on port:', port)
+
+    await server.listen({
+      port,
+      host: '0.0.0.0'
+    })
+
+    // Optional in-process email worker — keeps the dev experience simple
+    // (no second daemon needed). For multi-instance deploys, run
+    // `node src/workers/emailWorker.js` separately and leave this off.
+    if (process.env.MAIL_WORKER_INPROC === '1') {
+      try {
+        const { startEmailWorker } = require('./src/workers/emailWorker')
+        startEmailWorker(require('./src/lib/dbContext').systemOf(server.pg).pool || server.pg, { log: server.log })
+      } catch (err) {
+        server.log.warn({ err }, 'Failed to start in-process email worker')
+      }
+    }
+
+    // Real-time QGIS <-> web sync: LISTEN on the spatial_change channel
+    // (migration 109 triggers) and push SSE map refreshes for any PostGIS
+    // write — including edits saved from QGIS Desktop that never touch this
+    // API. Failure is non-fatal: API-driven SSE events still work.
+    try {
+      const { startSpatialChangeListener, stopSpatialChangeListener } = require('./src/services/spatialChangeListener')
+      await startSpatialChangeListener({
+        connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/vungu_master_db_v1',
+        log: server.log,
+      })
+      // Cleanup on shutdown via process signals — server.addHook('onClose')
+      // can't be used here because the server is already listening by this
+      // point (it throws FST_ERR_INSTANCE_ALREADY_LISTENING). Signal handlers
+      // also fire on the hard SIGINT that fastify's onClose misses.
+      for (const sig of ['SIGINT', 'SIGTERM']) {
+        process.once(sig, () => { stopSpatialChangeListener().finally(() => process.exit(0)) })
+      }
+    } catch (err) {
+      server.log.warn({ err }, 'Spatial change listener failed to start — live QGIS sync degraded to API-write events only')
+    }
+
+    console.log(`\n🎉 Vungu Unified Backend Server running successfully!`)
+    console.log(`📡 Server: http://localhost:${port}`)
+    console.log(`🏥 Health Check: http://localhost:${port}/health`)
+    console.log(`🧪 Test Route: http://localhost:${port}/api/test`)
+    console.log(`🗺️  OGC Services: http://localhost:${port}/api/ogc`)
+    console.log(`🏗️  Development Control: http://localhost:${port}/api/development-control`)
+    console.log(`📊 Land Use Management: http://localhost:${port}/api/land-use`)
+    console.log(`📋 All Routes: http://localhost:${port}/api/routes`)
+    
+  } catch (err) {
+    console.error('❌ Failed to start server:', err)
+    process.exit(1)
+  }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Received SIGINT, shutting down gracefully...')
+  process.exit(0)
+})
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Received SIGTERM, shutting down gracefully...')
+  process.exit(0)
+})
+
+// Start the server
+if (require.main === module) {
+  start()
+}
+
+module.exports = { build, start }

@@ -1,0 +1,68 @@
+# ── Dependencies ──────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.*
+
+# ── Environment / secrets ─────────────────────────────────────────────
+# .env is checked-in only as .env.example. Never commit real secrets.
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ── Build output ──────────────────────────────────────────────────────
+dist/
+build/
+out/
+
+# ── Logs ──────────────────────────────────────────────────────────────
+logs/
+*.log
+*.tsbuildinfo
+
+# ── OS / editor ───────────────────────────────────────────────────────
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# ── Coverage ──────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Uploads / generated artefacts ─────────────────────────────────────
+uploads/
+tmp/
+
+# ── Spatial source files (huge GeoPackages) ───────────────────────────
+# zimbabwe.gpkg is 1.47 GB; Vungu_RDC_Master_Plan.gpkg is 2.7 MB. Both
+# are import sources only — the live data lives in PostGIS once
+# setup-spatial.mjs has run. Download them on demand with
+# scripts/download-spatial-source.mjs (reads ZIMBABWE_GPKG_URL and
+# VUNGU_GPKG_URL from env).
+data/*.gpkg
+data/*.gpkg-shm
+data/*.gpkg-wal
+node_modules
+node_modules
+
+# DB dumps + uploads archives (npm run backup) — never commit; may contain real records
+backups/
+backup/
+
+# QGIS Server local secrets — real pg_service files hold DB credentials
+# (only the *.example templates are committed).
+qgis-projects/pg_service.conf
+qgis-projects/pg_service.docker.conf
+qgis-projects/vungu-project.qgs.bak-*
+qgis-projects/*~
+qgis-projects/*_attachments.zip
+qgis-projects/_db-backups/
+.env.bak*
+.env.runtime
+.launch-key.pem
+.surveypro-readers.json

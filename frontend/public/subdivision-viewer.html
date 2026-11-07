@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RDC Farm 626 — Residential Subdivision</title>
+  <link href="/vendor/maplibre-gl.css" rel="stylesheet" />
+  <script src="/vendor/maplibre-gl.js"></script>
+  <style>
+    :root { --ink:#1f2933; --muted:#65727f; --line:#e3e6ea; --accent:#1a73e8; }
+    html,body { margin:0; height:100%; font-family:system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); }
+    #map { position:absolute; inset:0; }
+    .panel {
+      position:absolute; top:14px; left:14px; z-index:2; background:#fffdf9; border:1px solid var(--line);
+      border-radius:12px; padding:14px 16px; max-width:300px; box-shadow:0 6px 20px rgba(0,0,0,.08);
+    }
+    .panel h1 { font-size:15px; margin:0 0 2px; letter-spacing:-.01em; }
+    .panel .sub { font-size:12px; color:var(--muted); margin:0 0 10px; }
+    .stats { display:grid; grid-template-columns:1fr auto; gap:3px 12px; font-size:12.5px; }
+    .stats b { font-variant-numeric:tabular-nums; }
+    .legend { margin-top:11px; padding-top:10px; border-top:1px solid var(--line); display:grid; gap:6px; font-size:12px; }
+    .legend i { display:inline-block; width:14px; height:10px; border-radius:2px; margin-right:7px; vertical-align:middle; border:1px solid rgba(0,0,0,.15); }
+    .maplibregl-popup-content { font-size:12px; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="panel">
+    <h1>RDC Farm 626</h1>
+    <p class="sub">Medium-density residential subdivision</p>
+    <div class="stats" id="stats"><span>loading…</span></div>
+    <div class="legend">
+      <div><i style="background:#cfe8c8"></i>Open space</div>
+      <div><i style="background:#f3d9b1"></i>Standard lot</div>
+      <div><i style="background:#e8b86d"></i>Corner lot</div>
+      <div><i style="background:#7a7f87;height:3px"></i>Street reserve</div>
+    </div>
+  </div>
+
+  <script>
+    const map = new maplibregl.Map({
+      container: 'map',
+      // Self-hosted: local glyphs, no external tiles — the subdivision
+      // GeoJSON is the content.
+      style: {
+        version: 8,
+        glyphs: '/fonts/{fontstack}/{range}.pbf',
+        sources: {},
+        layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#f2efe9' } }]
+      },
+      center: [29.822, -19.383], zoom: 14
+    });
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    map.on('load', async () => {
+      const data = await fetch('./subdivision.geojson').then(r => r.json());
+      map.addSource('plan', { type: 'geojson', data });
+
+      const only = k => ['==', ['get', 'kind'], k];
+
+      map.addLayer({ id: 'area', type: 'line', source: 'plan', filter: only('area'),
+        paint: { 'line-color': '#1f2933', 'line-width': 2, 'line-dasharray': [3,2] } });
+
+      map.addLayer({ id: 'open', type: 'fill', source: 'plan', filter: only('open_space'),
+        paint: { 'fill-color': '#cfe8c8', 'fill-opacity': 0.75, 'fill-outline-color': '#8bbf7f' } });
+
+      map.addLayer({ id: 'lots', type: 'fill', source: 'plan', filter: only('lot'),
+        paint: {
+          'fill-color': ['case', ['get','isCorner'], '#e8b86d', '#f3d9b1'],
+          'fill-opacity': 0.9
+        } });
+      map.addLayer({ id: 'lots-line', type: 'line', source: 'plan', filter: only('lot'),
+        paint: { 'line-color': '#b07d3a', 'line-width': 0.6 } });
+
+      map.addLayer({ id: 'roads', type: 'line', source: 'plan', filter: only('road'),
+        paint: { 'line-color': '#7a7f87', 'line-width': 3, 'line-opacity': 0.7 } });
+
+      // stats
+      const lots = data.features.filter(f => f.properties.kind === 'lot');
+      const totalLot = lots.reduce((s,f)=>s+(f.properties.areaSqm||0),0);
+      const avg = lots.length ? Math.round(totalLot/lots.length) : 0;
+      const corner = lots.filter(f=>f.properties.isCorner).length;
+      document.getElementById('stats').innerHTML =
+        `<span>Lots</span><b>${lots.length}</b>` +
+        `<span>Corner lots</span><b>${corner}</b>` +
+        `<span>Avg lot area</span><b>${avg} m²</b>` +
+        `<span>Streets</span><b>${data.features.filter(f=>f.properties.kind==='road').length}</b>`;
+
+      // fit to data
+      const b = new maplibregl.LngLatBounds();
+      const walk = c => Array.isArray(c[0]) ? c.forEach(walk) : b.extend(c);
+      data.features.forEach(f => walk(f.geometry.coordinates));
+      map.fitBounds(b, { padding: 60, duration: 0 });
+
+      // lot popup
+      map.on('click', 'lots', e => {
+        const p = e.features[0].properties;
+        new maplibregl.Popup().setLngLat(e.lngLat)
+          .setHTML(`<b>Lot ${p.lotNumber}</b><br>${p.areaSqm} m²${p.isCorner==='true'||p.isCorner===true?' · corner':''}<br>${p.useType||'single_residential'}`)
+          .addTo(map);
+      });
+      map.on('mouseenter', 'lots', () => map.getCanvas().style.cursor = 'pointer');
+      map.on('mouseleave', 'lots', () => map.getCanvas().style.cursor = '');
+    });
+  </script>
+</body>
+</html>

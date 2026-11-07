@@ -1,0 +1,2977 @@
+/**
+ * Development Management routes — DM Handbook 2021 v1.2
+ *
+ * All endpoints mount under /api (registered in server.js).
+ * All tables live in the spatial_planning schema (migration 070).
+ *
+ * Phase 1 — Permit Applications
+ *   POST   /permit-applications
+ *   GET    /permit-applications
+ *   GET    /permit-applications/:id
+ *   GET    /permit-applications/:id/rule-snapshots   (the rules the permit was judged under)
+ *   PUT    /permit-applications/:id/parcel           (staff set or correct the parcel)
+ *   POST   /permit-applications/:id/rule-snapshot    (planner picks the land use; server computes)
+ *   PATCH  /permit-applications/:id/status
+ *   POST   /permit-applications/:id/consultations
+ *   GET    /permit-applications/:id/consultations
+ *   PATCH  /consultations/:cid/response
+ *   POST   /permit-applications/:id/objections
+ *   GET    /permit-applications/:id/objections
+ *   PATCH  /objections/:oid/consideration
+ *
+ * Phase 2 — Enforcement
+ *   POST   /enforcement-orders
+ *   GET    /enforcement-orders
+ *   PATCH  /enforcement-orders/:id/status
+ *   POST   /enforcement-orders/:id/compliance-checks
+ *   POST   /prohibition-orders
+ *   GET    /prohibition-orders
+ *
+ * Phase 3 — Building Plans
+ *   POST   /permit-applications/:id/building-plans
+ *   GET    /permit-applications/:id/building-plans
+ *   PATCH  /building-plans/:bpid/appraisal
+ *   POST   /building-plans/:bpid/annotations
+ *
+ * Phase 4 — Stage Inspections
+ *   GET    /inspection-stages                          (owned by routes/inspections.js)
+ *   GET    /inspection-checklist/:stageNumber          (public)
+ *   POST   /permit-applications/:id/stage-inspections
+ *   GET    /permit-applications/:id/stage-inspections
+ *   GET    /stage-inspections/:sid
+ *   POST   /stage-inspections/:sid/checklist
+ *
+ * Phase 5 — Certificate of Occupation
+ *   POST   /permit-applications/:id/occupation-certificate
+ *   GET    /permit-applications/:id/occupation-certificate
+ */
+
+const fs = require('fs').promises
+const path = require('path')
+const crypto = require('crypto')
+const { requireAuth, requireRole, optionalAuth } = require('../middleware/jwtAuth')
+const { tenantPool } = require('../lib/tenancy')
+const notifier = require('../services/notifier')
+const { canTransition, allowedTransitions } = require('../config/permitWorkflow')
+const { scanBuffer } = require('../services/malwareScan')
+const { validateFileSignature } = require('../utils/fileSignature')
+const { parseParcelRef, parseUseCode } = require('../utils/ruleSnapshot')
+
+/**
+ * Statutory transition gate, shared by every status write. Returns null when
+ * the move is lawful, otherwise sends the 409 and returns the reply.
+ * Admins may override with body.override=true — the audit event records it.
+ */
+function rejectUnlawfulTransition(reply, request, fromStatus, toStatus) {
+  const isOverride = request.user.role === 'admin' && request.body?.override === true
+  if (isOverride || canTransition(fromStatus, toStatus)) return null
+  return reply.code(409).send({
+    success: false,
+    error: 'invalid_transition',
+    message: `A case in '${fromStatus}' cannot move to '${toStatus}'.`,
+    from: fromStatus,
+    allowed: allowedTransitions(fromStatus),
+  })
+}
+
+/**
+ * Has this permit been heard by a quorate committee that recorded a resolution?
+ * True when a live agenda_item for the permit has a non-pending outcome AND a
+ * resolution, on a live (non-deleted) meeting. This is what a statutory
+ * determination must normally be backed by (RTCP Act committee resolution).
+ */
+async function hasCommitteeResolution(pg, permitId) {
+  const { rows } = await pg.query(
+    `SELECT 1
+       FROM spatial_planning.agenda_item a
+       JOIN spatial_planning.committee_meeting m ON m.id = a.meeting_id
+      WHERE a.permit_app_id = $1
+        AND a.outcome <> 'pending'
+        AND a.resolution IS NOT NULL
+        AND a.deleted_at IS NULL
+        AND m.deleted_at IS NULL
+      LIMIT 1`,
+    [permitId],
+  )
+  return rows.length > 0
+}
+
+const STAFF_ROLES = [
+  'admin', 'planner', 'planning_clerk', 'building_inspector',
+  'eo', 'env_officer', 'surveyor', 'gis_officer',
+]
+
+// Citizens (public / registered / viewer) can read their own rows and create
+// new applications; only staff can change status or add internal records.
+const PERMIT_READERS = [...STAFF_ROLES, 'public', 'viewer', 'registered']
+
+// ════════════════════════════════════════════════════════════════════
+// Inspector work queue — served from spatial_planning.v_inspector_queue.
+// Every bucket/filter/count is a Postgres predicate defined once in
+// QUEUE_BUCKETS, so a KPI tile and the list it opens can never disagree.
+// ════════════════════════════════════════════════════════════════════
+const QUEUE_EFFECTIVE = 'COALESCE(q.scheduled_at, q.booking_scheduled_for)'
+const QUEUE_OPEN = 'q.inspected_at IS NULL'
+
+const QUEUE_BUCKETS = {
+  today:       `${QUEUE_OPEN} AND ${QUEUE_EFFECTIVE}::date = CURRENT_DATE`,
+  overdue:     `${QUEUE_OPEN} AND ${QUEUE_EFFECTIVE}::date < CURRENT_DATE`,
+  upcoming:    `${QUEUE_OPEN} AND ${QUEUE_EFFECTIVE}::date > CURRENT_DATE`,
+  unscheduled: `${QUEUE_OPEN} AND ${QUEUE_EFFECTIVE} IS NULL`,
+  followup:    `q.result = 'reinspection_required'`,
+  failed:      `q.result = 'fail'`,
+  completed:   `q.inspected_at IS NOT NULL`,
+}
+
+const QUEUE_COLS = `
+  q.permit_app_id, q.dev_app_id, q.tpd_reference, q.dev_register_no,
+  q.stand_number, q.suburb_ward, q.street_address, q.applicant_name,
+  q.development_type, q.description, q.permit_status, q.permit_assigned_to,
+  q.statutory_due_date, q.received_at, q.permit_updated_at, q.lng, q.lat,
+  q.stage_inspection_id, q.stage_number, q.attempt, q.inspector_id,
+  q.scheduled_at, q.inspected_at, q.assigned_at, q.assigned_by, q.result,
+  q.booking_id, q.booking_application_id, q.booking_status,
+  q.booking_scheduled_for, q.fee_paid_at, q.has_occupation_certificate,
+  ${QUEUE_EFFECTIVE} AS effective_scheduled_at,
+  (${QUEUE_OPEN} AND ${QUEUE_EFFECTIVE}::date < CURRENT_DATE) AS is_overdue
+`
+
+/** Build a bound WHERE clause from the queue query string. */
+function buildQueueFilters(query, user) {
+  const where = []
+  const params = []
+  const add = (sql, value) => { params.push(value); where.push(sql.replace('$$', `$${params.length}`)) }
+
+  if (query.bucket && QUEUE_BUCKETS[query.bucket]) where.push(QUEUE_BUCKETS[query.bucket])
+  if (query.scope === 'unassigned') where.push('q.inspector_id IS NULL')
+  if (query.inspector) add('q.inspector_id = $$', query.inspector === 'me' ? user?.id : query.inspector)
+  if (query.status) add('q.permit_status = $$', query.status)
+  if (query.result) add('q.result = $$', query.result)
+  if (query.stage) add('q.stage_number = $$::int', Number(query.stage))
+  if (query.ward) add('q.suburb_ward = $$', query.ward)
+  if (query.booking_status) add('q.booking_status = $$', query.booking_status)
+  if (query.from) add(`${QUEUE_EFFECTIVE}::date >= $$::date`, query.from)
+  if (query.to) add(`${QUEUE_EFFECTIVE}::date <= $$::date`, query.to)
+  if (query.search) {
+    params.push(`%${String(query.search).trim()}%`)
+    const p = `$${params.length}`
+    where.push(`(q.dev_register_no ILIKE ${p} OR q.tpd_reference ILIKE ${p}
+                 OR q.stand_number ILIKE ${p} OR q.applicant_name ILIKE ${p}
+                 OR q.suburb_ward ILIKE ${p} OR q.description ILIKE ${p})`)
+  }
+  return { clause: where.length ? `WHERE ${where.join(' AND ')}` : '', params }
+}
+
+function clampInt(value, fallback, min, max) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(Math.max(Math.trunc(n), min), max)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Photo storage (DM Handbook Phase 4 — Stage Inspection Photos)
+// ════════════════════════════════════════════════════════════════════
+const STAGE_PHOTO_ROOT = process.env.STAGE_PHOTO_ROOT
+  ? path.resolve(process.env.STAGE_PHOTO_ROOT)
+  : path.resolve(process.cwd(), 'uploads', 'stage-photos')
+
+// Permit case-file documents (migration 085 + 119). Plans and title deeds are
+// routinely large scans, so the cap is above the photo cap.
+const PERMIT_DOC_ROOT = process.env.PERMIT_DOC_ROOT
+  ? path.resolve(process.env.PERMIT_DOC_ROOT)
+  : path.resolve(process.cwd(), 'uploads', 'permit-documents')
+
+const MAX_PERMIT_DOC_BYTES = 20 * 1024 * 1024  // 20 MB
+const ALLOWED_PERMIT_DOC_MIME = new Set([
+  'application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic',
+])
+const PERMIT_DOC_EXT = {
+  'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png',
+  'image/webp': '.webp', 'image/heic': '.heic',
+}
+
+const MAX_STAGE_PHOTO_BYTES = 10 * 1024 * 1024  // 10 MB
+const ALLOWED_STAGE_PHOTO_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic',
+])
+const MIME_EXT = {
+  'image/jpeg': '.jpg', 'image/png': '.png',
+  'image/webp': '.webp', 'image/heic': '.heic',
+}
+
+async function ensureDir(dir) {
+  await fs.mkdir(dir, { recursive: true })
+}
+
+function isUuid(v) {
+  return typeof v === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(v)
+}
+function isStr(v, max = 4096) {
+  return typeof v === 'string' && v.length > 0 && v.length <= max
+}
+function isDate(v) {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
+}
+
+// Render the EO determination as a council letter (HTML). The body is stored in
+// generated_document.content and served via GET /generated-documents/:id —
+// the council's authoritative copy of the decision communicated to the citizen.
+// decision ∈ approve | approve_with_conditions | refuse.
+function renderDecisionLetter({ decision, permit, conditions, notes, officerName }) {
+  const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const ref = permit.dev_register_no || permit.tpd_reference || String(permit.id).slice(0, 8).toUpperCase()
+  const title = {
+    approve: 'Development Permit — Approval',
+    approve_with_conditions: 'Development Permit — Conditional Approval',
+    refuse: 'Development Permit — Refusal',
+  }[decision] || 'Development Permit — Decision'
+  const verb = {
+    approve: 'is hereby <strong>APPROVED</strong>',
+    approve_with_conditions: 'is hereby <strong>APPROVED SUBJECT TO THE CONDITIONS</strong> set out below',
+    refuse: 'is hereby <strong>REFUSED</strong>',
+  }[decision] || 'has been determined'
+  const condList = (Array.isArray(conditions) ? conditions : [])
+    .map(c => (typeof c === 'string' ? c : (c && c.text) || ''))
+    .filter(Boolean)
+  const condHtml = (decision === 'approve_with_conditions' && condList.length)
+    ? `<h3>Conditions of approval</h3><ol>${condList.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ol>`
+    : ''
+  const reasonsHtml = notes
+    ? `<h3>${decision === 'refuse' ? 'Reasons for refusal' : 'Notes'}</h3><p>${escapeHtml(notes).replace(/\n/g, '<br>')}</p>`
+    : ''
+  const body = `
+    <p>Dear ${escapeHtml(permit.applicant_name || 'Applicant')},</p>
+    <p>RE: ${escapeHtml(permit.description || permit.development_type || 'Development application')}
+       — Stand ${escapeHtml(permit.stand_number || '—')}${permit.suburb_ward ? ', ' + escapeHtml(permit.suburb_ward) : ''}</p>
+    <p>In terms of section 26 of the Regional, Town and Country Planning Act
+       [Chapter 29:12], I write to inform you that the above development application
+       ${verb}.</p>
+    ${condHtml}
+    ${reasonsHtml}
+    <p>Should you be aggrieved by this decision, you may appeal to the Administrative
+       Court within the period prescribed by the Act.</p>
+    <p>Yours faithfully,</p>
+    <p><strong>${escapeHtml(officerName || 'Executive Officer (Planning)')}</strong><br>
+       Executive Officer — Planning<br>Vungu Rural District Council</p>`
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<style>body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;max-width:720px;margin:2rem auto;padding:0 1.5rem;line-height:1.6}
+.lh{text-align:center;border-bottom:2px solid #1a1a1a;padding-bottom:0.5rem;margin-bottom:1.5rem}
+.lh h1{font-size:1.1rem;margin:0;letter-spacing:0.05em}.lh p{margin:0.2rem 0;font-size:0.8rem}
+.meta{display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:1.5rem}
+h2{font-size:1rem;text-align:center;text-transform:uppercase;letter-spacing:0.05em}
+h3{font-size:0.9rem;margin-top:1.3rem}ol{padding-left:1.4rem}@media print{body{margin:0}}</style></head>
+<body><div class="lh"><h1>VUNGU RURAL DISTRICT COUNCIL</h1>
+<p>Department of Physical Planning &amp; Development Control</p></div>
+<div class="meta"><span>Ref: ${escapeHtml(ref)}</span><span>${escapeHtml(today)}</span></div>
+<h2>${escapeHtml(title)}</h2>${body}</body></html>`
+  return { title, html }
+}
+
+async function developmentManagementRoutes(fastify) {
+  const pg = fastify.pg
+  // Permit work runs as the person making the request, so the database (migration 154) shows and
+  // changes only their authority's permits (a citizen's own). `pg` stays for system actions on a row
+  // this request has just created, and for routes not yet converted (see docs/TENANCY.md).
+  const db = (request) => tenantPool(pg, request.user)
+
+  // Any permit addressed by id (/permit-applications/:id and what hangs off it) is invisible to a
+  // signed-in person whose authority does not own it: 404, as if it did not exist. Converted routes get
+  // the same from the database; this closes the routes that are not converted yet.
+  // The same for what is addressed by a child's own id: its row is looked up through the database's policy
+  // (which follows the permit), so it is also a 404 across authorities.
+  const CHILD_ROUTES = [
+    ['/consultations/:cid', 'application_consultation', 'cid'],
+    ['/objections/:oid', 'application_objection', 'oid'],
+    ['/building-plans/:bpid', 'building_plan', 'bpid'],
+    ['/stage-inspections/:sid', 'stage_inspection', 'sid'],
+    ['/generated-documents/:id', 'generated_document', 'id'],
+  ]
+  fastify.addHook('preHandler', async (request, reply) => {
+    // the plugin is registered under /api: match on the route as this plugin declares it
+    const full = (request.routeOptions && request.routeOptions.url) || ''
+    const url = fastify.prefix && full.startsWith(fastify.prefix) ? full.slice(fastify.prefix.length) : full
+    let table = 'permit_application'
+    let param = 'id'
+    if (!url.startsWith('/permit-applications/:id')) {
+      const child = CHILD_ROUTES.find(([prefix]) => url === prefix || url.startsWith(prefix + '/'))
+      if (!child) return
+      ;[, table, param] = child
+    }
+    const id = request.params && request.params[param]
+    if (!isUuid(id)) return // the route's own validation answers
+    await optionalAuth(fastify)(request)
+    if (!request.user) return // the route's own authentication answers 401
+    const { rows } = await db(request).query(`SELECT 1 FROM spatial_planning.${table} WHERE id = $1`, [id])
+    if (!rows.length) return reply.code(404).send({ success: false, error: 'not_found' })
+  })
+
+  // Append-only audit log helper (migration 082). Best-effort: a failed
+  // audit insert must never break the primary action, but it is logged.
+  async function logEvent(permitId, eventType, request, detail = {}) {
+    try {
+      await pg.query(
+        `INSERT INTO spatial_planning.permit_event
+           (permit_app_id, event_type, actor_id, actor_role, detail)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [permitId, eventType, request.user?.id || null,
+         request.user?.role || null, JSON.stringify(detail || {})],
+      )
+    } catch (err) {
+      request.log.error({ err }, 'permit_event insert failed')
+    }
+  }
+
+  // ── Inspector work queue ──────────────────────────────────────────
+  fastify.get('/inspector/work-queue', {
+    preHandler: requireRole(fastify, STAFF_ROLES),
+  }, async (request, reply) => {
+    const limit = clampInt(request.query.limit, 50, 1, 500)
+    const offset = clampInt(request.query.offset, 0, 0, 1e6)
+    const { clause, params } = buildQueueFilters(request.query, request.user)
+    try {
+      const [rows, count] = await Promise.all([
+        db(request).query(
+          `SELECT ${QUEUE_COLS}
+           FROM spatial_planning.v_inspector_queue q
+           ${clause}
+           ORDER BY ${QUEUE_EFFECTIVE} NULLS LAST, q.permit_updated_at DESC
+           LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+          [...params, limit, offset],
+        ),
+        db(request).query(`SELECT COUNT(*)::int AS total FROM spatial_planning.v_inspector_queue q ${clause}`, params),
+      ])
+      return { success: true, data: rows.rows, total: count.rows[0].total, limit, offset }
+    } catch (err) {
+      request.log.error({ err }, '[dm] work-queue failed')
+      return reply.code(500).send({ success: false, error: 'queue_failed', message: 'The inspection queue could not be loaded.' })
+    }
+  })
+
+  fastify.get('/inspector/work-queue/summary', {
+    preHandler: requireRole(fastify, STAFF_ROLES),
+  }, async (request, reply) => {
+    const parts = Object.entries(QUEUE_BUCKETS)
+      .map(([name, pred]) => `COUNT(*) FILTER (WHERE ${pred})::int AS ${name}`)
+      .join(', ')
+    try {
+      const r = await db(request).query(`SELECT ${parts}, COUNT(*)::int AS total FROM spatial_planning.v_inspector_queue q`)
+      return { success: true, data: r.rows[0] }
+    } catch (err) {
+      request.log.error({ err }, '[dm] queue summary failed')
+      return reply.code(500).send({ success: false, error: 'summary_failed', message: 'Queue counts could not be loaded.' })
+    }
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 1 — PERMIT APPLICATIONS
+  // ══════════════════════════════════════════════════════════════════
+
+  fastify.post('/permit-applications', {
+    preHandler: requireRole(fastify, ['planning_clerk', 'planner', 'admin', 'public', 'viewer', 'registered']),
+  }, async (request, reply) => {
+    const b = request.body || {}
+    if (!isStr(b.applicant_name, 255)) {
+      return reply.code(400).send({ success: false, error: 'missing_field', field: 'applicant_name' })
+    }
+    const VALID_TYPES = ['new_building','alteration','extension','change_of_use',
+                         'subdivision','consolidation','rezoning','other']
+    if (!VALID_TYPES.includes(b.development_type)) {
+      return reply.code(400).send({ success: false, error: 'bad_development_type' })
+    }
+    const initialStatus = (b.pay_intent && typeof b.pay_intent === 'object')
+      ? 'pending_payment'
+      : 'registered'
+    try {
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.permit_application
+           (dev_app_id, tpd_reference, dev_register_no, stand_number, suburb_ward,
+            street_address, stand_area_sqm, applicant_name, applicant_id_number,
+            applicant_phone, applicant_email, development_type, description,
+            site_plan_url, received_at, created_by, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         RETURNING *`,
+        [
+          b.dev_app_id || null,
+          b.tpd_reference || null,
+          b.dev_register_no || null,
+          b.stand_number || null,
+          b.suburb_ward || null,
+          b.street_address || null,
+          b.stand_area_sqm || null,
+          b.applicant_name,
+          b.applicant_id_number || null,
+          b.applicant_phone || null,
+          b.applicant_email || null,
+          b.development_type,
+          b.description || null,
+          b.site_plan_url || null,
+          isDate(b.received_at) ? b.received_at : new Date().toISOString().slice(0, 10),
+          request.user.id,
+          initialStatus,
+        ],
+      )
+      let row = rows[0]
+      // GIS integration: persist the application's map location (centroid)
+      // when supplied, so every role's map can pin it. Stored as 4326 point.
+      const lat = Number(b.latitude ?? b.lat)
+      const lng = Number(b.longitude ?? b.lng)
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        const upd = await db(request).query(
+          `UPDATE spatial_planning.permit_application
+              SET location = ST_SetSRID(ST_MakePoint($2,$3),4326), updated_at = NOW()
+            WHERE id = $1
+            RETURNING *, ST_X(location) AS lng, ST_Y(location) AS lat`,
+          [row.id, lng, lat])
+        row = upd.rows[0] || row
+      }
+
+      // Link the parcel and record the zoning at lodgement (migration 146). The server
+      // works this out from the stand number or location; it never fails the lodgement:
+      // a stand that matches nothing, or several things, is recorded as such.
+      try {
+        await pg.query('SELECT spatial_planning.lodge_permit_zoning($1)', [row.id])
+        const { rows: linked } = await pg.query(
+          'SELECT authority_id, parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1',
+          [row.id])
+        if (linked[0]) row = { ...row, ...linked[0] }
+      } catch (err) {
+        request.log.error({ err }, 'permit lodgement zoning failed')
+      }
+
+      // Acknowledge receipt by email. Fire-and-forget: composing the
+      // (optionally AI-fine-tuned) message must never delay or fail the
+      // submission response. The email worker picks the row up from the
+      // outbox and delivers it.
+      const recipientEmail = row.applicant_email || request.user.email || null
+      if (recipientEmail) {
+        notifier.enqueueApplicationReceived(pg, {
+          userId:        request.user.id,
+          email:         recipientEmail,
+          name:          row.applicant_name || null,
+          applicationId: row.id,
+          reference:     row.dev_register_no || row.tpd_reference || null,
+          devType:       row.development_type || null,
+          standNumber:   row.stand_number || null,
+          suburbWard:    row.suburb_ward || null,
+        }).catch(err => request.log.error({ err }, 'application_received email enqueue failed'))
+      }
+
+      return reply.code(201).send({ success: true, data: row })
+    } catch (err) {
+      request.log.error({ err }, 'permit-application create failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    const { status, development_type, search, limit = 50, offset = 0 } = request.query
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    const ownerFilter = isStaff ? null : request.user.id
+    const includePending = isStaff && request.query.includePendingPayment === 'true'
+    const pageLimit = Math.min(Number(limit) || 50, 200)
+    const pageOffset = Math.max(Number(offset) || 0, 0)
+    try {
+      // COUNT(*) OVER() carries the size of the filtered set on every row, so a
+      // register can say "51–100 of 412" from one query. Without it a paged
+      // register can only offer Next and discover the end by hitting it, and
+      // the response shape has promised a total since it was first typed.
+      const { rows } = await db(request).query(
+        // The summary view carries the register columns but not the case
+        // columns, so a list row arrived without created_at (the quarterly
+        // return filtered on it and produced an empty return every time),
+        // without fee_paid (intake completeness read false for every paid
+        // application) and without the clock. They are joined back here rather
+        // than added to the view: the view is read by several consoles and
+        // changing its shape is a migration, while a list row missing the
+        // fields its own type promises is a bug in every one of them.
+        `SELECT v.*, COUNT(*) OVER() AS total_count,
+                p.created_at, p.updated_at, p.description,
+                p.applicant_phone, p.applicant_email,
+                p.acknowledged_at, p.statutory_due_date, p.assigned_to,
+                p.recommendation, p.classification,
+                (p.fee_paid_at IS NOT NULL) AS fee_paid
+           FROM spatial_planning.v_application_summary v
+           JOIN spatial_planning.permit_application p ON p.id = v.id
+         WHERE ($1::text IS NULL OR v.status = $1)
+           AND ($2::text IS NULL OR v.development_type = $2)
+           AND ($3::text IS NULL OR (
+                 v.applicant_name ILIKE '%' || $3 || '%'
+                 OR v.tpd_reference ILIKE '%' || $3 || '%'
+                 OR v.stand_number  ILIKE '%' || $3 || '%'
+                 OR v.dev_register_no ILIKE '%' || $3 || '%'
+                 OR v.suburb_ward ILIKE '%' || $3 || '%'
+               ))
+           AND ($6::uuid IS NULL OR v.created_by = $6)
+           AND ($7::boolean = true
+                OR v.created_by = COALESCE($6, '00000000-0000-0000-0000-000000000000'::uuid)
+                OR v.status <> 'pending_payment')
+         ORDER BY v.received_at DESC NULLS LAST
+         LIMIT $4 OFFSET $5`,
+        [status || null, development_type || null, search || null,
+         pageLimit, pageOffset,
+         ownerFilter, includePending],
+      )
+      const total = rows.length ? Number(rows[0].total_count) : 0
+      return reply.send({
+        success: true,
+        data: rows.map(({ total_count, ...row }) => row),
+        total,
+        limit: pageLimit,
+        offset: pageOffset,
+      })
+    } catch (err) {
+      request.log.error({ err }, 'list permit-applications failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications/:id', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    try {
+      const { rows } = await db(request).query(
+        `SELECT *, ST_X(location) AS lng, ST_Y(location) AS lat
+           FROM spatial_planning.permit_application WHERE id = $1`,
+        [request.params.id],
+      )
+      if (!rows[0]) {
+        return reply.code(404).send({ success: false, error: 'not_found' })
+      }
+      const isStaff = STAFF_ROLES.includes(request.user.role)
+      if (!isStaff && rows[0].created_by !== request.user.id) {
+        // 404 not 403 so we don't leak the existence of someone else's row.
+        return reply.code(404).send({ success: false, error: 'not_found' })
+      }
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'get permit-application failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Rule snapshots (migration 146) ───────────────────────────────
+  // The rules a permit is judged under, computed on the server from the parcel's position.
+  // Append-only history: the latest 'assessment' is the current one.
+  const SNAPSHOT_STAFF = ['planner', 'planning_clerk', 'eo', 'admin']
+
+  fastify.get('/permit-applications/:id/rule-snapshots', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    try {
+      const { rows: permit } = await db(request).query(
+        'SELECT id, created_by, parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1',
+        [request.params.id])
+      if (!permit[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      if (!STAFF_ROLES.includes(request.user.role) && permit[0].created_by !== request.user.id) {
+        return reply.code(404).send({ success: false, error: 'not_found' })
+      }
+      const { rows } = await db(request).query(
+        `SELECT id, kind, land_use_code, plan_instrument_id, snapshot, taken_by, taken_at
+           FROM spatial_planning.permit_rule_snapshot WHERE permit_id = $1 ORDER BY taken_at, id`,
+        [request.params.id])
+      const { id, created_by, ...parcel } = permit[0]
+      return reply.send({ success: true, data: { parcel, snapshots: rows } })
+    } catch (err) {
+      request.log.error({ err }, 'list rule snapshots failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.put('/permit-applications/:id/parcel', {
+    preHandler: requireRole(fastify, SNAPSHOT_STAFF),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const ref = parseParcelRef(b.layer, b.id)
+    if (!ref) return reply.code(400).send({ success: false, error: 'bad_parcel' })
+    try {
+      const { rows } = await db(request).query('SELECT spatial_planning.set_permit_parcel($1, $2, $3, $4) AS snapshot',
+        [request.params.id, ref.layer, ref.id, request.user.id])
+      return reply.send({ success: true, data: rows[0].snapshot })
+    } catch (err) {
+      if (/unknown permit/.test(err.message)) return reply.code(404).send({ success: false, error: 'not_found' })
+      if (/no parcel/.test(err.message)) return reply.code(404).send({ success: false, error: 'unknown_parcel' })
+      request.log.error({ err }, 'set permit parcel failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/permit-applications/:id/rule-snapshot', {
+    preHandler: requireRole(fastify, SNAPSHOT_STAFF),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const use = parseUseCode((request.body || {}).land_use_code)
+    if (!use) return reply.code(400).send({ success: false, error: 'bad_land_use_code' })
+    try {
+      const { rows } = await db(request).query('SELECT spatial_planning.take_permit_assessment_snapshot($1, $2, $3) AS snapshot',
+        [request.params.id, use, request.user.id])
+      return reply.code(201).send({ success: true, data: rows[0].snapshot })
+    } catch (err) {
+      if (/unknown permit/.test(err.message)) return reply.code(404).send({ success: false, error: 'not_found' })
+      if (/has no parcel/.test(err.message)) return reply.code(409).send({ success: false, error: 'no_parcel' })
+      request.log.error({ err }, 'take rule snapshot failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Planner case file (migration 082) ────────────────────────────
+  // Persist the planner's working record ON the permit so it is the shared
+  // system-of-record, not browser localStorage: proposal detail, due-diligence
+  // results, zoning snapshot, committee report, recommendation, structured
+  // conditions, statutory due date and the assigned planner.
+  fastify.patch('/permit-applications/:id/case', {
+    preHandler: requireRole(fastify, ['planner', 'planning_clerk', 'eo', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+
+    // Scalar columns (allow-listed).
+    const scalar = {
+      estimated_cost:         typeof b.estimated_cost === 'number' ? b.estimated_cost : undefined,
+      plinth_area:            typeof b.plinth_area === 'number' ? b.plinth_area : undefined,
+      floors:                 Number.isInteger(b.floors) ? b.floors : undefined,
+      parking_bays:           Number.isInteger(b.parking_bays) ? b.parking_bays : undefined,
+      title_deed_no:          isStr(b.title_deed_no, 60) ? b.title_deed_no : undefined,
+      classification:         isStr(b.classification, 40) ? b.classification : undefined,
+      recommendation:         isStr(b.recommendation, 40) ? b.recommendation : undefined,
+      recommendation_reasons: typeof b.recommendation_reasons === 'string' ? b.recommendation_reasons : undefined,
+      statutory_due_date:     isDate(b.statutory_due_date) ? b.statutory_due_date : undefined,
+      assigned_to:            isUuid(b.assigned_to) ? b.assigned_to : undefined,
+    }
+    // JSONB columns.
+    const json = {
+      due_diligence:     b.due_diligence,
+      committee_report:  b.committee_report,
+      zoning_assessment: b.zoning_assessment,
+      permit_conditions: b.permit_conditions,
+    }
+
+    const sets = []
+    const vals = [request.params.id]
+    for (const [k, v] of Object.entries(scalar)) {
+      if (v !== undefined) { vals.push(v); sets.push(`${k} = $${vals.length}`) }
+    }
+    for (const [k, v] of Object.entries(json)) {
+      if (v !== undefined) { vals.push(JSON.stringify(v)); sets.push(`${k} = $${vals.length}::jsonb`) }
+    }
+    // GIS integration: map location (centroid) as a 4326 point.
+    const lat = Number(b.lat ?? b.latitude)
+    const lng = Number(b.lng ?? b.longitude)
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      vals.push(lng); const lngIdx = vals.length
+      vals.push(lat); const latIdx = vals.length
+      sets.push(`location = ST_SetSRID(ST_MakePoint($${lngIdx},$${latIdx}),4326)`)
+    }
+    if (!sets.length) return reply.code(400).send({ success: false, error: 'no_fields' })
+
+    // Optimistic lock: caller must state the revision it last read. A missing
+    // or mismatched expectedRevision means someone else saved in between —
+    // reject with 409 + the current row rather than silently overwriting.
+    const expectedRevision = Number(b.expectedRevision)
+    if (!Number.isInteger(expectedRevision)) {
+      return reply.code(400).send({ success: false, error: 'expected_revision_required' })
+    }
+
+    try {
+      const before = await db(request).query(
+        'SELECT assigned_to, revision FROM spatial_planning.permit_application WHERE id = $1',
+        [request.params.id],
+      )
+      if (!before.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      if (before.rows[0].revision !== expectedRevision) {
+        const current = await db(request).query(
+          'SELECT *, ST_X(location) AS lng, ST_Y(location) AS lat FROM spatial_planning.permit_application WHERE id = $1',
+          [request.params.id],
+        )
+        return reply.code(409).send({
+          success: false, error: 'conflict',
+          message: 'This case was changed by another officer since you loaded it.',
+          data: current.rows[0],
+        })
+      }
+
+      const revisionIdx = vals.length + 1
+      vals.push(expectedRevision)
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.permit_application
+            SET ${sets.join(', ')}, revision = revision + 1, updated_at = NOW()
+          WHERE id = $1 AND revision = $${revisionIdx}
+          RETURNING *, ST_X(location) AS lng, ST_Y(location) AS lat`,
+        vals,
+      )
+      if (!rows[0]) {
+        // Lost the race between the check above and this write.
+        const current = await db(request).query(
+          'SELECT *, ST_X(location) AS lng, ST_Y(location) AS lat FROM spatial_planning.permit_application WHERE id = $1',
+          [request.params.id],
+        )
+        return reply.code(409).send({
+          success: false, error: 'conflict',
+          message: 'This case was changed by another officer since you loaded it.',
+          data: current.rows[0],
+        })
+      }
+
+      await logEvent(request.params.id, 'case_updated', request, {
+        fields: sets.map(s => s.split(' ')[0]),
+      })
+      if (scalar.assigned_to !== undefined && scalar.assigned_to !== before.rows[0].assigned_to) {
+        await logEvent(request.params.id, 'reassigned', request, {
+          from: before.rows[0].assigned_to, to: scalar.assigned_to,
+        })
+      }
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'patch permit case failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Audit log (migration 082) ────────────────────────────────────
+  // Who did what, when, why. Owner-scoped exactly like the permit reads.
+  fastify.get('/permit-applications/:id/events', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT e.id, e.event_type, e.actor_id, e.actor_role, e.detail, e.created_at,
+              COALESCE(u.full_name, u.name) AS actor_name
+         FROM spatial_planning.permit_event e
+         LEFT JOIN public.users u ON u.id = e.actor_id
+        WHERE e.permit_app_id = $1
+        ORDER BY e.created_at DESC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.patch('/permit-applications/:id/status', {
+    // EO Planner determines applications (approve / refuse / defer) per RTCP Act s.26,
+    // so 'eo' joins the planning officers allowed to transition status.
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    const { status, decision_conditions, decision_at, permit_conditions } = request.body || {}
+    const VALID_STATUSES = ['registered','acknowledged','circulation','objection_period',
+      'under_review','awaiting_eo_decision','deferred','approved','approved_with_conditions',
+      'refused','withdrawn','appealed']
+    if (!VALID_STATUSES.includes(status)) {
+      return reply.code(400).send({ success: false, error: 'bad_status' })
+    }
+    const expectedRevision = Number(request.body?.expectedRevision)
+    if (!Number.isInteger(expectedRevision)) {
+      return reply.code(400).send({ success: false, error: 'expected_revision_required' })
+    }
+    try {
+      // Statutory gate: read the current status and check the transition is
+      // lawful before writing anything (config/permitWorkflow.js).
+      const cur = await db(request).query(
+        'SELECT status FROM spatial_planning.permit_application WHERE id = $1',
+        [request.params.id],
+      )
+      if (!cur.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      const fromStatus = cur.rows[0].status
+
+      // Determinations must use POST /eo-decision (committee / delegated gate).
+      // Checked before transition so planners always see eo_decision_required.
+      const DECIDED = ['approved', 'approved_with_conditions', 'refused']
+      if (DECIDED.includes(status)) {
+        const role = request.user?.role
+        const adminOverride = role === 'admin' && request.body?.override === true
+        if (!adminOverride) {
+          return reply.code(403).send({
+            success: false,
+            error: 'eo_decision_required',
+            message: 'Approvals and refusals must be recorded via POST /permit-applications/:id/eo-decision (admin may pass override:true).',
+          })
+        }
+      }
+
+      if (rejectUnlawfulTransition(reply, request, fromStatus, status)) return
+
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.permit_application
+            SET status              = $2,
+                decision_conditions = COALESCE($3, decision_conditions),
+                decision_at         = COALESCE($4::date, decision_at),
+                decision_officer    = CASE WHEN $2::varchar IN ('approved','approved_with_conditions','refused')
+                                          THEN $5 ELSE decision_officer END,
+                permit_conditions   = COALESCE($6::jsonb, permit_conditions),
+                revision            = revision + 1,
+                updated_at          = NOW()
+          WHERE id = $1 AND revision = $7 AND status = $8
+          RETURNING *`,
+        [request.params.id, status, decision_conditions || null,
+         isDate(decision_at) ? decision_at : null, request.user.id,
+         permit_conditions !== undefined && permit_conditions !== null
+           ? JSON.stringify(permit_conditions) : null,
+         expectedRevision, fromStatus],
+      )
+      if (!rows[0]) {
+        const current = await db(request).query(
+          'SELECT * FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+        if (!current.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+        return reply.code(409).send({
+          success: false, error: 'conflict',
+          message: 'This case was changed by another officer since you loaded it.',
+          data: current.rows[0],
+        })
+      }
+      await logEvent(request.params.id, 'status_changed', request, {
+        status,
+        from_status: fromStatus,
+        override: request.user.role === 'admin' && request.body?.override === true
+          && !canTransition(fromStatus, status) ? true : undefined,
+        has_conditions: !!permit_conditions,
+        decision_conditions: decision_conditions || null,
+      })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'patch permit status failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Consultations ────────────────────────────────────────────────
+
+  fastify.post('/permit-applications/:id/consultations', {
+    // EO Planner circulates applications to technical departments, so 'eo' may
+    // create consultations alongside the planning officers.
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    // Accept `department` as an alias for `body_name`: the planner UI sends
+    // `department`, the statutory column is `body_name`. (Fixes a 400 that
+    // previously broke referral creation from the planner console.)
+    const bodyName = isStr(b.body_name, 120) ? b.body_name
+                   : (isStr(b.department, 120) ? b.department : null)
+    if (!bodyName) {
+      return reply.code(400).send({ success: false, error: 'body_name required' })
+    }
+    try {
+      const PRI = ['low', 'normal', 'high', 'urgent']
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.application_consultation
+           (permit_app_id, body_name, body_type, contact_name, contact_email,
+            circulated_at, response_due_at, assigned_to, response_notes,
+            priority, task_type, blocking, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING *`,
+        [request.params.id, bodyName, b.body_type || null,
+         b.contact_name || null, b.contact_email || null,
+         isDate(b.circulated_at) ? b.circulated_at : new Date().toISOString().slice(0, 10),
+         isDate(b.response_due_at) ? b.response_due_at : null,
+         isUuid(b.assigned_to) ? b.assigned_to : null,
+         isStr(b.response_notes, 4096) ? b.response_notes : null,
+         PRI.includes(b.priority) ? b.priority : 'normal',
+         isStr(b.task_type, 40) ? b.task_type : null,
+         b.blocking === true,
+         request.user.id],
+      )
+      await logEvent(request.params.id, 'referral_created', request, {
+        body_name: bodyName,
+        assigned_to: isUuid(b.assigned_to) ? b.assigned_to : null,
+      })
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })
+      request.log.error({ err }, 'create consultation failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications/:id/consultations', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT * FROM spatial_planning.application_consultation
+       WHERE permit_app_id = $1 ORDER BY created_at ASC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.patch('/consultations/:cid/response', {
+    // The tasked specialist records their finding here so it returns to the
+    // planner console (closing the referral loop). All technical reviewers may
+    // respond — not just the planner — otherwise the loop can never close.
+    preHandler: requireRole(fastify, ['planner', 'admin', 'eo', 'planning_clerk',
+      'gis_officer', 'surveyor', 'env_officer', 'building_inspector']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.cid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const VALID = ['pending','no_objection','objection','conditional_approval','no_response']
+    if (!VALID.includes(b.response_status)) {
+      return reply.code(400).send({ success: false, error: 'bad_response_status' })
+    }
+    try {
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.application_consultation
+            SET response_status       = $2,
+                response_received_at  = COALESCE($3::date, response_received_at),
+                response_notes        = COALESCE($4, response_notes),
+                response_document_url = COALESCE($5, response_document_url),
+                task_status           = CASE WHEN $2::varchar IN ('no_objection','objection','conditional_approval')
+                                             THEN 'responded' ELSE task_status END,
+                updated_at            = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [request.params.cid, b.response_status,
+         isDate(b.response_received_at) ? b.response_received_at : null,
+         b.response_notes || null, b.response_document_url || null],
+      )
+      if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      await logEvent(rows[0].permit_app_id, 'referral_response', request, {
+        consultation_id: rows[0].id,
+        body_name: rows[0].body_name,
+        response_status: b.response_status,
+      })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'patch consultation response failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // Update a referral's task fields: priority, task_status, due date, blocking,
+  // assignment, or escalate it (reminder/chase). The EO Planner manages these
+  // from the Technical Circulation screen.
+  fastify.patch('/consultations/:cid/task', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.cid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const PRI = ['low', 'normal', 'high', 'urgent']
+    const TS = ['open', 'in_progress', 'responded', 'accepted', 'returned', 'cancelled']
+    const sets = []
+    const vals = [request.params.cid]
+    if (PRI.includes(b.priority)) { vals.push(b.priority); sets.push(`priority = $${vals.length}`) }
+    if (TS.includes(b.task_status)) { vals.push(b.task_status); sets.push(`task_status = $${vals.length}`) }
+    if (typeof b.blocking === 'boolean') { vals.push(b.blocking); sets.push(`blocking = $${vals.length}`) }
+    if (isDate(b.response_due_at)) { vals.push(b.response_due_at); sets.push(`response_due_at = $${vals.length}::date`) }
+    if (isUuid(b.assigned_to)) { vals.push(b.assigned_to); sets.push(`assigned_to = $${vals.length}`) }
+    if (b.escalate === true) { sets.push('escalated_at = NOW()') }
+    if (!sets.length) return reply.code(400).send({ success: false, error: 'no_fields' })
+    try {
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.application_consultation
+            SET ${sets.join(', ')}, updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        vals,
+      )
+      if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      await logEvent(rows[0].permit_app_id, 'referral_task_updated', request, {
+        consultation_id: rows[0].id,
+        escalated: b.escalate === true,
+      })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'patch consultation task failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Objections ───────────────────────────────────────────────────
+
+  fastify.post('/permit-applications/:id/objections', {
+    // 'eo' joins the list it was missing from: the two neighbouring routes let
+    // the EO verify the notice and determine an objection, so an EO who could
+    // decide an objection could not record the one handed in at the counter.
+    preHandler: requireRole(fastify, ['eo', 'planning_clerk', 'planner', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isStr(b.objector_name, 255)) {
+      return reply.code(400).send({ success: false, error: 'objector_name required' })
+    }
+    try {
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.application_objection
+           (permit_app_id, objector_name, objector_address, objector_id_number,
+            grounds, grounds_detail, received_at, document_url)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING *`,
+        [request.params.id, b.objector_name, b.objector_address || null,
+         b.objector_id_number || null,
+         Array.isArray(b.grounds) ? JSON.stringify(b.grounds) : '[]',
+         b.grounds_detail || null,
+         isDate(b.received_at) ? b.received_at : new Date().toISOString().slice(0, 10),
+         b.document_url || null],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })
+      request.log.error({ err }, 'create objection failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications/:id/objections', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT * FROM spatial_planning.application_objection
+       WHERE permit_app_id = $1 ORDER BY received_at ASC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.patch('/objections/:oid/consideration', {
+    // The EO Planner determines objections on the public-notification screen, so
+    // 'eo' (and the clerk) join the planner here. Accepts response evidence.
+    preHandler: requireRole(fastify, ['planner', 'admin', 'eo', 'planning_clerk']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.oid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (typeof b.sustained !== 'boolean') {
+      return reply.code(400).send({ success: false, error: 'sustained (boolean) required' })
+    }
+    try {
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.application_objection
+            SET sustained               = $2,
+                consideration_notes     = COALESCE($3, consideration_notes),
+                resolution_document_url = COALESCE($4, resolution_document_url),
+                considered_at           = CURRENT_DATE,
+                considered_by           = $5
+          WHERE id = $1
+          RETURNING *`,
+        [request.params.oid, b.sustained, b.consideration_notes || null,
+         isStr(b.resolution_document_url, 1000) ? b.resolution_document_url : null,
+         request.user.id],
+      )
+      if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      await logEvent(rows[0].permit_app_id, 'objection_considered', request, {
+        objection_id: rows[0].id, sustained: b.sustained,
+      })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'patch objection consideration failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC NOTIFICATION (RTCP Act s.26(3) — advert, abutting owners, notice)
+  // ══════════════════════════════════════════════════════════════════
+  fastify.get('/permit-applications/:id/public-notice', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await db(request).query(
+      'SELECT * FROM spatial_planning.public_notice WHERE permit_app_id = $1', [request.params.id])
+    return reply.send({ success: true, data: rows[0] || null })
+  })
+
+  // Record / clear a notification verification step, or set the objection-period
+  // window. One row per permit (upserted). step selects which field is written.
+  fastify.post('/permit-applications/:id/public-notice/verify', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+  }, async (request, reply) => {
+    const id = request.params.id
+    if (!isUuid(id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const STEP = b.step
+    const VALID_STEPS = ['advert', 'abutting_owners', 'site_notice',
+      'objection_period_closed', 'set_period', 'notes']
+    if (!VALID_STEPS.includes(STEP)) return reply.code(400).send({ success: false, error: 'bad_step' })
+    const verified = b.verified !== false   // default true
+    const uid = request.user.id
+    try {
+      const own = await db(request).query('SELECT id FROM spatial_planning.permit_application WHERE id=$1', [id])
+      if (!own.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      await db(request).query(
+        `INSERT INTO spatial_planning.public_notice (permit_app_id)
+         VALUES ($1) ON CONFLICT (permit_app_id) DO NOTHING`, [id])
+
+      let sql, params
+      switch (STEP) {
+        case 'advert':
+          sql = `UPDATE spatial_planning.public_notice
+                    SET advert_verified=$2, advert_reference=COALESCE($3, advert_reference),
+                        advert_verified_at=CASE WHEN $2 THEN NOW() ELSE NULL END,
+                        advert_verified_by=CASE WHEN $2 THEN $4::uuid ELSE NULL END
+                  WHERE permit_app_id=$1 RETURNING *`
+          params = [id, verified, isStr(b.reference, 200) ? b.reference : null, uid]
+          break
+        case 'abutting_owners':
+          sql = `UPDATE spatial_planning.public_notice
+                    SET abutting_owners_verified=$2,
+                        abutting_owners_verified_at=CASE WHEN $2 THEN NOW() ELSE NULL END,
+                        abutting_owners_verified_by=CASE WHEN $2 THEN $3::uuid ELSE NULL END
+                  WHERE permit_app_id=$1 RETURNING *`
+          params = [id, verified, uid]
+          break
+        case 'site_notice':
+          sql = `UPDATE spatial_planning.public_notice
+                    SET site_notice_verified=$2,
+                        site_notice_verified_at=CASE WHEN $2 THEN NOW() ELSE NULL END,
+                        site_notice_verified_by=CASE WHEN $2 THEN $3::uuid ELSE NULL END
+                  WHERE permit_app_id=$1 RETURNING *`
+          params = [id, verified, uid]
+          break
+        case 'objection_period_closed':
+          sql = `UPDATE spatial_planning.public_notice
+                    SET objection_period_closed=$2,
+                        objection_period_closed_at=CASE WHEN $2 THEN NOW() ELSE NULL END,
+                        objection_period_closed_by=CASE WHEN $2 THEN $3::uuid ELSE NULL END
+                  WHERE permit_app_id=$1 RETURNING *`
+          params = [id, verified, uid]
+          break
+        case 'set_period':
+          sql = `UPDATE spatial_planning.public_notice
+                    SET objection_period_start=$2::date, objection_period_end=$3::date
+                  WHERE permit_app_id=$1 RETURNING *`
+          params = [id, isDate(b.objection_period_start) ? b.objection_period_start : null,
+            isDate(b.objection_period_end) ? b.objection_period_end : null]
+          break
+        case 'notes':
+          sql = `UPDATE spatial_planning.public_notice SET notes=$2 WHERE permit_app_id=$1 RETURNING *`
+          params = [id, isStr(b.notes, 4096) ? b.notes : null]
+          break
+      }
+      const { rows } = await db(request).query(sql, params)
+      await logEvent(id, 'public_notice_verified', request, { step: STEP, verified })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'public-notice verify failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // EO PLANNER — DECISION WORKSPACE (RTCP Act s.26 determination)
+  // ══════════════════════════════════════════════════════════════════
+  // The authoritative EO decision layer over the data model from migration 085
+  // (eo_handoff_package, case_message, v_specialist_findings, generated_document)
+  // and 086 (return fields, v_eo_decision_queue). The EO Planner sees one
+  // assembled decision package, then Approves / Approves-with-conditions /
+  // Refuses, OR returns the case to a role, OR requests citizen information.
+  const EO_DECIDERS = ['eo', 'admin']
+
+  // ── EO inbox: every permit awaiting a determination ──────────────
+  fastify.get('/eo-planner/cases', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+  }, async (request, reply) => {
+    try {
+      const { rows } = await db(request).query(
+        `SELECT * FROM spatial_planning.v_eo_decision_queue
+          ORDER BY days_to_deemed ASC NULLS LAST, received_at ASC
+          LIMIT 200`,
+      )
+      return reply.send({ success: true, data: rows })
+    } catch (err) {
+      request.log.error({ err }, 'eo-planner cases failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Federated specialist findings for one permit ─────────────────
+  fastify.get('/permit-applications/:id/specialist-findings', {
+    preHandler: requireRole(fastify, STAFF_ROLES),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    try {
+      const { rows } = await db(request).query(
+        `SELECT vf.*, COALESCE(u.full_name, u.name) AS specialist_name
+           FROM spatial_planning.v_specialist_findings vf
+           LEFT JOIN public.users u ON u.id = vf.specialist_id
+          WHERE vf.permit_app_id = $1
+          ORDER BY vf.received_at DESC NULLS LAST, vf.created_at DESC`,
+        [request.params.id],
+      )
+      return reply.send({ success: true, data: rows })
+    } catch (err) {
+      request.log.error({ err }, 'specialist-findings query failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Assembled decision package (the EO's single review screen) ────
+  fastify.get('/permit-applications/:id/decision-package', {
+    preHandler: requireRole(fastify, STAFF_ROLES),
+  }, async (request, reply) => {
+    const id = request.params.id
+    if (!isUuid(id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    try {
+      const permitRes = await db(request).query(
+        `SELECT *, ST_X(location) AS lng, ST_Y(location) AS lat
+           FROM spatial_planning.permit_application WHERE id = $1`,
+        [id],
+      )
+      if (!permitRes.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      const permit = permitRes.rows[0]
+
+      // A failed sub-query (e.g. a view not yet migrated) must degrade to [] —
+      // the decision package should still render with whatever is available.
+      const safe = async (q, params) => {
+        try { return (await db(request).query(q, params)).rows }
+        catch (err) { request.log.error({ err }, 'decision-package sub-query failed'); return [] }
+      }
+
+      const [findings, objections, consultations, buildingPlans, documents, handoffRows, eventsRecent] =
+        await Promise.all([
+          safe(`SELECT vf.*, COALESCE(u.full_name, u.name) AS specialist_name
+                  FROM spatial_planning.v_specialist_findings vf
+                  LEFT JOIN public.users u ON u.id = vf.specialist_id
+                 WHERE vf.permit_app_id = $1
+                 ORDER BY vf.received_at DESC NULLS LAST, vf.created_at DESC`, [id]),
+          safe(`SELECT * FROM spatial_planning.application_objection
+                 WHERE permit_app_id = $1 ORDER BY received_at ASC`, [id]),
+          safe(`SELECT * FROM spatial_planning.application_consultation
+                 WHERE permit_app_id = $1 ORDER BY created_at ASC`, [id]),
+          safe(`SELECT * FROM spatial_planning.building_plan
+                 WHERE permit_app_id = $1 ORDER BY revision ASC`, [id]),
+          safe(`SELECT id, doc_type, title, storage_url, mime_type, version, created_at
+                  FROM spatial_planning.generated_document
+                 WHERE permit_app_id = $1 ORDER BY created_at DESC`, [id]),
+          safe(`SELECT * FROM spatial_planning.eo_handoff_package
+                 WHERE permit_app_id = $1 ORDER BY created_at DESC LIMIT 1`, [id]),
+          safe(`SELECT e.event_type, e.actor_role, e.detail, e.created_at,
+                       COALESCE(u.full_name, u.name) AS actor_name
+                  FROM spatial_planning.permit_event e
+                  LEFT JOIN public.users u ON u.id = e.actor_id
+                 WHERE e.permit_app_id = $1 ORDER BY e.created_at DESC LIMIT 12`, [id]),
+        ])
+
+      const objectionSummary = {
+        total: objections.length,
+        sustained: objections.filter(o => o.sustained === true).length,
+        pending: objections.filter(o => o.sustained === null || o.sustained === undefined).length,
+      }
+
+      return reply.send({
+        success: true,
+        data: {
+          permit,
+          recommendation: {
+            value: permit.recommendation || null,
+            reasons: permit.recommendation_reasons || null,
+          },
+          due_diligence: permit.due_diligence || null,
+          committee_report: permit.committee_report || null,
+          zoning_assessment: permit.zoning_assessment || null,
+          proposed_conditions: permit.permit_conditions || [],
+          findings,
+          objections,
+          objection_summary: objectionSummary,
+          consultations,
+          building_plans: buildingPlans,
+          documents,
+          handoff: handoffRows[0] || null,
+          events_recent: eventsRecent,
+        },
+      })
+    } catch (err) {
+      request.log.error({ err }, 'decision-package failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Case conversation thread ─────────────────────────────────────
+  fastify.get('/permit-applications/:id/messages', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    // Citizens (non-staff) only see messages addressed to them or made public.
+    const visClause = isStaff ? '' : "AND m.visibility IN ('citizen','public')"
+    const { rows } = await db(request).query(
+      `SELECT m.*, COALESCE(u.full_name, u.name) AS author_name
+         FROM spatial_planning.case_message m
+         LEFT JOIN public.users u ON u.id = m.author_id
+        WHERE m.permit_app_id = $1 ${visClause}
+        ORDER BY m.created_at ASC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.post('/permit-applications/:id/messages', {
+    preHandler: requireRole(fastify, STAFF_ROLES),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isStr(b.body, 8000)) return reply.code(400).send({ success: false, error: 'body required' })
+    const MSG_TYPES = ['internal_note', 'citizen_message', 'specialist_comment', 'decision_comment', 'document_request']
+    const VIS = ['internal', 'specialist', 'citizen', 'public']
+    const messageType = MSG_TYPES.includes(b.message_type) ? b.message_type : 'internal_note'
+    const visibility = VIS.includes(b.visibility) ? b.visibility : 'internal'
+    try {
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.case_message
+           (permit_app_id, author_id, author_role, message_type, visibility, body)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         RETURNING *`,
+        [request.params.id, request.user.id, request.user.role, messageType, visibility, b.body],
+      )
+      await logEvent(request.params.id, 'message_posted', request, { message_type: messageType, visibility })
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })
+      request.log.error({ err }, 'post case message failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Final EO determination (approve / conditions / refuse) ───────
+  fastify.post('/permit-applications/:id/eo-decision', {
+    preHandler: requireRole(fastify, EO_DECIDERS),
+  }, async (request, reply) => {
+    const id = request.params.id
+    if (!isUuid(id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const DECISION_STATUS = {
+      approve: 'approved',
+      approve_with_conditions: 'approved_with_conditions',
+      refuse: 'refused',
+    }
+    const status = DECISION_STATUS[b.decision]
+    if (!status) return reply.code(400).send({ success: false, error: 'bad_decision' })
+    const notes = isStr(b.notes, 8000) ? b.notes : null
+    const conditions = (b.conditions !== undefined && b.conditions !== null)
+      ? JSON.stringify(b.conditions) : null
+    try {
+      // Statutory gate: a determination is only lawful from a review stage —
+      // never from intake, and never re-deciding an already-decided case.
+      const cur = await db(request).query(
+        'SELECT status FROM spatial_planning.permit_application WHERE id = $1', [id])
+      if (!cur.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      const fromStatus = cur.rows[0].status
+      if (rejectUnlawfulTransition(reply, request, fromStatus, status)) return
+
+      // Committee gate (H2): a determination must be backed by a committee
+      // resolution — UNLESS the decider records it as a delegated-authority
+      // decision (a reason string, audited), or an admin overrides. This blocks
+      // the "approved with no committee having heard it" hole while still
+      // allowing lawful delegated decisions for minor applications.
+      const delegated = isStr(b.delegated_authority, 2000) ? b.delegated_authority : null
+      const adminOverride = request.user.role === 'admin' && b.override === true
+      if (!delegated && !adminOverride && !(await hasCommitteeResolution(db(request), id))) {
+        return reply.code(409).send({
+          success: false,
+          error: 'committee_resolution_required',
+          message: 'A committee resolution is required before this determination. '
+            + 'Table the application on a committee agenda and record the resolution, '
+            + 'or record this as a delegated-authority decision.',
+        })
+      }
+
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.permit_application
+            SET status              = $2,
+                decision_conditions = COALESCE($3, decision_conditions),
+                decision_at         = CURRENT_DATE,
+                decision_officer    = $4,
+                permit_conditions   = COALESCE($5::jsonb, permit_conditions),
+                updated_at          = NOW()
+          WHERE id = $1 AND status = $6
+          RETURNING *`,
+        [id, status, notes, request.user.id, conditions, fromStatus],
+      )
+      if (!rows[0]) {
+        return reply.code(409).send({
+          success: false, error: 'conflict',
+          message: 'This case was changed by another officer since you loaded it.',
+        })
+      }
+      // Close the latest open handoff package as decided (best-effort).
+      try {
+        await db(request).query(
+          `UPDATE spatial_planning.eo_handoff_package
+              SET status='decided', eo_decision=$2, eo_notes=COALESCE($3, eo_notes),
+                  decided_by=$4, decided_at=NOW(), updated_at=NOW()
+            WHERE id = (SELECT id FROM spatial_planning.eo_handoff_package
+                         WHERE permit_app_id=$1 AND status <> 'decided'
+                         ORDER BY created_at DESC LIMIT 1)`,
+          [id, status, notes, request.user.id],
+        )
+      } catch (err) { request.log.error({ err }, 'eo handoff decided update failed') }
+      // Generate + persist the council decision letter (best-effort: a failure
+      // here must not undo the determination, which is already committed).
+      let generatedDoc = null
+      try {
+        const offRow = await db(request).query(
+          'SELECT COALESCE(full_name, name) AS n FROM public.users WHERE id=$1', [request.user.id])
+        const { title, html } = renderDecisionLetter({
+          decision: b.decision, permit: rows[0],
+          conditions: b.conditions, notes, officerName: offRow.rows[0]?.n || null,
+        })
+        const docType = b.decision === 'refuse' ? 'refusal_letter' : 'outcome_letter'
+        const bytes = Buffer.byteLength(html, 'utf8')
+        const sha = crypto.createHash('sha256').update(html).digest('hex')
+        const verRow = await db(request).query(
+          `SELECT COALESCE(MAX(version),0)+1 AS v FROM spatial_planning.generated_document
+            WHERE permit_app_id=$1 AND doc_type=$2`, [id, docType])
+        const ins = await db(request).query(
+          `INSERT INTO spatial_planning.generated_document
+             (permit_app_id, doc_type, title, content, mime_type, bytes, sha256_hex, version, payload, generated_by)
+           VALUES ($1,$2,$3,$4,'text/html',$5,$6,$7,$8::jsonb,$9)
+           RETURNING id, doc_type, title, mime_type, version, created_at`,
+          [id, docType, title, html, bytes, sha, verRow.rows[0].v,
+           JSON.stringify({ decision: b.decision, status }), request.user.id])
+        generatedDoc = ins.rows[0]
+      } catch (err) { request.log.error({ err }, 'decision letter generation failed') }
+      await logEvent(id, 'eo_decision', request, {
+        decision: b.decision, status, from_status: fromStatus, has_conditions: !!conditions,
+        document_id: generatedDoc ? generatedDoc.id : null,
+        // Statutory backing for the determination: committee resolution, an
+        // audited delegated-authority decision, or an admin override.
+        delegated_authority: delegated || undefined,
+        admin_override: adminOverride || undefined,
+      })
+      return reply.send({ success: true, data: { permit: rows[0], document: generatedDoc } })
+    } catch (err) {
+      request.log.error({ err }, 'eo-decision failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Return the case to a specific role for more work ─────────────
+  fastify.post('/permit-applications/:id/return-to-role', {
+    preHandler: requireRole(fastify, EO_DECIDERS),
+  }, async (request, reply) => {
+    const id = request.params.id
+    if (!isUuid(id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const RETURN_ROLES = ['planner', 'gis_officer', 'surveyor', 'env_officer', 'building_inspector']
+    if (!RETURN_ROLES.includes(b.role)) return reply.code(400).send({ success: false, error: 'bad_role' })
+    const reason = isStr(b.reason, 8000) ? b.reason : null
+    // The working status the case returns to (caller may override).
+    const ROLE_STATUS = {
+      planner: 'under_review', gis_officer: 'circulation', surveyor: 'circulation',
+      env_officer: 'circulation', building_inspector: 'circulation',
+    }
+    const VALID_STATUSES = ['registered', 'acknowledged', 'circulation', 'objection_period',
+      'under_review', 'awaiting_eo_decision', 'deferred', 'approved', 'approved_with_conditions',
+      'refused', 'withdrawn', 'appealed']
+    const status = VALID_STATUSES.includes(b.status) ? b.status : (ROLE_STATUS[b.role] || 'under_review')
+    try {
+      // Statutory gate: a decided case cannot be quietly reopened by a return —
+      // reopening a determination is an appeal (or an audited admin override).
+      const cur = await db(request).query(
+        'SELECT status FROM spatial_planning.permit_application WHERE id = $1', [id])
+      if (!cur.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      const fromStatus = cur.rows[0].status
+      if (rejectUnlawfulTransition(reply, request, fromStatus, status)) return
+
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.permit_application
+            SET status=$2, updated_at=NOW() WHERE id=$1 AND status=$3 RETURNING *`,
+        [id, status, fromStatus],
+      )
+      if (!rows[0]) {
+        return reply.code(409).send({
+          success: false, error: 'conflict',
+          message: 'This case was changed by another officer since you loaded it.',
+        })
+      }
+      // Mark the latest open handoff returned (best-effort).
+      try {
+        await db(request).query(
+          `UPDATE spatial_planning.eo_handoff_package
+              SET status='returned', returned_to_role=$2,
+                  return_reason=COALESCE($3, return_reason), updated_at=NOW()
+            WHERE id = (SELECT id FROM spatial_planning.eo_handoff_package
+                         WHERE permit_app_id=$1 AND status <> 'decided'
+                         ORDER BY created_at DESC LIMIT 1)`,
+          [id, b.role, reason],
+        )
+      } catch (err) { request.log.error({ err }, 'eo handoff return update failed') }
+      // Record the return as a decision comment in the thread (best-effort).
+      if (reason) {
+        try {
+          await db(request).query(
+            `INSERT INTO spatial_planning.case_message
+               (permit_app_id, author_id, author_role, message_type, visibility, body)
+             VALUES ($1,$2,$3,'decision_comment','specialist',$4)`,
+            [id, request.user.id, request.user.role, `Returned to ${b.role}: ${reason}`],
+          )
+        } catch (err) { request.log.error({ err }, 'return case_message insert failed') }
+      }
+      await logEvent(id, 'returned_to_role', request, { role: b.role, reason, status, from_status: fromStatus })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'return-to-role failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Request information from the citizen / applicant ─────────────
+  fastify.post('/permit-applications/:id/request-info', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+  }, async (request, reply) => {
+    const id = request.params.id
+    if (!isUuid(id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isStr(b.message, 8000)) return reply.code(400).send({ success: false, error: 'message required' })
+    try {
+      const own = await db(request).query('SELECT id FROM spatial_planning.permit_application WHERE id=$1', [id])
+      if (!own.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.case_message
+           (permit_app_id, author_id, author_role, message_type, visibility, body)
+         VALUES ($1,$2,$3,'citizen_message','citizen',$4)
+         RETURNING *`,
+        [id, request.user.id, request.user.role, b.message],
+      )
+      // Optionally open a formal document_request when a doc_kind is named.
+      let docRequest = null
+      if (isStr(b.doc_kind, 40)) {
+        try {
+          const dr = await db(request).query(
+            `INSERT INTO spatial_planning.document_request
+               (permit_app_id, requested_by, doc_kind, reason, due_at)
+             VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+            [id, request.user.id, b.doc_kind, b.message, isDate(b.due_at) ? b.due_at : null],
+          )
+          docRequest = dr.rows[0]
+        } catch (err) { request.log.error({ err }, 'document_request insert failed') }
+      }
+      await logEvent(id, 'citizen_info_requested', request, { doc_kind: b.doc_kind || null })
+      return reply.code(201).send({ success: true, data: { message: rows[0], document_request: docRequest } })
+    } catch (err) {
+      request.log.error({ err }, 'request-info failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Generated decision documents (council's authoritative copies) ─
+  fastify.get('/permit-applications/:id/generated-documents', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT d.id, d.doc_type, d.title, d.mime_type, d.version, d.storage_url, d.created_at,
+              COALESCE(u.full_name, u.name) AS generated_by_name
+         FROM spatial_planning.generated_document d
+         LEFT JOIN public.users u ON u.id = d.generated_by
+        WHERE d.permit_app_id = $1
+        ORDER BY d.created_at DESC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  // Fetch one generated document including its rendered content (for viewing
+  // / printing). Owner-scoped exactly like the permit reads.
+  fastify.get('/generated-documents/:id', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const { rows } = await db(request).query(
+      `SELECT d.*, pa.created_by AS permit_created_by
+         FROM spatial_planning.generated_document d
+         JOIN spatial_planning.permit_application pa ON pa.id = d.permit_app_id
+        WHERE d.id = $1`,
+      [request.params.id],
+    )
+    if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && rows[0].permit_created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const doc = rows[0]
+    delete doc.permit_created_by
+    return reply.send({ success: true, data: doc })
+  })
+
+  // Save a GIS map snapshot (the application on the basemap with the chosen
+  // evidence layers) to the decision record as a generated_document. The PNG
+  // is stored as a data URL in content (image storage_url, migration 087/088).
+  fastify.post('/permit-applications/:id/map-evidence', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+    bodyLimit: 8 * 1024 * 1024,   // a PNG data URL exceeds the 1 MB default
+  }, async (request, reply) => {
+    const id = request.params.id
+    if (!isUuid(id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const image = typeof b.image === 'string' ? b.image : null
+    if (!image || !/^data:image\/png;base64,/.test(image)) {
+      return reply.code(400).send({ success: false, error: 'image (png data URL) required' })
+    }
+    if (image.length > 8_000_000) return reply.code(413).send({ success: false, error: 'image too large' })
+    try {
+      const own = await db(request).query('SELECT id FROM spatial_planning.permit_application WHERE id=$1', [id])
+      if (!own.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      const base64 = image.split(',')[1] || ''
+      const bytes = Buffer.byteLength(base64, 'base64')
+      const sha = crypto.createHash('sha256').update(image).digest('hex')
+      const verRow = await db(request).query(
+        `SELECT COALESCE(MAX(version),0)+1 AS v FROM spatial_planning.generated_document
+          WHERE permit_app_id=$1 AND doc_type='map_evidence'`, [id])
+      const ins = await db(request).query(
+        `INSERT INTO spatial_planning.generated_document
+           (permit_app_id, doc_type, title, content, mime_type, bytes, sha256_hex, version, payload, generated_by)
+         VALUES ($1,'map_evidence',$2,$3,'image/png',$4,$5,$6,$7::jsonb,$8)
+         RETURNING id, doc_type, title, mime_type, version, created_at`,
+        [id, isStr(b.title, 200) ? b.title : 'Map evidence', image, bytes, sha,
+         verRow.rows[0].v, JSON.stringify(b.payload ?? {}), request.user.id])
+      await logEvent(id, 'map_evidence_saved', request, { document_id: ins.rows[0].id })
+      return reply.code(201).send({ success: true, data: ins.rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'map-evidence failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 2 — ENFORCEMENT
+  // ══════════════════════════════════════════════════════════════════
+
+  fastify.post('/enforcement-orders', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'admin']),
+  }, async (request, reply) => {
+    const b = request.body || {}
+    const required = ['order_type', 'subject_name', 'subject_address',
+                      'breach_description', 'required_action']
+    for (const f of required) {
+      if (!isStr(b[f], 2000)) {
+        return reply.code(400).send({ success: false, error: 'missing_field', field: f })
+      }
+    }
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO spatial_planning.enforcement_order
+           (permit_app_id, order_reference, order_type, subject_name, subject_address,
+            stand_number, breach_description, required_action, compliance_period,
+            issued_at, issued_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         RETURNING *`,
+        [
+          isUuid(b.permit_app_id) ? b.permit_app_id : null,
+          b.order_reference || null,
+          b.order_type, b.subject_name, b.subject_address,
+          b.stand_number || null,
+          b.breach_description, b.required_action,
+          Number(b.compliance_period) || 30,
+          isDate(b.issued_at) ? b.issued_at : new Date().toISOString().slice(0, 10),
+          request.user.id,
+        ],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23505') return reply.code(409).send({ success: false, error: 'duplicate_reference' })
+      request.log.error({ err }, 'create enforcement order failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // The clerk reads this register but never writes it: the enforcement
+  // register is open to public inspection, and the clerk's console is where
+  // a caller at the counter is answered from. Writes below stay the EO's.
+  fastify.get('/enforcement-orders', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'admin', 'building_inspector', 'gis_officer', 'env_officer', 'planning_clerk']),
+  }, async (request, reply) => {
+    const { status, stand_number, permit_app_id, limit = 50, offset = 0 } = request.query
+    try {
+      // Two ways to name the same property, so they OR rather than AND:
+      //   stand_number   trimmed, case-insensitive — the Stands Register and the
+      //                  order are captured at different desks, so 'Somabula '
+      //                  and 'somabula' are the same stand
+      //   permit_app_id  catches an order raised against the permit but captured
+      //                  with a different stand string, which a stand-only query
+      //                  would miss
+      // status still narrows whatever that identity match returns.
+      const { rows } = await pg.query(
+        `SELECT * FROM spatial_planning.enforcement_order
+         WHERE ($1::text IS NULL OR status = $1)
+           AND (
+             ($4::text IS NULL AND $5::uuid IS NULL)
+             OR ($4::text IS NOT NULL AND upper(btrim(stand_number)) = upper(btrim($4)))
+             OR ($5::uuid IS NOT NULL AND permit_app_id = $5)
+           )
+         ORDER BY issued_at DESC LIMIT $2 OFFSET $3`,
+        [status || null, Math.min(Number(limit) || 50, 200), Number(offset) || 0,
+          isStr(stand_number, 40) ? stand_number : null,
+          isUuid(permit_app_id) ? permit_app_id : null],
+      )
+      return reply.send({ success: true, data: rows })
+    } catch (err) {
+      request.log.error({ err }, 'list enforcement orders failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.patch('/enforcement-orders/:id/status', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const VALID = ['draft','issued','served','complied','non_complied','withdrawn','appealed']
+    if (!VALID.includes(b.status)) {
+      return reply.code(400).send({ success: false, error: 'bad_status' })
+    }
+    try {
+      const { rows } = await pg.query(
+        `UPDATE spatial_planning.enforcement_order
+            SET status            = $2,
+                served_at         = CASE WHEN $2 = 'served' THEN CURRENT_DATE ELSE served_at END,
+                compliance_due_at = COALESCE($3::date, compliance_due_at),
+                notes             = COALESCE($4, notes)
+          WHERE id = $1
+          RETURNING *`,
+        [request.params.id, b.status,
+         isDate(b.compliance_due_at) ? b.compliance_due_at : null,
+         b.notes || null],
+      )
+      if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'patch enforcement status failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/enforcement-orders/:id/compliance-checks', {
+    preHandler: requireRole(fastify, ['eo', 'building_inspector', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isDate(b.visited_at)) {
+      return reply.code(400).send({ success: false, error: 'visited_at (YYYY-MM-DD) required' })
+    }
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO spatial_planning.enforcement_compliance_check
+           (enforcement_order_id, visited_at, complied, notes, photo_urls, inspector_id)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         RETURNING *`,
+        [request.params.id, b.visited_at,
+         typeof b.complied === 'boolean' ? b.complied : null,
+         b.notes || null,
+         Array.isArray(b.photo_urls) ? JSON.stringify(b.photo_urls) : '[]',
+         request.user.id],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'order_not_found' })
+      request.log.error({ err }, 'compliance check create failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/prohibition-orders', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'admin']),
+  }, async (request, reply) => {
+    const b = request.body || {}
+    const required = ['subject_name', 'subject_address', 'prohibited_activity', 'reason']
+    for (const f of required) {
+      if (!isStr(b[f], 2000)) {
+        return reply.code(400).send({ success: false, error: 'missing_field', field: f })
+      }
+    }
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO spatial_planning.prohibition_order
+           (enforcement_order_id, order_reference, subject_name, subject_address,
+            stand_number, prohibited_activity, reason, issued_at, issued_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         RETURNING *`,
+        [
+          isUuid(b.enforcement_order_id) ? b.enforcement_order_id : null,
+          b.order_reference || null,
+          b.subject_name, b.subject_address, b.stand_number || null,
+          b.prohibited_activity, b.reason,
+          isDate(b.issued_at) ? b.issued_at : new Date().toISOString().slice(0, 10),
+          request.user.id,
+        ],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23505') return reply.code(409).send({ success: false, error: 'duplicate_reference' })
+      request.log.error({ err }, 'create prohibition order failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/prohibition-orders', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'admin', 'building_inspector', 'gis_officer', 'env_officer']),
+  }, async (request, reply) => {
+    const { status, limit = 50, offset = 0 } = request.query
+    const { rows } = await pg.query(
+      `SELECT * FROM spatial_planning.prohibition_order
+       WHERE ($1::text IS NULL OR status = $1)
+       ORDER BY issued_at DESC LIMIT $2 OFFSET $3`,
+      [status || null, Math.min(Number(limit) || 50, 200), Number(offset) || 0],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 3 — BUILDING PLANS
+  // ══════════════════════════════════════════════════════════════════
+
+  fastify.post('/permit-applications/:id/building-plans', {
+    preHandler: requireRole(fastify, ['building_inspector', 'planning_clerk', 'planner', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isStr(b.plan_document_url, 1000)) {
+      return reply.code(400).send({ success: false, error: 'plan_document_url required' })
+    }
+    try {
+      const { rows: revRows } = await db(request).query(
+        `SELECT COALESCE(MAX(revision), 0) + 1 AS next_rev
+         FROM spatial_planning.building_plan WHERE permit_app_id = $1`,
+        [request.params.id],
+      )
+      const revision = revRows[0].next_rev
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.building_plan
+           (permit_app_id, revision, revision_label, plan_document_url, site_plan_url,
+            structural_drawings_url, services_drawings_url, architect_name, architect_reg_no,
+            engineer_name, engineer_reg_no, gross_floor_area_sqm, number_of_storeys,
+            building_use, submitted_at, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         RETURNING *`,
+        [
+          request.params.id, revision,
+          b.revision_label || `Rev ${String.fromCharCode(64 + revision)}`,
+          b.plan_document_url, b.site_plan_url || null,
+          b.structural_drawings_url || null, b.services_drawings_url || null,
+          b.architect_name || null, b.architect_reg_no || null,
+          b.engineer_name || null, b.engineer_reg_no || null,
+          b.gross_floor_area_sqm || null, b.number_of_storeys || null,
+          b.building_use || null,
+          isDate(b.submitted_at) ? b.submitted_at : new Date().toISOString().slice(0, 10),
+          request.user.id,
+        ],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })
+      request.log.error({ err }, 'create building plan failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications/:id/building-plans', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT * FROM spatial_planning.building_plan WHERE permit_app_id = $1 ORDER BY revision ASC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.patch('/building-plans/:bpid/appraisal', {
+    preHandler: requireRole(fastify, ['building_inspector', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.bpid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const VALID = ['submitted','under_appraisal','approved','approved_with_amendments','rejected','resubmitted']
+    if (!VALID.includes(b.status)) {
+      return reply.code(400).send({ success: false, error: 'bad_status' })
+    }
+    try {
+      const { rows } = await db(request).query(
+        `UPDATE spatial_planning.building_plan
+            SET status          = $2,
+                appraised_by    = $3,
+                appraised_at    = CASE WHEN $2::varchar IN ('approved','approved_with_amendments','rejected')
+                                       THEN CURRENT_DATE ELSE appraised_at END,
+                appraisal_notes = COALESCE($4, appraisal_notes)
+          WHERE id = $1
+          RETURNING *`,
+        [request.params.bpid, b.status, request.user.id, b.appraisal_notes || null],
+      )
+      if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'building plan appraisal patch failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/building-plans/:bpid/annotations', {
+    preHandler: requireRole(fastify, ['building_inspector', 'planner', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.bpid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!['info','warn','error'].includes(b.severity) || !isStr(b.message, 2000)) {
+      return reply.code(400).send({ success: false, error: 'severity and message required' })
+    }
+    try {
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.building_plan_annotation
+           (building_plan_id, page_number, severity, code, message, bbox, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         RETURNING *`,
+        [request.params.bpid, b.page_number || null, b.severity,
+         b.code || null, b.message,
+         b.bbox ? JSON.stringify(b.bbox) : null, request.user.id],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'plan_not_found' })
+      request.log.error({ err }, 'create annotation failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 4 — STAGE INSPECTIONS
+  // ══════════════════════════════════════════════════════════════════
+  //
+  // GET /inspection-stages is owned by routes/inspections.js (the public
+  // catalogue handler). Registering it here as well used to crash startup
+  // with FST_ERR_DUPLICATED_ROUTE. Removed to keep one source of truth.
+
+  fastify.get('/inspection-checklist/:stageNumber', async (request, reply) => {
+    const stageNumber = Number(request.params.stageNumber)
+    if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > 9) {
+      return reply.code(400).send({ success: false, error: 'bad_stage_number' })
+    }
+    const { rows } = await pg.query(
+      `SELECT ci.id, ci.code, ci.description, ci.is_mandatory, ci.applicable_stages,
+              cc.code AS category_code, cc.label AS category_label
+       FROM spatial_planning.checklist_item ci
+       JOIN spatial_planning.checklist_category cc ON cc.id = ci.category_id
+       WHERE $1 = ANY(ci.applicable_stages)
+       ORDER BY cc.sort_order, ci.sort_order`,
+      [stageNumber],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.post('/permit-applications/:id/stage-inspections', {
+    preHandler: requireRole(fastify, ['building_inspector', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const stageNumber = Number(b.stage_number)
+    if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > 9) {
+      return reply.code(400).send({ success: false, error: 'bad_stage_number' })
+    }
+    try {
+      const { rows: attemptRows } = await db(request).query(
+        `SELECT COALESCE(MAX(attempt), 0) + 1 AS next_attempt
+         FROM spatial_planning.stage_inspection
+         WHERE permit_app_id = $1 AND stage_number = $2`,
+        [request.params.id, stageNumber],
+      )
+      const attempt = attemptRows[0].next_attempt
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.stage_inspection
+           (permit_app_id, building_plan_id, stage_number, attempt, inspector_id,
+            scheduled_at, stamp_reference, weather_conditions, site_ready)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         RETURNING *`,
+        [
+          request.params.id,
+          isUuid(b.building_plan_id) ? b.building_plan_id : null,
+          stageNumber, attempt, request.user.id,
+          b.scheduled_at ? new Date(b.scheduled_at).toISOString() : null,
+          b.stamp_reference || null,
+          b.weather_conditions || null,
+          typeof b.site_ready === 'boolean' ? b.site_ready : null,
+        ],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })
+      request.log.error({ err }, 'create stage inspection failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications/:id/stage-inspections', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await db(request).query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT * FROM spatial_planning.v_inspection_progress
+       WHERE permit_app_id = $1 ORDER BY stage_number, attempt`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.get('/stage-inspections/:sid', {
+    preHandler: requireAuth(fastify),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.sid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const { rows } = await db(request).query(
+      `SELECT si.*, ist.stage_name, ist.prerequisites
+       FROM spatial_planning.stage_inspection si
+       JOIN spatial_planning.inspection_stage ist ON ist.stage_number = si.stage_number
+       WHERE si.id = $1`,
+      [request.params.sid],
+    )
+    if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const { rows: checklistRows } = await db(request).query(
+      `SELECT icr.*, ci.code, ci.description, ci.is_mandatory,
+              cc.code AS category_code, cc.label AS category_label
+       FROM spatial_planning.inspection_checklist_result icr
+       JOIN spatial_planning.checklist_item ci ON ci.id = icr.checklist_item_id
+       JOIN spatial_planning.checklist_category cc ON cc.id = ci.category_id
+       WHERE icr.stage_inspection_id = $1
+       ORDER BY cc.sort_order, ci.sort_order`,
+      [request.params.sid],
+    )
+    return reply.send({ success: true, data: { ...rows[0], checklist: checklistRows } })
+  })
+
+  fastify.post('/stage-inspections/:sid/checklist', {
+    preHandler: requireRole(fastify, ['building_inspector', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.sid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!Array.isArray(b.results) || b.results.length === 0) {
+      return reply.code(400).send({ success: false, error: 'results array required' })
+    }
+    const VALID_RESULTS = ['pass', 'fail', 'na']
+    for (const r of b.results) {
+      if (!Number.isInteger(r.checklist_item_id) || !VALID_RESULTS.includes(r.result)) {
+        return reply.code(400).send({ success: false, error: 'bad_result_entry' })
+      }
+      // Score is required for any item not marked 'na'. The *system* —
+      // not the inspector — decides pass/fail from these scores.
+      if (r.result !== 'na') {
+        const score = Number(r.score)
+        if (!Number.isFinite(score) || score < 0 || score > 10) {
+          return reply.code(400).send({
+            success: false, error: 'score_required',
+            message: `Item ${r.checklist_item_id} needs a score between 0 and 10`,
+          })
+        }
+      }
+      if (r.photo_id != null && !isUuid(r.photo_id)) {
+        return reply.code(400).send({ success: false, error: 'bad_photo_id' })
+      }
+    }
+    try {
+      for (const r of b.results) {
+        await db(request).query(
+          `INSERT INTO spatial_planning.inspection_checklist_result
+             (stage_inspection_id, checklist_item_id, result, notes, score, photo_id)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (stage_inspection_id, checklist_item_id) DO UPDATE
+             SET result   = EXCLUDED.result,
+                 notes    = COALESCE(EXCLUDED.notes, inspection_checklist_result.notes),
+                 score    = EXCLUDED.score,
+                 photo_id = COALESCE(EXCLUDED.photo_id, inspection_checklist_result.photo_id)`,
+          [
+            request.params.sid, r.checklist_item_id, r.result,
+            r.notes || null,
+            r.result === 'na' ? null : Number(r.score),
+            r.photo_id || null,
+          ],
+        )
+      }
+
+      // Ask the database to compute the overall result from the per-item
+      // scores. The inspector cannot override this — anti-corruption.
+      const { rows: scoreRows } = await db(request).query(
+        `SELECT item_count, scored_count, photo_count,
+                avg_score, min_score, max_score, computed_result
+         FROM spatial_planning.stage_inspection_scoring
+         WHERE stage_inspection_id = $1`,
+        [request.params.sid],
+      )
+      const summary = scoreRows[0] || {
+        item_count: 0, scored_count: 0, photo_count: 0,
+        avg_score: null, min_score: null, max_score: null, computed_result: null,
+      }
+
+      if (summary.computed_result) {
+        await db(request).query(
+          `UPDATE spatial_planning.stage_inspection
+              SET result        = $2,
+                  inspected_at  = NOW(),
+                  result_notes  = COALESCE($3, result_notes)
+            WHERE id = $1`,
+          [request.params.sid, summary.computed_result, b.result_notes || null],
+        )
+      }
+      return reply.send({
+        success: true,
+        data: { ...summary, stage_inspection_id: request.params.sid },
+      })
+    } catch (err) {
+      if (err.code === '23503') {
+        return reply.code(404).send({ success: false, error: 'inspection_or_item_not_found' })
+      }
+      request.log.error({ err }, 'save checklist results failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // GET system-computed score summary for a stage inspection.
+  fastify.get('/stage-inspections/:sid/scoring', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    if (!isUuid(request.params.sid)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT * FROM spatial_planning.stage_inspection_scoring WHERE stage_inspection_id = $1`,
+      [request.params.sid],
+    )
+    return reply.send({ success: true, data: rows[0] || null })
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 5 — CERTIFICATE OF OCCUPATION
+  // ══════════════════════════════════════════════════════════════════
+
+  fastify.post('/permit-applications/:id/occupation-certificate', {
+    preHandler: requireRole(fastify, ['building_inspector', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isStr(b.certificate_no, 40)) {
+      return reply.code(400).send({ success: false, error: 'certificate_no required' })
+    }
+    // Guard: all 8 construction stages must have passed.
+    const { rows: stageRows } = await db(request).query(
+      `SELECT stage_number, result FROM spatial_planning.stage_inspection
+       WHERE permit_app_id = $1 AND stage_number < 9
+       ORDER BY stage_number, attempt DESC`,
+      [request.params.id],
+    )
+    const latestByStage = new Map()
+    for (const r of stageRows) {
+      if (!latestByStage.has(r.stage_number)) latestByStage.set(r.stage_number, r)
+    }
+    const failed = []
+    for (let s = 1; s <= 8; s++) {
+      const row = latestByStage.get(s)
+      if (!row || !['pass', 'conditional_pass'].includes(row.result)) failed.push(s)
+    }
+    if (failed.length > 0) {
+      return reply.code(409).send({
+        success: false,
+        error: 'stages_not_passed',
+        message: `Stages ${failed.join(', ')} have not passed.`,
+      })
+    }
+    try {
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.occupation_certificate
+           (permit_app_id, certificate_no, issued_at, occupant_name, building_use,
+            gross_floor_area_sqm, issued_by, countersigned_by, certificate_pdf_url, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING *`,
+        [
+          request.params.id, b.certificate_no,
+          isDate(b.issued_at) ? b.issued_at : new Date().toISOString().slice(0, 10),
+          b.occupant_name || null, b.building_use || null,
+          b.gross_floor_area_sqm || null,
+          request.user.id,
+          isUuid(b.countersigned_by) ? b.countersigned_by : null,
+          b.certificate_pdf_url || null, b.notes || null,
+        ],
+      )
+      // Mark the application as approved.
+      await db(request).query(
+        `UPDATE spatial_planning.permit_application
+            SET status = 'approved', decision_at = CURRENT_DATE, decision_officer = $2
+          WHERE id = $1 AND status NOT IN ('approved','approved_with_conditions')`,
+        [request.params.id, request.user.id],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23505') {
+        return reply.code(409).send({ success: false, error: 'certificate_already_issued' })
+      }
+      if (err.code === '23503') {
+        return reply.code(404).send({ success: false, error: 'application_not_found' })
+      }
+      request.log.error({ err }, 'issue occupation certificate failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications/:id/occupation-certificate', {
+    preHandler: requireAuth(fastify),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    try {
+      // "Not issued yet" is the normal state of an unfinished building, not an
+      // error: it answers 200 with data: null. A 404 here means the PERMIT does
+      // not exist (or is not yours), so a missing route and a building still
+      // under construction no longer look identical to the caller.
+      const permit = await db(request).query(
+        'SELECT id, created_by FROM spatial_planning.permit_application WHERE id = $1',
+        [request.params.id],
+      )
+      if (!permit.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      // The certificate carries the occupant's name and floor area. Same gate as
+      // GET /permit-applications/:id — 404 rather than 403 so the existence of
+      // someone else's case is not disclosed.
+      const isStaff = STAFF_ROLES.includes(request.user.role)
+      if (!isStaff && permit.rows[0].created_by !== request.user.id) {
+        return reply.code(404).send({ success: false, error: 'not_found' })
+      }
+      const { rows } = await db(request).query(
+        `SELECT * FROM spatial_planning.occupation_certificate WHERE permit_app_id = $1`,
+        [request.params.id],
+      )
+      return reply.send({ success: true, data: rows[0] || null })
+    } catch (err) {
+      request.log.error({ err }, 'get occupation certificate failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PERMIT DOCUMENTS (migration 085 permit_document + 119 file metadata)
+  // ══════════════════════════════════════════════════════════════════
+  // The case file: supporting documents uploaded by the applicant, and by the
+  // planning desks. Serves the citizen portal, planner intake, planning-clerk
+  // receipt and the inspector case file, which all read the same list.
+
+  try { await ensureDir(PERMIT_DOC_ROOT) } catch { /* surfaced at upload time */ }
+
+  /**
+   * Staff, or the citizen whose case it is. Returns the permit row, or null
+   * after sending 404 — the same "don't disclose someone else's case" rule as
+   * GET /permit-applications/:id.
+   */
+  async function permitForDocumentActor(request, reply) {
+    if (!isUuid(request.params.id)) {
+      reply.code(400).send({ success: false, error: 'bad_id' })
+      return null
+    }
+    const { rows } = await db(request).query(
+      'SELECT id, created_by, status FROM spatial_planning.permit_application WHERE id = $1',
+      [request.params.id],
+    )
+    const permit = rows[0]
+    if (!permit) {
+      reply.code(404).send({ success: false, error: 'not_found' })
+      return null
+    }
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && permit.created_by !== request.user.id) {
+      reply.code(404).send({ success: false, error: 'not_found' })
+      return null
+    }
+    return permit
+  }
+
+  fastify.get('/permit-applications/:id/documents', {
+    preHandler: requireAuth(fastify),
+  }, async (request, reply) => {
+    try {
+      const permit = await permitForDocumentActor(request, reply)
+      if (!permit) return reply
+      // Directly uploaded rows carry their own metadata (migration 119); rows
+      // that link a citizen document resolve theirs from citizen_documents.
+      // file_name falls back to the stored file's basename so the list never
+      // shows a blank name.
+      const { rows } = await db(request).query(
+        `SELECT pd.id,
+                pd.permit_app_id AS permit_application_id,
+                COALESCE(pd.doc_role, cd.doc_kind, 'other') AS doc_type,
+                COALESCE(
+                  pd.file_name,
+                  NULLIF(regexp_replace(COALESCE(pd.storage_url, cd.storage_url, ''), '^.*/', ''), '')
+                ) AS file_name,
+                COALESCE(pd.storage_url, cd.storage_url) AS storage_url,
+                COALESCE(pd.mime_type, cd.mime_type) AS mime_type,
+                COALESCE(pd.bytes, cd.bytes)::int AS bytes,
+                pd.added_by AS uploaded_by,
+                COALESCE(u.full_name, u.name) AS uploaded_by_name,
+                pd.created_at AS uploaded_at,
+                pd.source
+           FROM spatial_planning.permit_document pd
+           LEFT JOIN public.citizen_documents cd
+             ON pd.source = 'citizen' AND cd.id = pd.document_id AND cd.deleted_at IS NULL
+           LEFT JOIN public.users u ON u.id = pd.added_by
+          WHERE pd.permit_app_id = $1
+          ORDER BY pd.created_at DESC`,
+        [request.params.id],
+      )
+      return reply.send({ success: true, data: rows })
+    } catch (err) {
+      request.log.error({ err }, 'list permit documents failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // Multipart upload. Field name: 'file'. Required field: doc_type.
+  fastify.post('/permit-applications/:id/documents', {
+    preHandler: requireAuth(fastify),
+  }, async (request, reply) => {
+    if (!request.isMultipart || !request.isMultipart()) {
+      return reply.code(415).send({ success: false, error: 'expected_multipart' })
+    }
+    let permit
+    try {
+      permit = await permitForDocumentActor(request, reply)
+      if (!permit) return reply
+    } catch (err) {
+      request.log.error({ err }, 'permit document authorisation failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+
+    let file = null
+    let docType = null
+    try {
+      const parts = request.parts({ limits: { fileSize: MAX_PERMIT_DOC_BYTES, files: 1 } })
+      for await (const part of parts) {
+        if (part.type === 'file') {
+          if (file) { await part.toBuffer().catch(() => null); continue }
+          if (!ALLOWED_PERMIT_DOC_MIME.has(part.mimetype)) {
+            return reply.code(415).send({
+              success: false, error: 'bad_mime',
+              message: `Allowed: ${[...ALLOWED_PERMIT_DOC_MIME].join(', ')}`,
+            })
+          }
+          const buf = await part.toBuffer()
+          if (!buf || buf.length === 0) {
+            return reply.code(400).send({ success: false, error: 'empty_file' })
+          }
+          // Magic bytes, not the declared Content-Type: a .pdf header on an
+          // executable is the whole point of the check.
+          const sig = validateFileSignature(buf, part.mimetype, ALLOWED_PERMIT_DOC_MIME)
+          if (!sig.ok) {
+            return reply.code(415).send({
+              success: false, error: 'bad_file_signature',
+              message: 'File content does not match an allowed document type.',
+            })
+          }
+          file = { mimetype: sig.mime, filename: part.filename, buffer: buf }
+        } else if (part.type === 'field') {
+          if (part.fieldname === 'doc_type' && isStr(part.value, 40)) docType = part.value.trim()
+          if (part.fieldname === 'docType' && isStr(part.value, 40)) docType = part.value.trim()
+        }
+      }
+    } catch (err) {
+      if (err && err.code === 'FST_REQ_FILE_TOO_LARGE') {
+        return reply.code(413).send({
+          success: false, error: 'too_large',
+          message: `Document exceeds ${Math.round(MAX_PERMIT_DOC_BYTES / (1024 * 1024))} MB.`,
+        })
+      }
+      request.log.error({ err }, 'permit document parse failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+
+    if (!file) return reply.code(400).send({ success: false, error: 'no_file' })
+    // An open vocabulary (migration 085 calls doc_role an open set) with a shape
+    // rule, so the register cannot fill with free text or markup.
+    if (!docType || !/^[a-z][a-z0-9_]{1,39}$/.test(docType)) {
+      return reply.code(400).send({
+        success: false, error: 'bad_doc_type',
+        message: 'doc_type is required: lower-case letters, digits and underscores.',
+      })
+    }
+
+    const scan = await scanBuffer(file.buffer, { mime: file.mimetype, log: request.log })
+    if (!scan.clean) {
+      request.log.warn({ signature: scan.signature, engine: scan.engine, userId: request.user.id },
+        'rejected infected permit document')
+      return reply.code(422).send({
+        success: false, error: 'malware_detected',
+        message: 'This file failed a security scan and was not accepted.',
+      })
+    }
+
+    const sha256 = crypto.createHash('sha256').update(file.buffer).digest('hex')
+    const id = crypto.randomUUID()
+    const ext = PERMIT_DOC_EXT[file.mimetype] || ''
+    const dir = path.join(PERMIT_DOC_ROOT, request.params.id)
+    const storageUrl = `/uploads/permit-documents/${request.params.id}/${id}${ext}`
+
+    try {
+      await ensureDir(dir)
+      await fs.writeFile(path.join(dir, `${id}${ext}`), file.buffer)
+      // The uploaded file is its own source row: document_id is this record's
+      // id, source 'external'. ON CONFLICT makes a re-upload of the same file
+      // idempotent rather than a second entry in the register.
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.permit_document
+           (id, permit_app_id, document_id, source, doc_role, storage_url,
+            file_name, mime_type, bytes, sha256_hex, added_by)
+         VALUES ($1,$2,$1,'external',$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (permit_app_id, sha256_hex) WHERE sha256_hex IS NOT NULL
+           DO UPDATE SET doc_role = EXCLUDED.doc_role
+         RETURNING id, permit_app_id AS permit_application_id, doc_role AS doc_type,
+                   file_name, storage_url, mime_type, bytes::int AS bytes, added_by AS uploaded_by,
+                   created_at AS uploaded_at, source`,
+        [id, request.params.id, docType, storageUrl,
+          isStr(file.filename, 255) ? path.basename(file.filename) : `${docType}${ext}`,
+          file.mimetype, file.buffer.length, sha256, request.user.id],
+      )
+      await logEvent(request.params.id, 'document_uploaded', request, {
+        document_id: rows[0].id, doc_type: docType, bytes: file.buffer.length,
+      })
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'permit document upload failed')
+      return reply.code(500).send({ success: false, error: 'internal', message: 'The document was not saved.' })
+    }
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 4b — STAGE INSPECTION PHOTO EVIDENCE
+  // ══════════════════════════════════════════════════════════════════
+
+  // Boot-time best-effort: make sure the upload root exists.
+  try { await ensureDir(STAGE_PHOTO_ROOT) } catch { /* surfaced at upload time */ }
+
+  // POST /stage-inspections/:sid/photos
+  // Multipart upload. Field name: 'photo'. Optional fields: caption, takenAt, lng, lat.
+  fastify.post('/stage-inspections/:sid/photos', {
+    preHandler: requireRole(fastify, ['building_inspector', 'planner', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.sid)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    if (!request.isMultipart || !request.isMultipart()) {
+      return reply.code(415).send({ success: false, error: 'expected_multipart' })
+    }
+
+    // Confirm the parent inspection exists (FK errors would otherwise be opaque).
+    const { rows: inspRows } = await db(request).query(
+      `SELECT id FROM spatial_planning.stage_inspection WHERE id = $1`,
+      [request.params.sid],
+    )
+    if (!inspRows[0]) {
+      return reply.code(404).send({ success: false, error: 'inspection_not_found' })
+    }
+
+    let file = null, caption = null, takenAt = null, lng = null, lat = null
+    try {
+      const parts = request.parts({ limits: { fileSize: MAX_STAGE_PHOTO_BYTES, files: 1 } })
+      for await (const part of parts) {
+        if (part.type === 'file') {
+          if (file) { await part.toBuffer().catch(() => null); continue }
+          if (!ALLOWED_STAGE_PHOTO_MIME.has(part.mimetype)) {
+            return reply.code(415).send({
+              success: false, error: 'bad_mime',
+              message: `Allowed: ${[...ALLOWED_STAGE_PHOTO_MIME].join(', ')}`,
+            })
+          }
+          const buf = await part.toBuffer()
+          if (!buf || buf.length === 0) {
+            return reply.code(400).send({ success: false, error: 'empty_file' })
+          }
+          file = { mimetype: part.mimetype, filename: part.filename, buffer: buf }
+        } else if (part.type === 'field') {
+          if (part.fieldname === 'caption' && isStr(part.value, 255)) caption = part.value
+          if (part.fieldname === 'takenAt' && isStr(part.value, 64))  takenAt = part.value
+          if (part.fieldname === 'lng' && isStr(part.value, 32))      lng = Number(part.value)
+          if (part.fieldname === 'lat' && isStr(part.value, 32))      lat = Number(part.value)
+        }
+      }
+    } catch (err) {
+      if (err && err.code === 'FST_REQ_FILE_TOO_LARGE') {
+        return reply.code(413).send({ success: false, error: 'too_large', message: 'Photo exceeds 10 MB.' })
+      }
+      request.log.error({ err }, 'stage photo parse failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+    if (!file) return reply.code(400).send({ success: false, error: 'no_file' })
+
+    // Malware scan (H7) before the photo is persisted.
+    const scan = await scanBuffer(file.buffer, { mime: file.mimetype, log: request.log })
+    if (!scan.clean) {
+      request.log.warn({ signature: scan.signature, engine: scan.engine }, 'rejected infected stage photo')
+      return reply.code(422).send({ success: false, error: 'malware_detected', message: 'This file failed a security scan and was not accepted.' })
+    }
+
+    const sha256 = crypto.createHash('sha256').update(file.buffer).digest('hex')
+    const id = crypto.randomUUID()
+    const ext = MIME_EXT[file.mimetype] || ''
+    const dir = path.join(STAGE_PHOTO_ROOT, request.params.sid)
+    const diskPath = path.join(dir, `${id}${ext}`)
+    const storageUrl = `/uploads/stage-photos/${request.params.sid}/${id}${ext}`
+
+    try {
+      await ensureDir(dir)
+      await fs.writeFile(diskPath, file.buffer)
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.stage_inspection_photo
+           (id, stage_inspection_id, storage_url, mime_type, bytes, sha256_hex,
+            caption, taken_at, taken_lng, taken_lat, uploaded_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         ON CONFLICT (stage_inspection_id, sha256_hex) DO UPDATE
+           SET caption = COALESCE(EXCLUDED.caption, stage_inspection_photo.caption)
+         RETURNING *`,
+        [
+          id, request.params.sid, storageUrl, file.mimetype,
+          file.buffer.length, sha256, caption,
+          takenAt && !Number.isNaN(Date.parse(takenAt)) ? new Date(takenAt).toISOString() : null,
+          Number.isFinite(lng) ? lng : null,
+          Number.isFinite(lat) ? lat : null,
+          request.user.id,
+        ],
+      )
+      // Mirror into the legacy JSONB array on stage_inspection so existing
+      // callers that read photo_urls keep working.
+      await db(request).query(
+        `UPDATE spatial_planning.stage_inspection
+            SET photo_urls = photo_urls || to_jsonb($2::text)
+          WHERE id = $1 AND NOT (photo_urls ? $2)`,
+        [request.params.sid, storageUrl],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'stage photo upload failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // GET /stage-inspections/:sid/photos
+  fastify.get('/stage-inspections/:sid/photos', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    if (!isUuid(request.params.sid)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT id, stage_inspection_id, storage_url, mime_type, bytes, sha256_hex,
+              caption, taken_at, taken_lng, taken_lat, uploaded_by, created_at
+       FROM spatial_planning.stage_inspection_photo
+       WHERE stage_inspection_id = $1
+       ORDER BY created_at DESC`,
+      [request.params.sid],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 4c — ANTI-CORRUPTION FLAGS
+  // ══════════════════════════════════════════════════════════════════
+
+  const FLAG_REASONS = new Set([
+    'work_not_done', 'work_not_to_standard', 'photos_dont_match_site',
+    'safety_issue_missed', 'measurements_incorrect', 'fraudulent_pass',
+    'absent_during_inspection', 'other',
+  ])
+
+  // POST /stage-inspections/:sid/flag — file an anti-corruption flag.
+  fastify.post('/stage-inspections/:sid/flag', {
+    preHandler: requireRole(fastify, ['building_inspector', 'planner', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.sid)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    const b = request.body || {}
+    if (!FLAG_REASONS.has(b.reason_code)) {
+      return reply.code(400).send({ success: false, error: 'bad_reason_code' })
+    }
+    if (!isStr(b.description, 4096)) {
+      return reply.code(400).send({ success: false, error: 'description_required' })
+    }
+    const evidenceIds = Array.isArray(b.evidence_photo_ids)
+      ? b.evidence_photo_ids.filter(isUuid)
+      : []
+
+    try {
+      // Forbid flagging your own inspection — prevents weaponising the flag system.
+      const { rows: ownRows } = await db(request).query(
+        `SELECT inspector_id FROM spatial_planning.stage_inspection WHERE id = $1`,
+        [request.params.sid],
+      )
+      if (!ownRows[0]) {
+        return reply.code(404).send({ success: false, error: 'inspection_not_found' })
+      }
+      if (ownRows[0].inspector_id && ownRows[0].inspector_id === request.user.id) {
+        return reply.code(409).send({ success: false, error: 'cannot_flag_own_inspection' })
+      }
+
+      const { rows } = await db(request).query(
+        `INSERT INTO spatial_planning.stage_inspection_flag
+           (stage_inspection_id, reason_code, description, evidence_photo_ids,
+            flagged_by, flagged_by_role)
+         VALUES ($1,$2,$3,$4::UUID[],$5,$6)
+         RETURNING *`,
+        [
+          request.params.sid, b.reason_code, b.description, evidenceIds,
+          request.user.id, request.user.role,
+        ],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') {
+        return reply.code(404).send({ success: false, error: 'inspection_not_found' })
+      }
+      request.log.error({ err }, 'stage flag failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // GET /stage-inspections/:sid/flags
+  fastify.get('/stage-inspections/:sid/flags', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    if (!isUuid(request.params.sid)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT f.*, u.name AS flagged_by_name
+       FROM spatial_planning.stage_inspection_flag f
+       LEFT JOIN public.users u ON u.id = f.flagged_by
+       WHERE f.stage_inspection_id = $1
+       ORDER BY f.created_at DESC`,
+      [request.params.sid],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  // GET /permit-applications/:id/stage-inspection-flags — all flags for a permit.
+  fastify.get('/permit-applications/:id/stage-inspection-flags', {
+    preHandler: requireAuth(fastify),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) {
+      return reply.code(400).send({ success: false, error: 'bad_id' })
+    }
+    const { rows } = await db(request).query(
+      `SELECT f.*, si.stage_number, u.name AS flagged_by_name
+       FROM spatial_planning.stage_inspection_flag f
+       JOIN spatial_planning.stage_inspection si ON si.id = f.stage_inspection_id
+       LEFT JOIN public.users u ON u.id = f.flagged_by
+       WHERE si.permit_app_id = $1
+       ORDER BY f.created_at DESC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  // ══════════════════════════════════════════════════════════════════
+  // COMMITTEE MEETINGS & AGENDA (migration 083)
+  // Table applications onto a committee meeting and record the hearing.
+  // ══════════════════════════════════════════════════════════════════
+  const SCHEDULERS = ['planner', 'planning_clerk', 'eo', 'admin']
+
+  fastify.post('/committee-meetings', { preHandler: requireRole(fastify, SCHEDULERS) }, async (request, reply) => {
+    const b = request.body || {}
+    if (!isStr(b.title, 160) || !isDate(b.meeting_date)) {
+      return reply.code(400).send({ success: false, error: 'title and meeting_date (YYYY-MM-DD) required' })
+    }
+    try {
+      const quorum = Number.isInteger(b.quorum) && b.quorum > 0 ? b.quorum : null
+      const { rows } = await pg.query(
+        `INSERT INTO spatial_planning.committee_meeting (title, meeting_date, location, notes, quorum, created_by)
+         VALUES ($1, $2::date, $3, $4, $5, $6) RETURNING *`,
+        [b.title, b.meeting_date, isStr(b.location, 160) ? b.location : null,
+         isStr(b.notes, 4096) ? b.notes : null, quorum, request.user.id],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'create committee meeting failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/committee-meetings', { preHandler: requireRole(fastify, STAFF_ROLES) }, async (request, reply) => {
+    const status = request.query?.status
+    const { rows } = await pg.query(
+      `SELECT m.*,
+              (SELECT COUNT(*) FROM spatial_planning.agenda_item a
+                WHERE a.meeting_id = m.id AND a.deleted_at IS NULL) AS item_count,
+              (SELECT COUNT(*) FROM spatial_planning.meeting_attendance att
+                WHERE att.meeting_id = m.id AND att.status = 'present') AS present_count
+         FROM spatial_planning.committee_meeting m
+        WHERE ($1::text IS NULL OR m.status = $1)
+          AND m.deleted_at IS NULL
+        ORDER BY m.meeting_date DESC
+        LIMIT 100`,
+      [typeof status === 'string' ? status : null],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.post('/committee-meetings/:id/agenda', { preHandler: requireRole(fastify, SCHEDULERS) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isUuid(b.permit_app_id)) return reply.code(400).send({ success: false, error: 'permit_app_id required' })
+    const purpose = ['determination', 'consideration', 'deputation', 'noting'].includes(b.purpose) ? b.purpose : 'determination'
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO spatial_planning.agenda_item (meeting_id, permit_app_id, purpose, item_order, created_by)
+         VALUES ($1, $2, $3,
+           (SELECT COALESCE(MAX(item_order), 0) + 1 FROM spatial_planning.agenda_item WHERE meeting_id = $1),
+           $4)
+         RETURNING *`,
+        [request.params.id, b.permit_app_id, purpose, request.user.id],
+      )
+      await logEvent(b.permit_app_id, 'hearing_scheduled', request, { meeting_id: request.params.id, purpose })
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23505') return reply.code(409).send({ success: false, error: 'already_scheduled' })
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'meeting_or_permit_not_found' })
+      request.log.error({ err }, 'schedule agenda item failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/committee-meetings/:id/agenda', { preHandler: requireRole(fastify, STAFF_ROLES) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const { rows } = await pg.query(
+      `SELECT a.*, p.dev_register_no, p.stand_number, p.suburb_ward,
+              p.applicant_name, p.development_type, p.status AS permit_status
+         FROM spatial_planning.agenda_item a
+         JOIN spatial_planning.permit_application p ON p.id = a.permit_app_id
+        WHERE a.meeting_id = $1 AND a.deleted_at IS NULL
+        ORDER BY a.item_order ASC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.patch('/agenda-items/:aid', { preHandler: requireRole(fastify, ['eo', 'planner', 'admin']) }, async (request, reply) => {
+    if (!isUuid(request.params.aid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const VALID = ['pending', 'approved', 'approved_with_conditions', 'refused', 'deferred', 'noted']
+    if (b.outcome !== undefined && !VALID.includes(b.outcome)) {
+      return reply.code(400).send({ success: false, error: 'bad_outcome' })
+    }
+    const recordsResolution = b.outcome !== undefined && b.outcome !== 'pending'
+    try {
+      // Quorum gate (H2): a resolution is only valid if the meeting was quorate.
+      // When the meeting has a quorum set, require present attendance >= quorum
+      // before a non-pending outcome may be recorded.
+      if (recordsResolution) {
+        const q = await pg.query(
+          `SELECT m.id AS meeting_id, m.quorum,
+                  (SELECT COUNT(*) FROM spatial_planning.meeting_attendance att
+                    WHERE att.meeting_id = m.id AND att.status = 'present') AS present_count
+             FROM spatial_planning.agenda_item a
+             JOIN spatial_planning.committee_meeting m ON m.id = a.meeting_id
+            WHERE a.id = $1 AND a.deleted_at IS NULL AND m.deleted_at IS NULL`,
+          [request.params.aid],
+        )
+        if (!q.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+        const { quorum, present_count } = q.rows[0]
+        if (quorum != null && Number(present_count) < Number(quorum)) {
+          return reply.code(409).send({
+            success: false, error: 'quorum_not_met',
+            message: `Quorum not met: ${present_count} present, ${quorum} required. Record attendance first.`,
+            present: Number(present_count), quorum: Number(quorum),
+          })
+        }
+      }
+      const { rows } = await pg.query(
+        `UPDATE spatial_planning.agenda_item
+            SET outcome    = COALESCE($2, outcome),
+                resolution = COALESCE($3, resolution),
+                heard_at   = CASE WHEN $2 IS NOT NULL AND $2 <> 'pending' THEN NOW() ELSE heard_at END
+          WHERE id = $1 AND deleted_at IS NULL
+          RETURNING *`,
+        [request.params.aid, b.outcome ?? null, isStr(b.resolution, 4096) ? b.resolution : null],
+      )
+      if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      await logEvent(rows[0].permit_app_id, 'hearing_recorded', request, {
+        agenda_item_id: rows[0].id, outcome: rows[0].outcome,
+      })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'record agenda outcome failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/permit-applications/:id/meetings', { preHandler: requireRole(fastify, PERMIT_READERS) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const ownRow = await pg.query(
+      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+    if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    const isStaff = STAFF_ROLES.includes(request.user.role)
+    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+      return reply.code(404).send({ success: false, error: 'not_found' })
+    }
+    const { rows } = await pg.query(
+      `SELECT a.id AS agenda_item_id, a.purpose, a.outcome, a.resolution, a.heard_at,
+              m.id AS meeting_id, m.title, m.meeting_date, m.location, m.status AS meeting_status
+         FROM spatial_planning.agenda_item a
+         JOIN spatial_planning.committee_meeting m ON m.id = a.meeting_id
+        WHERE a.permit_app_id = $1 AND a.deleted_at IS NULL AND m.deleted_at IS NULL
+        ORDER BY m.meeting_date DESC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  // ── Committee roster (migration 104) ────────────────────────────────
+  fastify.get('/committee-members', { preHandler: requireRole(fastify, STAFF_ROLES) }, async (request, reply) => {
+    const includeInactive = request.query?.all === 'true'
+    const { rows } = await pg.query(
+      `SELECT id, full_name, title, user_id, active, created_at
+         FROM spatial_planning.committee_member
+        WHERE ($1::bool OR active = TRUE)
+        ORDER BY active DESC, full_name ASC`,
+      [includeInactive],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  fastify.post('/committee-members', { preHandler: requireRole(fastify, SCHEDULERS) }, async (request, reply) => {
+    const b = request.body || {}
+    if (!isStr(b.full_name, 160)) return reply.code(400).send({ success: false, error: 'full_name required' })
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO spatial_planning.committee_member (full_name, title, user_id, created_by)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [b.full_name, isStr(b.title, 120) ? b.title : null,
+         isUuid(b.user_id) ? b.user_id : null, request.user.id],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'create committee member failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // Soft-retire a member (active=false). Preserves attendance history.
+  fastify.delete('/committee-members/:id', { preHandler: requireRole(fastify, SCHEDULERS) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const { rowCount } = await pg.query(
+      `UPDATE spatial_planning.committee_member SET active = FALSE, updated_at = NOW() WHERE id = $1 AND active = TRUE`,
+      [request.params.id],
+    )
+    if (!rowCount) return reply.code(404).send({ success: false, error: 'not_found' })
+    return reply.send({ success: true })
+  })
+
+  // ── Attendance (migration 104) ──────────────────────────────────────
+  fastify.get('/committee-meetings/:id/attendance', { preHandler: requireRole(fastify, STAFF_ROLES) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const { rows } = await pg.query(
+      `SELECT att.id, att.member_id, att.status, att.recorded_at,
+              mem.full_name, mem.title
+         FROM spatial_planning.meeting_attendance att
+         JOIN spatial_planning.committee_member mem ON mem.id = att.member_id
+        WHERE att.meeting_id = $1
+        ORDER BY mem.full_name ASC`,
+      [request.params.id],
+    )
+    return reply.send({ success: true, data: rows })
+  })
+
+  // Upsert one member's attendance for a meeting (present/apology/absent).
+  fastify.post('/committee-meetings/:id/attendance', { preHandler: requireRole(fastify, SCHEDULERS) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    if (!isUuid(b.member_id)) return reply.code(400).send({ success: false, error: 'member_id required' })
+    const status = ['present', 'apology', 'absent'].includes(b.status) ? b.status : 'present'
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO spatial_planning.meeting_attendance (meeting_id, member_id, status, recorded_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (meeting_id, member_id)
+           DO UPDATE SET status = EXCLUDED.status, recorded_by = EXCLUDED.recorded_by, recorded_at = NOW()
+         RETURNING *`,
+        [request.params.id, b.member_id, status, request.user.id],
+      )
+      return reply.code(201).send({ success: true, data: rows[0] })
+    } catch (err) {
+      if (err.code === '23503') return reply.code(404).send({ success: false, error: 'meeting_or_member_not_found' })
+      request.log.error({ err }, 'record attendance failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Soft-delete a meeting / remove an agenda item (migration 104) ───
+  fastify.delete('/committee-meetings/:id', { preHandler: requireRole(fastify, SCHEDULERS) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const { rowCount } = await pg.query(
+      `UPDATE spatial_planning.committee_meeting
+          SET deleted_at = NOW(), deleted_by = $2, updated_at = NOW()
+        WHERE id = $1 AND deleted_at IS NULL`,
+      [request.params.id, request.user.id],
+    )
+    if (!rowCount) return reply.code(404).send({ success: false, error: 'not_found' })
+    return reply.send({ success: true })
+  })
+
+  fastify.delete('/agenda-items/:aid', { preHandler: requireRole(fastify, SCHEDULERS) }, async (request, reply) => {
+    if (!isUuid(request.params.aid)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const { rows } = await pg.query(
+      `UPDATE spatial_planning.agenda_item
+          SET deleted_at = NOW(), deleted_by = $2
+        WHERE id = $1 AND deleted_at IS NULL
+        RETURNING permit_app_id`,
+      [request.params.aid, request.user.id],
+    )
+    if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    await logEvent(rows[0].permit_app_id, 'hearing_unscheduled', request, { agenda_item_id: request.params.aid })
+    return reply.send({ success: true })
+  })
+}
+
+module.exports = { developmentManagementRoutes }

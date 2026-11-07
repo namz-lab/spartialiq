@@ -1,0 +1,68 @@
+# Build the Windows NSIS installer and publish a GitHub Release so installed
+# apps can wirelessly update (Tauri updater → latest.json).
+#
+# Triggers:
+#   - push to main (desktop-related paths or version bump)
+#   - version tags: v1.2.3
+#   - manual run
+#
+# Required repo secret (Settings → Secrets → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY = contents of src-tauri/keys/spartialiq.key
+
+name: Desktop release
+
+on:
+  # Every push to main publishes a new desktop build so installed apps can
+  # see "Update available". Also runs on version tags and manual dispatch.
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - name: Build and publish desktop release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: SpartialIQ Local v__VERSION__
+          releaseBody: |
+            Windows installer for SpartialIQ Local.
+
+            Installed apps check this release for wireless updates (`latest.json`).
+            Download `SpartialIQ Local_*_x64-setup.exe` to install fresh.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: --config src-tauri/tauri.windows.conf.json

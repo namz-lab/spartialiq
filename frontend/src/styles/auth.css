@@ -1,0 +1,670 @@
+/*
+  Shared visual system for the five screens an anonymous visitor can reach:
+  sign in, create account, forgot password, reset password, accept invite.
+
+  WHY THIS FILE EXISTS
+  LoginView and RegisterView carried the same ~250 lines of scoped CSS twice,
+  copied by hand and already drifting, and InviteAcceptView carried a third
+  dialect of the same thing. Three sign-in pages that do not quite match is
+  how a portal starts looking like a phishing page of itself. One file, and
+  every rule in it reads from the --ent-* token SSOT (styles/enterprise.css)
+  rather than the hex literals those views had hard-coded.
+
+  THE DIRECTION
+  This is a statutory service, not a product launch. The left rail states who
+  the council is and what the account is for; it does not sell. No gradient
+  headlines, no metric cards, no exclamation marks. The accent colour appears
+  on exactly one element per screen — the primary button — which keeps it
+  well under the share PRODUCT.md allows it.
+
+  Prefixed `auth-` and loaded globally from main.ts, beside public-pages.css.
+*/
+
+:root {
+  /* Auth controls are deliberately taller than --ent-control-h (34px). These
+     are the highest-stakes inputs in the product, often typed on a phone on a
+     rural connection, and 44px is the comfortable touch target. max() lets
+     responsive.css's coarse-pointer uplift win where it is larger. */
+  --auth-control-h: max(44px, var(--ent-control-h));
+  --auth-card-w: 25rem;
+  --auth-rail-w: 27rem;
+  /* The institutional ink for the identity rail — --ent-text at panel scale. */
+  --auth-rail-bg: #16202c;
+  --auth-rail-line: #2b3947;
+  --auth-rail-text: #e8ecf1;
+  --auth-rail-text-2: #9fb0c2;
+}
+
+/* ─── Page frame ──────────────────────────────────────────────────────── */
+
+.auth-page {
+  min-height: var(--ent-vh);
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--ent-canvas);
+  color: var(--ent-text);
+  font-family: var(--ent-font);
+}
+
+@media (min-width: 1024px) {
+  .auth-page { grid-template-columns: var(--auth-rail-w) 1fr; }
+}
+
+/* ─── Identity rail ───────────────────────────────────────────────────── */
+/* On phones this collapses to a compact banner above the form, because a
+   full-height brand panel there would push the password field off-screen. */
+
+.auth-rail {
+  background: var(--auth-rail-bg);
+  color: var(--auth-rail-text);
+  padding: var(--ent-s5) var(--ent-s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ent-s6);
+}
+
+@media (min-width: 1024px) {
+  .auth-rail {
+    padding: var(--ent-s8) var(--ent-s7);
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    height: var(--ent-vh);
+  }
+}
+
+.auth-mark {
+  display: flex;
+  align-items: center;
+  gap: var(--ent-s3);
+  text-decoration: none;
+  color: inherit;
+  width: fit-content;
+  border-radius: var(--ent-r);
+}
+.auth-mark:focus-visible {
+  outline: 2px solid var(--auth-rail-text);
+  outline-offset: 3px;
+}
+
+.auth-mark-tile {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: var(--ent-r);
+  background: var(--ent-accent);
+  color: var(--ent-text-on-accent);
+  display: grid;
+  place-items: center;
+}
+
+.auth-mark-name {
+  display: block;
+  font-size: var(--ent-fs-base);
+  font-weight: var(--ent-fw-semibold);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.auth-mark-sub {
+  display: block;
+  font-size: var(--ent-fs-xs);
+  color: var(--auth-rail-text-2);
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+/* The rail's middle block — hidden on phones, where it is noise between the
+   council's name and the field the visitor came to fill in. */
+.auth-rail-body { display: none; }
+@media (min-width: 1024px) {
+  .auth-rail-body { display: block; max-width: 22rem; }
+}
+
+.auth-rail-lede {
+  font-size: 1.5rem;
+  font-weight: var(--ent-fw-semibold);
+  line-height: var(--ent-lh-tight);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--ent-s4);
+}
+
+.auth-rail-copy {
+  font-size: var(--ent-fs-base);
+  line-height: var(--ent-lh);
+  color: var(--auth-rail-text-2);
+  margin: 0 0 var(--ent-s6);
+}
+
+.auth-rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ent-s3);
+}
+.auth-rail-list li {
+  display: flex;
+  gap: var(--ent-s3);
+  align-items: flex-start;
+  font-size: var(--ent-fs-sm);
+  line-height: var(--ent-lh);
+  color: var(--auth-rail-text-2);
+}
+.auth-rail-list svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ent-accent-line);
+}
+
+.auth-rail-foot {
+  display: none;
+  font-size: var(--ent-fs-xs);
+  color: var(--auth-rail-text-2);
+  border-top: 1px solid var(--auth-rail-line);
+  padding-top: var(--ent-s4);
+  line-height: var(--ent-lh);
+}
+@media (min-width: 1024px) { .auth-rail-foot { display: block; } }
+
+.auth-rail-foot a {
+  color: var(--auth-rail-text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--auth-rail-line);
+}
+.auth-rail-foot a:hover { border-bottom-color: currentColor; }
+.auth-rail-foot a:focus-visible { outline: 2px solid var(--auth-rail-text); outline-offset: 2px; }
+
+/* ─── Form column ─────────────────────────────────────────────────────── */
+
+.auth-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ent-s6) var(--ent-s4) var(--ent-s7);
+  /* The 16px side gutter is the floor; on wide screens the card centres in
+     whatever is left of the column. */
+}
+@media (min-width: 768px) { .auth-main { padding: var(--ent-s8) var(--ent-s7); } }
+
+.auth-card {
+  width: 100%;
+  max-width: var(--auth-card-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ent-s5);
+}
+
+/* A wider variant for create-account, which has nine fields and reads badly
+   as one long 25rem ribbon on a desktop screen. */
+.auth-card-wide { max-width: 34rem; }
+
+.auth-head { display: flex; flex-direction: column; gap: var(--ent-s2); }
+
+.auth-eyebrow {
+  font-size: var(--ent-fs-micro);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ent-text-3);
+}
+
+.auth-title {
+  font-size: 1.75rem;
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: -0.02em;
+  line-height: var(--ent-lh-tight);
+  color: var(--ent-text);
+  margin: 0;
+}
+
+.auth-sub {
+  font-size: var(--ent-fs-base);
+  line-height: var(--ent-lh);
+  color: var(--ent-text-2);
+  margin: 0;
+  max-width: 38ch;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ent-s4);
+}
+
+/* Two fields side by side where they are genuinely a pair (given name /
+   surname, password / confirm). Stacks under 560px. */
+.auth-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ent-s4);
+}
+@media (min-width: 560px) { .auth-row { grid-template-columns: 1fr 1fr; } }
+
+.auth-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ent-s4);
+  padding-top: var(--ent-s4);
+  border-top: 1px solid var(--ent-line);
+}
+.auth-section-title {
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ent-text-3);
+  margin: 0;
+}
+
+/* ─── Fields ──────────────────────────────────────────────────────────── */
+
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+
+.auth-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ent-s3);
+}
+
+.auth-label {
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text);
+}
+.auth-optional {
+  font-weight: var(--ent-fw-normal);
+  color: var(--ent-text-3);
+}
+
+.auth-input,
+.auth-select {
+  width: 100%;
+  min-height: var(--auth-control-h);
+  padding: 0 var(--ent-s3);
+  border: 1px solid var(--ent-line-strong);
+  border-radius: var(--ent-r);
+  background: var(--ent-surface);
+  color: var(--ent-text);
+  font: inherit;
+  font-size: var(--ent-fs-base);
+  transition: border-color var(--ent-dur) var(--ent-ease),
+              box-shadow var(--ent-dur) var(--ent-ease);
+  box-sizing: border-box;
+  appearance: none;
+}
+
+.auth-select {
+  /* Native chevron, drawn rather than shipped as an image file. */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ent-text-3) 50%),
+    linear-gradient(135deg, var(--ent-text-3) 50%, transparent 50%);
+  background-position: right 18px center, right 13px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: var(--ent-s7);
+}
+
+.auth-input::placeholder { color: var(--ent-text-3); }
+
+.auth-input:focus,
+.auth-select:focus {
+  outline: none;
+  border-color: var(--ent-accent);
+  box-shadow: var(--ent-focus-ring);
+}
+
+.auth-input:disabled,
+.auth-select:disabled {
+  background: var(--ent-surface-sunken);
+  color: var(--ent-text-2);
+  cursor: not-allowed;
+}
+
+/* Invalid is announced by colour AND by the message below AND by
+   aria-invalid — never by colour alone (WCAG 1.4.1). */
+.auth-input[aria-invalid='true'],
+.auth-select[aria-invalid='true'] {
+  border-color: var(--ent-danger);
+}
+.auth-input[aria-invalid='true']:focus,
+.auth-select[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px var(--ent-tone-negative-line);
+}
+
+/* Password field: the reveal button sits inside the input's box, so the
+   input reserves room for it rather than the text running underneath. */
+.auth-input-wrap { position: relative; display: flex; }
+.auth-input-wrap .auth-input { padding-right: 2.75rem; }
+
+.auth-reveal {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--ent-r-sm);
+  color: var(--ent-text-3);
+  cursor: pointer;
+  transition: color var(--ent-dur) var(--ent-ease), background var(--ent-dur) var(--ent-ease);
+}
+.auth-reveal:hover { color: var(--ent-text); background: var(--ent-surface-2); }
+.auth-reveal:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); color: var(--ent-text); }
+
+.auth-hint {
+  font-size: var(--ent-fs-xs);
+  line-height: var(--ent-lh);
+  color: var(--ent-text-3);
+  margin: 0;
+}
+
+.auth-field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--ent-fs-xs);
+  line-height: var(--ent-lh);
+  color: var(--ent-danger);
+  margin: 0;
+}
+.auth-field-error svg { flex: none; margin-top: 1px; }
+
+/* ─── Password strength ───────────────────────────────────────────────── */
+/* Advice, not a gate. The bars are backed by a text label because a bar
+   chart alone carries no meaning to a screen reader or in high contrast. */
+
+.auth-strength { display: flex; align-items: center; gap: var(--ent-s2); }
+
+.auth-strength-bars { display: flex; gap: 3px; flex: 1; }
+.auth-strength-bar {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--ent-line);
+  transition: background var(--ent-dur) var(--ent-ease);
+}
+.auth-strength-bar.on-0 { background: var(--ent-danger); }
+.auth-strength-bar.on-1 { background: var(--ent-danger); }
+.auth-strength-bar.on-2 { background: var(--ent-warning); }
+.auth-strength-bar.on-3 { background: var(--ent-success); }
+.auth-strength-bar.on-4 { background: var(--ent-success); }
+
+.auth-strength-label {
+  font-size: var(--ent-fs-xs);
+  font-weight: var(--ent-fw-medium);
+  color: var(--ent-text-2);
+  white-space: nowrap;
+}
+
+/* ─── Checkbox rows ───────────────────────────────────────────────────── */
+
+.auth-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ent-s3);
+  font-size: var(--ent-fs-sm);
+  line-height: var(--ent-lh);
+  color: var(--ent-text-2);
+  cursor: pointer;
+}
+.auth-check input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 1px;
+  accent-color: var(--ent-accent);
+  cursor: pointer;
+}
+.auth-check input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: var(--ent-focus-ring);
+  border-radius: 3px;
+}
+.auth-check a { color: var(--ent-accent); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ─── Banners ─────────────────────────────────────────────────────────── */
+
+.auth-banner {
+  display: flex;
+  gap: var(--ent-s3);
+  align-items: flex-start;
+  padding: var(--ent-s3) var(--ent-s4);
+  border-radius: var(--ent-r-md);
+  border: 1px solid;
+  font-size: var(--ent-fs-sm);
+  line-height: var(--ent-lh);
+}
+.auth-banner svg { flex: none; margin-top: 2px; }
+.auth-banner p { margin: 0; }
+.auth-banner p + p { margin-top: var(--ent-s2); }
+
+.auth-banner-error {
+  background: var(--ent-tone-negative-bg);
+  border-color: var(--ent-tone-negative-line);
+  color: #8e241e; /* AA on --ent-danger-soft; --ent-danger itself is 3.9:1 there */
+}
+.auth-banner-success {
+  background: var(--ent-tone-positive-bg);
+  border-color: var(--ent-tone-positive-line);
+  color: #145c39;
+}
+.auth-banner-info {
+  background: var(--ent-tone-info-bg);
+  border-color: var(--ent-tone-info-line);
+  color: var(--ent-accent-active);
+}
+.auth-banner-warning {
+  background: var(--ent-tone-warning-bg);
+  border-color: var(--ent-tone-warning-line);
+  color: #7d4907;
+}
+
+.auth-banner a { color: inherit; font-weight: var(--ent-fw-semibold); }
+
+/* Error summary: each problem is a control that moves focus to its own field.
+   A nine-field form where the summary only *names* the problems still leaves
+   the person hunting for them. */
+.auth-summary-list { margin: 4px 0 0; padding-left: 1.1em; }
+.auth-summary-list button {
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.auth-summary-list button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────── */
+
+.auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ent-s2);
+  width: 100%;
+  min-height: var(--auth-control-h);
+  padding: 0 var(--ent-s5);
+  border-radius: var(--ent-r);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: var(--ent-fs-base);
+  font-weight: var(--ent-fw-semibold);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--ent-dur) var(--ent-ease),
+              border-color var(--ent-dur) var(--ent-ease),
+              color var(--ent-dur) var(--ent-ease);
+}
+.auth-btn:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); }
+
+.auth-btn-primary {
+  background: var(--ent-accent);
+  color: var(--ent-text-on-accent);
+}
+.auth-btn-primary:hover:not(:disabled) { background: var(--ent-accent-hover); }
+.auth-btn-primary:active:not(:disabled) { background: var(--ent-accent-active); }
+
+.auth-btn-secondary {
+  background: var(--ent-surface);
+  border-color: var(--ent-line-strong);
+  color: var(--ent-text);
+}
+.auth-btn-secondary:hover:not(:disabled) {
+  background: var(--ent-surface-2);
+  border-color: var(--ent-text-3);
+}
+
+.auth-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.auth-btn .auth-spin { animation: auth-spin 0.8s linear infinite; }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
+/* ─── Footer of the form column ───────────────────────────────────────── */
+
+.auth-alt {
+  font-size: var(--ent-fs-sm);
+  color: var(--ent-text-2);
+  text-align: center;
+  margin: 0;
+}
+.auth-alt a,
+.auth-link {
+  color: var(--ent-accent);
+  font-weight: var(--ent-fw-medium);
+  text-decoration: none;
+}
+.auth-alt a:hover,
+.auth-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.auth-alt a:focus-visible,
+.auth-link:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); border-radius: 2px; }
+
+.auth-link-quiet {
+  font-size: var(--ent-fs-xs);
+  color: var(--ent-text-2);
+  text-decoration: none;
+}
+.auth-link-quiet:hover { color: var(--ent-text); text-decoration: underline; text-underline-offset: 2px; }
+.auth-link-quiet:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); border-radius: 2px; }
+
+/* The legal line every auth screen carries on small viewports, where the
+   rail's footer is hidden. */
+.auth-legal {
+  font-size: var(--ent-fs-xs);
+  line-height: var(--ent-lh);
+  color: var(--ent-text-3);
+  text-align: center;
+  margin: 0;
+}
+.auth-legal a { color: var(--ent-text-2); }
+@media (min-width: 1024px) { .auth-legal { display: none; } }
+
+/* ─── Demo account picker (development builds only) ───────────────────── */
+
+.auth-demo {
+  border: 1px dashed var(--ent-line-strong);
+  border-radius: var(--ent-r-md);
+  padding: var(--ent-s3);
+  background: var(--ent-surface-2);
+}
+.auth-demo-title {
+  font-size: var(--ent-fs-micro);
+  font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ent-text-3);
+  margin: 0 0 var(--ent-s2);
+}
+.auth-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 4px;
+}
+.auth-demo-pill {
+  font: inherit;
+  font-size: var(--ent-fs-xs);
+  text-align: left;
+  padding: 5px var(--ent-s2);
+  border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r-sm);
+  background: var(--ent-surface);
+  color: var(--ent-text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.auth-demo-pill:hover { border-color: var(--ent-accent); color: var(--ent-text); }
+.auth-demo-pill:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); }
+
+/* ─── Read-only detail list (invite, reset confirmation) ──────────────── */
+
+.auth-facts {
+  border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r-md);
+  background: var(--ent-surface-2);
+  padding: var(--ent-s3) var(--ent-s4);
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--ent-s2) var(--ent-s4);
+  font-size: var(--ent-fs-sm);
+}
+.auth-facts dt { color: var(--ent-text-3); }
+.auth-facts dd { margin: 0; color: var(--ent-text); font-weight: var(--ent-fw-medium); word-break: break-word; }
+
+/* ─── Centred status states (validating a link, link dead, done) ──────── */
+
+.auth-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--ent-s4);
+}
+.auth-state-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ent-surface-2);
+  color: var(--ent-text-2);
+}
+.auth-state-icon.is-good { background: var(--ent-tone-positive-bg); color: var(--ent-success); }
+.auth-state-icon.is-bad { background: var(--ent-tone-negative-bg); color: var(--ent-danger); }
+.auth-state .auth-sub { max-width: 34ch; }
+
+/* Screen-reader-only, for the live region that announces submit results. */
+.auth-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-input,
+  .auth-select,
+  .auth-btn,
+  .auth-reveal,
+  .auth-strength-bar { transition: none; }
+  .auth-btn .auth-spin { animation-duration: 1.6s; }
+}

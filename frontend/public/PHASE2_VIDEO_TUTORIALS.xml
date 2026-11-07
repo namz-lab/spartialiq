@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE tutorials PUBLIC "-//VUNGU//DTD Video Tutorials 1.0//EN" "http://vungu.gov.zw/dtd/video-tutorials.dtd">
+<tutorials>
+  <header>
+    <title>Phase 2 Admin System - Video Tutorials</title>
+    <version>1.0</version>
+    <date>2026-01-21</date>
+    <author>Vungu Spatial Systems Team</author>
+    <total-tutorials>6</total-tutorials>
+    <total-duration>120 minutes</total-duration>
+  </header>
+  
+  <tutorial id="1" title="Getting Started Overview" duration="15">
+    <description>Complete system introduction and navigation walkthrough for new users</description>
+    <thumbnail>https://via.placeholder.com/400x225/3498db/ffffff?text=Getting+Started</thumbnail>
+    
+    <sections>
+      <section title="Introduction" time="00:00 - 02:00">
+        <topics>
+          <topic>System overview and architecture</topic>
+          <topic>Key features and capabilities</topic>
+          <target-audience>New administrators and users</target-audience>
+        </topics>
+      </section>
+      
+      <section title="Navigation" time="02:00 - 05:00">
+        <topics>
+          <topic>Admin panel layout and components</topic>
+          <topic>Main navigation menu structure</topic>
+          <topic>Dashboard widgets and indicators</topic>
+        </topics>
+      </section>
+      
+      <section title="User Interface" time="05:00 - 08:00">
+        <topics>
+          <topic>Common UI patterns and interactions</topic>
+          <topic>Form layouts and data entry</topic>
+          <topic>Search and filter functionality</topic>
+        </topics>
+      </section>
+      
+      <section title="Basic Operations" time="08:00 - 12:00">
+        <topics>
+          <topic>Creating and managing jobs</topic>
+          <topic>Uploading and downloading files</topic>
+          <topic>Viewing reports and analytics</topic>
+        </topics>
+      </section>
+      
+      <section title="Getting Help" time="12:00 - 15:00">
+        <topics>
+          <topic>Documentation and user guides</topic>
+          <topic>Support channels and contact information</topic>
+          <topic>Troubleshooting common issues</topic>
+        </topics>
+      </section>
+    </sections>
+    
+    <learning-objectives>
+      <objective>Understand the Phase 2 system architecture</objective>
+      <objective>Navigate the admin interface efficiently</objective>
+      <objective>Perform basic system operations</objective>
+      <objective>Access help and support resources</objective>
+    </learning-objectives>
+    
+    <production-notes>
+      <visuals>Screen recordings of actual system interface</visuals>
+      <audio>Professional voice-over with clear narration</audio>
+      <graphics>Highlighted UI elements and navigation paths</graphics>
+      <captions>Full closed captions for accessibility</captions>
+    </production-notes>
+  </tutorial>
+
+  <tutorial id="2" title="Data Cleaning Deep Dive" duration="20">
+    <description>Comprehensive guide to data import, export, and validation workflows</description>
+    <thumbnail>https://via.placeholder.com/400x225/e74c3c/ffffff?text=Data+Cleaning</thumbnail>
+    
+    <sections>
+      <section title="Data Import" time="00:00 - 05:00">
+        <topics>
+          <topic>Supported file formats (SHP, GeoJSON, KML, CSV, GPKG)</topic>
+          <topic>Upload process and file validation</topic>
+          <topic>Import configuration options</topic>
+          <topic>Batch import techniques</topic>
+        </topics>
+      </section>
+      
+      <section title="Data Validation" time="05:00 - 10:00">
+        <topics>
+          <topic>Geometry validation rules</topic>
+          <topic>Attribute completeness checks</topic>
+          <topic>Coordinate reference system validation</topic>
+          <topic>Topology relationship verification</topic>
+        </topics>
+      </section>
+      
+      <section title="Cleaning Operations" time="10:00 - 15:00">
+        <topics>
+          <topic>Duplicate detection and removal</topic>
+          <topic>Geometry repair algorithms</topic>
+          <topic>Attribute standardization</topic>
+          <topic>Projection transformation</topic>
+        </topics>
+      </section>
+      
+      <section title="Export Options" time="15:00 - 18:00">
+        <topics>
+          <topic>Export format selection</topic>
+          <topic>Quality and compression settings</topic>
+          <topic>Batch export operations</topic>
+          <topic>Export validation</topic>
+        </topics>
+      </section>
+      
+      <section title="Best Practices" time="18:00 - 20:00">
+        <topics>
+          <topic>Data quality standards</topic>
+          <topic>Workflow optimization</topic>
+          <topic>Error handling strategies</topic>
+          <topic>Performance considerations</topic>
+        </topics>
+      </section>
+    </sections>
+    
+    <learning-objectives>
+      <objective>Import data from various formats</objective>
+      <objective>Configure and run validation rules</objective>
+      <objective>Apply data cleaning operations</objective>
+      <objective>Export cleaned data efficiently</objective>
+    </learning-objectives>
+    
+    <production-notes>
+      <visuals>Real data import examples with different file types</visuals>
+      <audio>Step-by-step narration with technical details</audio>
+      <graphics>Before/after data quality comparisons</graphics>
+      <captions>Technical terminology captions</captions>
+    </production-notes>
+  </tutorial>
+
+  <tutorial id="3" title="QML Style Management" duration="18">
+    <description>Master QML template creation, editing, and style application techniques</description>
+    <thumbnail>https://via.placeholder.com/400x225/9b59b6/ffffff?text=QML+Styles</thumbnail>
+    
+    <sections>
+      <section title="QML Basics" time="00:00 - 03:00">
+        <topics>
+          <topic>QML syntax and structure</topic>
+          <topic>Style components and elements</topic>
+          <topic>QGIS compatibility requirements</topic>
+          <topic>Template organization</topic>
+        </topics>
+      </section>
+      
+      <section title="Template Creation" time="03:00 - 07:00">
+        <topics>
+          <topic>Creating new QML templates</topic>
+          <topic>Symbol definition and configuration</topic>
+          <topic>Color scheme management</topic>
+          <topic>Label placement rules</topic>
+        </topics>
+      </section>
+      
+      <section title="Advanced Styling" time="07:00 - 12:00">
+        <topics>
+          <topic>Scale-dependent styling</topic>
+          <topic>Rule-based styling</topic>
+          <topic>Data-defined properties</topic>
+          <topic>Complex symbol combinations</topic>
+        </topics>
+      </section>
+      
+      <section title="Template Management" time="12:00 - 15:00">
+        <topics>
+          <topic>Template library organization</topic>
+          <topic>Version control for templates</topic>
+          <topic>Template sharing and distribution</topic>
+          <topic>Template validation</topic>
+        </topics>
+      </section>
+      
+      <section title="Application Techniques" time="15:00 - 18:00">
+        <topics>
+          <topic>Batch style application</topic>
+          <topic>Style preview and testing</topic>
+          <topic>Performance optimization</topic>
+          <topic>Export styled data</topic>
+        </topics>
+      </section>
+    </sections>
+    
+    <learning-objectives>
+      <objective>Understand QML syntax and structure</objective>
+      <objective>Create professional cartographic styles</objective>
+      <objective>Manage template libraries efficiently</objective>
+      <objective>Apply styles to spatial data</objective>
+    </learning-objectives>
+    
+    <production-notes>
+      <visuals>QML code examples and visual results</visuals>
+      <audio>Technical explanations with practical examples</audio>
+      <graphics>Style before/after comparisons</graphics>
+      <captions>QML syntax highlighting in captions</captions>
+    </production-notes>
+  </tutorial>
+
+  <tutorial id="4" title="Approval Workflows" duration="22">
+    <description>Configure and manage multi-level approval workflows efficiently</description>
+    <thumbnail>https://via.placeholder.com/400x225/27ae60/ffffff?text=Approvals</thumbnail>
+    
+    <sections>
+      <section title="Workflow Concepts" time="00:00 - 04:00">
+        <topics>
+          <topic>Approval workflow principles</topic>
+          <topic>Workflow components and stages</topic>
+          <topic>Role-based approval process</topic>
+          <topic>Workflow state management</topic>
+        </topics>
+      </section>
+      
+      <section title="Configuration" time="04:00 - 09:00">
+        <topics>
+          <topic>Creating new workflows</topic>
+          <topic>Defining approval steps</topic>
+          <topic>Setting up role assignments</topic>
+          <topic>Configuring timeout rules</topic>
+        </topics>
+      </section>
+      
+      <section title="User Management" time="09:00 - 13:00">
+        <topics>
+          <topic>User roles and permissions</topic>
+          <topic>Approval authority levels</topic>
+          <topic>Delegation and substitution</topic>
+          <topic>User group management</topic>
+        </topics>
+      </section>
+      
+      <section title="Process Management" time="13:00 - 18:00">
+        <topics>
+          <topic>Initiating approval workflows</topic>
+          <topic>Tracking approval progress</topic>
+          <topic>Handling rejections and changes</topic>
+          <topic>Escalation procedures</topic>
+        </topics>
+      </section>
+      
+      <section title="Monitoring and Reporting" time="18:00 - 22:00">
+        <topics>
+          <topic>Workflow performance metrics</topic>
+          <topic>Approval time analysis</topic>
+          <topic>Bottleneck identification</topic>
+          <topic>Compliance reporting</topic>
+        </topics>
+      </section>
+    </sections>
+    
+    <learning-objectives>
+      <objective>Design effective approval workflows</objective>
+      <objective>Configure multi-level approval processes</objective>
+      <objective>Manage user roles and permissions</objective>
+      <objective>Monitor workflow performance</objective>
+    </learning-objectives>
+    
+    <production-notes>
+      <visuals>Workflow diagrams and process flows</visuals>
+      <audio>Clear explanation of approval concepts</audio>
+      <graphics>User interface demonstrations</graphics>
+      <captions>Workflow terminology definitions</captions>
+    </production-notes>
+  </tutorial>
+
+  <tutorial id="5" title="Batch Processing" duration="20">
+    <description>Learn bulk operations, job monitoring, and performance optimization</description>
+    <thumbnail>https://via.placeholder.com/400x225/f39c12/ffffff?text=Batch+Processing</thumbnail>
+    
+    <sections>
+      <section title="Batch Processing Overview" time="00:00 - 03:00">
+        <topics>
+          <topic>Batch processing concepts</topic>
+          <topic>Job queue management</topic>
+          <topic>Resource allocation</topic>
+          <topic>Performance considerations</topic>
+        </topics>
+      </section>
+      
+      <section title="Job Creation" time="03:00 - 07:00">
+        <topics>
+          <topic>Creating batch jobs</topic>
+          <topic>Job configuration options</topic>
+          <topic>Input parameter settings</topic>
+          <topic>Output format selection</topic>
+        </topics>
+      </section>
+      
+      <section title="Job Types" time="07:00 - 12:00">
+        <topics>
+          <topic>Bulk data import jobs</topic>
+          <topic>Batch data export jobs</topic>
+          <topic>Style application jobs</topic>
+          <topic>Validation and cleaning jobs</topic>
+        </topics>
+      </section>
+      
+      <section title="Monitoring and Management" time="12:00 - 16:00">
+        <topics>
+          <topic>Job queue monitoring</topic>
+          <topic>Progress tracking</topic>
+          <topic>Error handling and recovery</topic>
+          <topic>Job cancellation and restart</topic>
+        </topics>
+      </section>
+      
+      <section title="Optimization" time="16:00 - 20:00">
+        <topics>
+          <topic>Performance tuning</topic>
+          <topic>Resource optimization</topic>
+          <topic>Parallel processing</topic>
+          <topic>Best practices</topic>
+        </topics>
+      </section>
+    </sections>
+    
+    <learning-objectives>
+      <objective>Create and configure batch jobs</objective>
+      <objective>Monitor job execution progress</objective>
+      <objective>Handle job errors and failures</objective>
+      <objective>Optimize batch processing performance</objective>
+    </learning-objectives>
+    
+    <production-notes>
+      <visuals>Job queue interface and monitoring screens</visuals>
+      <audio>Technical performance explanations</audio>
+      <graphics>Performance metrics and charts</graphics>
+      <captions>Batch processing terminology</captions>
+    </production-notes>
+  </tutorial>
+
+  <tutorial id="6" title="Security & Admin" duration="25">
+    <description>Complete security features overview and administration best practices</description>
+    <thumbnail>https://via.placeholder.com/400x225/2c3e50/ffffff?text=Security</thumbnail>
+    
+    <sections>
+      <section title="Security Architecture" time="00:00 - 05:00">
+        <topics>
+          <topic>System security layers</topic>
+          <topic>Authentication mechanisms</topic>
+          <topic>Authorization framework</topic>
+          <topic>Audit and logging systems</topic>
+        </topics>
+      </section>
+      
+      <section title="User Management" time="05:00 - 10:00">
+        <topics>
+          <topic>User account creation and management</topic>
+          <topic>Role-based access control</topic>
+          <topic>Permission assignment</topic>
+          <topic>User group management</topic>
+        </topics>
+      </section>
+      
+      <section title="Security Features" time="10:00 - 16:00">
+        <topics>
+          <topic>Rate limiting and throttling</topic>
+          <topic>Input validation and sanitization</topic>
+          <topic>CORS and security headers</topic>
+          <topic>Security audit logging</topic>
+        </topics>
+      </section>
+      
+      <section title="Monitoring and Alerts" time="16:00 - 20:00">
+        <topics>
+          <topic>Security event monitoring</topic>
+          <topic>Suspicious activity detection</topic>
+          <topic>Alert configuration</topic>
+          <topic>Incident response procedures</topic>
+        </topics>
+      </section>
+      
+      <section title="Best Practices" time="20:00 - 25:00">
+        <topics>
+          <topic>Security administration guidelines</topic>
+          <topic>Regular security tasks</topic>
+          <topic>Compliance requirements</topic>
+          <topic>Security awareness training</topic>
+        </topics>
+      </section>
+    </sections>
+    
+    <learning-objectives>
+      <objective>Understand system security architecture</objective>
+      <objective>Manage users and permissions effectively</objective>
+      <objective>Monitor security events and alerts</objective>
+      <objective>Implement security best practices</objective>
+    </learning-objectives>
+    
+    <production-notes>
+      <visuals>Security dashboard and monitoring interfaces</visuals>
+      <audio>Security concept explanations</audio>
+      <graphics>Security architecture diagrams</graphics>
+      <captions>Security terminology and definitions</captions>
+    </production-notes>
+  </tutorial>
+
+  <appendix>
+    <section title="Production Information">
+      <production-details>
+        <detail name="Video Format">MP4, 1920x1080, 30fps</detail>
+        <detail name="Audio Quality">Stereo, 48kHz, 320kbps</detail>
+        <detail name="Closed Captions">Full ADA compliance</detail>
+        <detail name="Transcripts">Available in multiple languages</detail>
+        <detail name="Accessibility">Screen reader compatible</detail>
+      </production-details>
+    </section>
+    
+    <section title="Additional Resources">
+      <resources>
+        <resource type="Documentation">User Manual and Admin Guide</resource>
+        <resource type="API Reference">Complete API documentation</resource>
+        <resource type="Support">24/7 technical support</resource>
+        <resource type="Community">User forums and discussion groups</resource>
+      </resources>
+    </section>
+    
+    <section title="Update Schedule">
+      <updates>
+        <update frequency="Quarterly">Content updates and new tutorials</update>
+        <update frequency="Monthly">Bug fixes and improvements</update>
+        <update frequency="As needed">Feature-specific tutorials</update>
+      </updates>
+    </section>
+  </appendix>
+</tutorials>

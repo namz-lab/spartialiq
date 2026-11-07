@@ -1,0 +1,480 @@
+/*
+  Global stylesheet — civic / document aesthetic.
+  Single source of truth: Tailwind tokens (see tailwind.config.js).
+  This file holds only:
+    1. Tailwind layer imports
+    2. CSS custom properties (legacy --stitch-* aliases for back-compat)
+    3. Document-wide a11y + reduced-motion baselines
+    4. Reusable .btn / .card / .form-* primitives that pre-date Tailwind tokens
+       (kept temporarily — new code should use utilities instead)
+*/
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Tokens. Mirror tailwind.config.js so legacy `var(--stitch-*)` consumers
+   keep working while we migrate them to utility classes.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Easings — match Tailwind config */
+  --ease-out:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Civic palette (mirrors tailwind tokens) */
+  --ink-50:  #f7f8fa;
+  --ink-100: #eef0f4;
+  --ink-200: #dde1e8;
+  --ink-300: #c0c6d1;
+  --ink-400: #8e96a4;
+  --ink-500: #5b6473;
+  --ink-600: #404a59;
+  --ink-700: #2b333f;
+  --ink-800: #1a1f29;
+  --ink-900: #0b1220;
+
+  --accent-50:  #eef6f1;
+  --accent-100: #d6ebde;
+  --accent-500: #1e6b4a;
+  --accent-600: #175b3e;
+  --accent-700: #114830;
+
+  --danger-500:  #b42318;
+  --warning-500: #b54708;
+  --success-500: #1e6b4a;
+
+  /* Legacy aliases — keep until per-component refactor is done. */
+  --primary-color:    var(--ink-900);
+  --primary-hover:    var(--ink-800);
+  --secondary-color:  var(--accent-500);
+  --success-color:    var(--success-500);
+  --warning-color:    var(--warning-500);
+  --error-color:      var(--danger-500);
+  --background-color: #fbfbf8; /* off-white paper */
+  --surface-color:    var(--ink-50);
+  --surface-container:      #ffffff;
+  --surface-container-low:  var(--ink-50);
+  --surface-container-high: var(--ink-100);
+  --text-primary:   var(--ink-900);
+  --text-secondary: var(--ink-500);
+  --border-color:   var(--ink-200);
+
+  /* Stitch-prefixed legacy aliases used by some payment views */
+  --stitch-primary:           var(--ink-900);
+  --stitch-primary-container: var(--ink-800);
+  --stitch-on-primary:        #ffffff;
+  --stitch-secondary:          var(--accent-500);
+  --stitch-secondary-container:var(--accent-100);
+  --stitch-tertiary:           var(--ink-800);
+  --stitch-tertiary-container: var(--ink-700);
+  --stitch-surface:       #fbfbf8;
+  --stitch-surface-low:   var(--ink-50);
+  --stitch-surface-mid:   var(--ink-100);
+  --stitch-surface-high:  var(--ink-200);
+  --stitch-on-surface:        var(--ink-900);
+  --stitch-on-surface-muted:  var(--ink-500);
+  --stitch-outline:           var(--ink-200);
+  --stitch-error:             var(--danger-500);
+  --stitch-error-container:   #fee4e2;
+  --stitch-radius-sm: 4px;
+  --stitch-radius-md: 6px;
+  --stitch-radius-lg: 8px;
+  --stitch-radius-xl: 12px;
+  --stitch-shadow:      0 12px 28px -8px rgba(11, 18, 32, 0.12);
+  --stitch-shadow-soft: 0 1px 3px 0 rgba(11, 18, 32, 0.08);
+
+  /* ────────────────────────────────────────────────────────────────────────
+     GIS-EOS frontend design-skill tokens — seeded verbatim from
+     src/views/admin/LoginView.vue. Single source of truth for the
+     `gis-eos-frontend` skill: reference via var(--login-*), never hardcode the
+     hex/px. Deliberately diverges from DESIGN.md's #1a73e8 accent (user choice,
+     scoped to the frontend design skill). See
+     ".claude/skills/gis enteprise skills/_shared/DESIGN-SYSTEM.md".
+     ──────────────────────────────────────────────────────────────────────── */
+  --login-accent:         #0066cc;
+  --login-accent-dark:    #0052a3;
+  --login-accent-darker:  #004090;
+  --login-accent-ring:    rgba(0, 102, 204, 0.1);
+  --login-heading:        #1a1a1a;
+  --login-label:          #333333;
+  --login-muted:          #666666;
+  --login-input-border:   #e1e5e9;
+  --login-input-disabled: #f5f5f5;
+  --login-error-bg:       #ffeeee;
+  --login-error-fg:       #cc3333;
+  --login-surface:        #ffffff;
+  --login-card-radius:    12px;
+  --login-control-radius: 8px;
+  --login-card-shadow:    0 20px 40px rgba(0, 0, 0, 0.1);
+  --login-btn-gradient:       linear-gradient(135deg, #0066cc, #0052a3);
+  --login-btn-gradient-hover: linear-gradient(135deg, #0052a3, #004090);
+  --login-page-gradient:  linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --login-motion:         all 0.2s ease;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Base
+   ────────────────────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-color);
+  color: var(--text-primary);
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  min-height: 100dvh; /* dvh prevents iOS Safari layout jumping */
+  display: flex;
+  flex-direction: column;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Accessibility baselines
+   - Always-visible focus ring (replaces every `outline: none` we used to
+     scatter across components without a `:focus-visible` replacement).
+   - Reduced-motion fallback for the entire app.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Default focus ring — strong, brand-tinted, never invisible. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Pressable elements: tactile feedback that the click landed. */
+@media (hover: hover) {
+  :where(button, [role='button'], a.btn, .hero-btn-primary, .hero-btn-secondary,
+         .login-btn-primary, .login-btn-secondary):active:not(:disabled) {
+    transform: scale(0.985);
+  }
+}
+
+/* Honor reduced-motion globally. Components may opt back in for purposeful
+   feedback (e.g. error shake) but decorative motion must respect this. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Map primitives
+   ────────────────────────────────────────────────────────────────────────── */
+.map-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+}
+
+.maplibregl-map {
+  position: absolute;
+  inset: 0;
+}
+
+.maplibregl-popup {
+  max-width: 300px;
+}
+
+.maplibregl-popup-content {
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Buttons (legacy primitive — new code should use utilities)
+   ────────────────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: 500 0.875rem/1.25rem 'Geist', sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 160ms var(--ease-out),
+              border-color    160ms var(--ease-out),
+              transform       100ms var(--ease-out);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--ink-900);
+  color: #fff;
+  border-color: var(--ink-900);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--ink-800);
+  border-color: var(--ink-800);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--ink-900);
+  border-color: var(--ink-300);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--ink-50);
+  border-color: var(--ink-400);
+}
+
+.btn-success { background: var(--success-500); color: #fff; border-color: var(--success-500); }
+.btn-warning { background: var(--warning-500); color: #fff; border-color: var(--warning-500); }
+.btn-error   { background: var(--danger-500);  color: #fff; border-color: var(--danger-500); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Forms (legacy primitive)
+   ────────────────────────────────────────────────────────────────────────── */
+.form-group   { margin-bottom: 1rem; }
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.form-input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  background: #fff;
+  transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: 0 0 0 3px rgba(30, 107, 74, 0.18);
+}
+
+.form-input:invalid { border-color: var(--danger-500); }
+
+.form-error {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--danger-500);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Card primitive (legacy)
+   ────────────────────────────────────────────────────────────────────────── */
+.card {
+  background-color: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(11, 18, 32, 0.08);
+  overflow: hidden;
+}
+
+.card-header { padding: 1rem; border-bottom: 1px solid var(--border-color); background-color: var(--surface-color); }
+.card-body   { padding: 1rem; }
+.card-footer { padding: 1rem; border-top: 1px solid var(--border-color); background-color: var(--surface-color); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Loading
+   ────────────────────────────────────────────────────────────────────────── */
+.loading-spinner {
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  border-top-color: var(--accent-500);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Skeleton shimmer — for empty/loading states. Honors reduced motion via
+   the global rule above. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink-100);
+  border-radius: 6px;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.6) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: shimmer 1.4s var(--ease-in-out) infinite;
+}
+
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Utilities (legacy — prefer Tailwind)
+   ────────────────────────────────────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Layer / search / stats — kept verbatim for now, used by older views.
+   These should be folded into Tailwind utilities in a follow-up pass. */
+
+.layer-control {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px -2px rgba(11, 18, 32, 0.08);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.layer-item:last-child { border-bottom: none; }
+.layer-checkbox       { margin-right: 0.75rem; }
+
+.layer-color {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 4px;
+  margin-right: 0.75rem;
+  border: 1px solid var(--border-color);
+}
+
+.layer-name {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.layer-opacity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.layer-opacity input[type='range'] { width: 4rem; }
+
+.search-container { position: relative; }
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+}
+
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px -8px rgba(11, 18, 32, 0.12);
+  max-height: 20rem;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.search-result-item {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.search-result-item:hover     { background-color: var(--surface-color); }
+.search-result-item:last-child { border-bottom: none; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background-color: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--ink-900);
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* Print */
+@media print {
+  .no-print           { display: none !important; }
+  .print-break-before { page-break-before: always; }
+  .print-break-after  { page-break-after: always; }
+}

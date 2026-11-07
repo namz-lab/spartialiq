@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE manual PUBLIC "-//VUNGU//DTD User Manual 1.0//EN" "http://vungu.gov.zw/dtd/manual.dtd">
+<manual>
+  <header>
+    <title>Phase 2 Admin System - User Manual</title>
+    <version>1.0</version>
+    <date>2026-01-21</date>
+    <author>Vungu Spatial Systems Team</author>
+  </header>
+  
+  <toc>
+    <chapter num="1" title="System Overview" />
+    <chapter num="2" title="Getting Started" />
+    <chapter num="3" title="Data Cleaning Service" />
+    <chapter num="4" title="QML Parser Service" />
+    <chapter num="5" title="Approval Workflow Service" />
+    <chapter num="6" title="Batch Processing Service" />
+    <chapter num="7" title="Security Features" />
+    <chapter num="8" title="Troubleshooting" />
+    <chapter num="9" title="Best Practices" />
+  </toc>
+
+  <chapter id="overview" num="1" title="System Overview">
+    <section title="Introduction">
+      <para>The Phase 2 Admin System is a comprehensive spatial data management platform designed for the Vungu Rural District Council. This system provides advanced tools for data cleaning, QML template management, approval workflows, and batch processing operations.</para>
+    </section>
+    
+    <section title="Key Features">
+      <features>
+        <feature id="data-cleaning" name="Data Cleaning Service">
+          <description>Advanced data validation, cleaning, and transformation tools for spatial datasets</description>
+          <capabilities>
+            <capability>Import multiple data formats</capability>
+            <capability>Automated data validation</capability>
+            <capability>Custom cleaning rules</capability>
+            <capability>Export to standard formats</capability>
+          </capabilities>
+        </feature>
+        
+        <feature id="qml-parser" name="QML Parser Service">
+          <description>QGIS Style Language (QML) template management and parsing system</description>
+          <capabilities>
+            <capability>Template creation and editing</capability>
+            <capability>Style validation</capability>
+            <capability>Batch style application</capability>
+            <capability>Template library management</capability>
+          </capabilities>
+        </feature>
+        
+        <feature id="approval-workflow" name="Approval Workflow Service">
+          <description>Multi-level approval system for data and document processing</description>
+          <capabilities>
+            <capability>Configurable workflow steps</capability>
+            <capability>Role-based approvals</capability>
+            <capability>Automated notifications</capability>
+            <capability>Audit trail tracking</capability>
+          </capabilities>
+        </feature>
+        
+        <feature id="batch-processing" name="Batch Processing Service">
+          <description>High-performance batch operations for large datasets</description>
+          <capabilities>
+            <capability>Bulk data processing</capability>
+            <capability>Job scheduling and monitoring</capability>
+            <capability>Parallel processing</capability>
+            <capability>Progress tracking</capability>
+          </capabilities>
+        </feature>
+      </features>
+    </section>
+    
+    <section title="System Architecture">
+      <architecture>
+        <layer name="Frontend" type="Vue.js">
+          <components>Admin Dashboard, Service Interfaces, Data Visualization</components>
+        </layer>
+        <layer name="Backend" type="Fastify/Node.js">
+          <components>REST APIs, Business Logic, Data Processing</components>
+        </layer>
+        <layer name="Database" type="PostgreSQL/PostGIS">
+          <components>Spatial Data, Metadata, Audit Logs</components>
+        </layer>
+      </architecture>
+    </section>
+  </chapter>
+
+  <chapter id="getting-started" num="2" title="Getting Started">
+    <section title="System Requirements">
+      <requirements>
+        <requirement type="browser">Modern web browser (Chrome, Firefox, Safari, Edge)</requirement>
+        <requirement type="connection">Stable internet connection</requirement>
+        <requirement type="credentials">Valid admin account credentials</requirement>
+      </requirements>
+    </section>
+    
+    <section title="Login Process">
+      <steps>
+        <step num="1">Navigate to the admin portal URL</step>
+        <step num="2">Enter your admin credentials</step>
+        <step num="3">Click "Sign In" button</step>
+        <step num="4">Verify two-factor authentication if enabled</step>
+        <step num="5">Access the admin dashboard</step>
+      </steps>
+    </section>
+    
+    <section title="Dashboard Overview">
+      <dashboard>
+        <section title="Navigation">
+          <nav-items>
+            <nav-item>Dashboard Home</nav-item>
+            <nav-item>Data Cleaning</nav-item>
+            <nav-item>QML Templates</nav-item>
+            <nav-item>Approval Workflows</nav-item>
+            <nav-item>Batch Processing</nav-item>
+            <nav-item>Security Settings</nav-item>
+          </nav-items>
+        </section>
+        
+        <section title="Quick Actions">
+          <quick-actions>
+            <action>Create new data cleaning job</action>
+            <action>Upload QML template</action>
+            <action>Initiate approval workflow</action>
+            <action>Start batch processing</action>
+          </quick-actions>
+        </section>
+      </dashboard>
+    </section>
+  </chapter>
+
+  <chapter id="data-cleaning" num="3" title="Data Cleaning Service">
+    <section title="Overview">
+      <para>The Data Cleaning Service provides comprehensive tools for validating, cleaning, and transforming spatial data. This service ensures data quality and consistency across all spatial datasets.</para>
+    </section>
+    
+    <section title="Data Import">
+      <import-formats>
+        <format>Shapefile (.shp)</format>
+        <format>GeoJSON (.json)</format>
+        <format>KML/KMZ (.kml, .kmz)</format>
+        <format>CSV (.csv)</format>
+        <format>GeoPackage (.gpkg)</format>
+      </import-formats>
+      
+      <import-steps>
+        <step num="1">Select data source</step>
+        <step num="2">Choose file format</step>
+        <step num="3">Upload file</step>
+        <step num="4">Configure import settings</step>
+        <step num="5">Validate data structure</step>
+        <step num="6">Process import</step>
+      </import-steps>
+    </section>
+    
+    <section title="Data Validation">
+      <validation-rules>
+        <rule type="geometry">Valid geometry structures</rule>
+        <rule type="attributes">Required field completeness</rule>
+        <rule type="projections">Coordinate reference system</rule>
+        <rule type="topology">Spatial relationship integrity</rule>
+        <rule type="attributes">Data type consistency</rule>
+      </validation-rules>
+    </section>
+    
+    <section title="Cleaning Operations">
+      <operations>
+        <operation name="Remove Duplicates">
+          <description>Identify and remove duplicate features based on geometry and attributes</description>
+        </operation>
+        <operation name="Fix Geometries">
+          <description>Repair invalid geometries using automated algorithms</description>
+        </operation>
+        <operation name="Standardize Attributes">
+          <description>Normalize attribute values and formats</description>
+        </operation>
+        <operation name="Projection Transformation">
+          <description>Transform data to standard coordinate reference system</description>
+        </operation>
+      </operations>
+    </section>
+  </chapter>
+
+  <chapter id="qml-parser" num="4" title="QML Parser Service">
+    <section title="Overview">
+      <para>The QML Parser Service manages QGIS Style Language templates for consistent cartographic representation of spatial data.</para>
+    </section>
+    
+    <section title="Template Management">
+      <template-operations>
+        <operation>Create new QML templates</operation>
+        <operation>Edit existing templates</operation>
+        <operation>Validate template syntax</operation>
+        <operation>Apply templates to layers</operation>
+        <operation>Export template library</operation>
+      </template-operations>
+    </section>
+    
+    <section title="Style Components">
+      <components>
+        <component name="Symbols">
+          <description>Point, line, and polygon styling definitions</description>
+        </component>
+        <component name="Colors">
+          <description>Color schemes and palettes</description>
+        </component>
+        <component name="Labels">
+          <description>Text formatting and placement rules</description>
+        </component>
+        <component name="Scale">
+          <description>Scale-dependent visibility</description>
+        </component>
+      </components>
+    </section>
+  </chapter>
+
+  <chapter id="approval-workflow" num="5" title="Approval Workflow Service">
+    <section title="Workflow Configuration">
+      <workflow-steps>
+        <step type="submission">Data submission</step>
+        <step type="review">Initial review</step>
+        <step type="validation">Technical validation</step>
+        <step type="approval">Final approval</step>
+        <step type="publication">Publication</step>
+      </workflow-steps>
+    </section>
+    
+    <section title="Role Management">
+      <roles>
+        <role name="Submitter">
+          <permissions>Submit data, view status</permissions>
+        </role>
+        <role name="Reviewer">
+          <permissions>Review submissions, request changes</permissions>
+        </role>
+        <role name="Validator">
+          <permissions>Technical validation, quality checks</permissions>
+        </role>
+        <role name="Approver">
+          <permissions>Final approval, publication</permissions>
+        </role>
+      </roles>
+    </section>
+  </chapter>
+
+  <chapter id="batch-processing" num="6" title="Batch Processing Service">
+    <section title="Job Management">
+      <job-types>
+        <type name="Data Import">Bulk data import operations</type>
+        <type name="Data Export">Batch data export to multiple formats</type>
+        <type name="Style Application">Apply QML styles to multiple layers</type>
+        <type name="Validation">Batch data validation</type>
+        <type name="Transformation">Coordinate system transformations</type>
+      </job-types>
+    </section>
+    
+    <section title="Monitoring">
+      <monitoring-features>
+        <feature>Real-time job progress tracking</feature>
+        <feature>Error reporting and logging</feature>
+        <feature>Performance metrics</feature>
+        <feature>Resource usage monitoring</feature>
+      </monitoring-features>
+    </section>
+  </chapter>
+
+  <chapter id="security" num="7" title="Security Features">
+    <section title="Authentication">
+      <auth-methods>
+        <method>Username/Password</method>
+        <method>Two-Factor Authentication</method>
+        <method>LDAP Integration</method>
+        <method>SSO Support</method>
+      </auth-methods>
+    </section>
+    
+    <section title="Authorization">
+      <access-control>
+        <level>Read-only access</level>
+        <level>Edit access</level>
+        <level>Admin access</level>
+        <level>Superuser access</level>
+      </access-control>
+    </section>
+    
+    <section title="Audit Trail">
+      <audit-features>
+        <feature>User activity logging</feature>
+        <feature>Data change tracking</feature>
+        <feature>System event recording</feature>
+        <feature>Security incident monitoring</feature>
+      </audit-features>
+    </section>
+  </chapter>
+
+  <chapter id="troubleshooting" num="8" title="Troubleshooting">
+    <section title="Common Issues">
+      <issue id="import-failure">
+        <title>Data Import Fails</title>
+        <symptoms>Import process stops or returns errors</symptoms>
+        <causes>
+          <cause>Invalid file format</cause>
+          <cause>Corrupted data file</cause>
+          <cause>Insufficient permissions</cause>
+        </causes>
+        <solutions>
+          <solution>Verify file format compatibility</solution>
+          <solution>Check file integrity</solution>
+          <solution>Ensure proper permissions</solution>
+        </solutions>
+      </issue>
+      
+      <issue id="validation-errors">
+        <title>Data Validation Errors</title>
+        <symptoms>Validation reports multiple errors</symptoms>
+        <causes>
+          <cause>Invalid geometries</cause>
+          <cause>Missing required attributes</cause>
+          <cause>Incorrect coordinate system</cause>
+        </causes>
+        <solutions>
+          <solution>Run geometry repair tools</solution>
+          <solution>Complete missing attributes</solution>
+          <solution>Reproject to correct CRS</solution>
+        </solutions>
+      </issue>
+    </section>
+  </chapter>
+
+  <chapter id="best-practices" num="9" title="Best Practices">
+    <section title="Data Management">
+      <practices>
+        <practice>Regular data validation and cleaning</practice>
+        <practice>Consistent file naming conventions</practice>
+        <practice>Proper metadata documentation</practice>
+        <practice>Regular backup procedures</practice>
+        <practice>Version control for data changes</practice>
+      </practices>
+    </section>
+    
+    <section title="System Usage">
+      <practices>
+        <practice>Regular system maintenance</practice>
+        <practice>Monitor system performance</practice>
+        <practice>Keep software updated</practice>
+        <practice>Regular security audits</practice>
+        <practice>User training and documentation</practice>
+      </practices>
+    </section>
+  </chapter>
+
+  <appendix>
+    <section title="API Reference">
+      <api-endpoints>
+        <endpoint method="GET" path="/api/data-cleaning/jobs">List data cleaning jobs</endpoint>
+        <endpoint method="POST" path="/api/data-cleaning/jobs">Create new cleaning job</endpoint>
+        <endpoint method="GET" path="/api/qml-templates">List QML templates</endpoint>
+        <endpoint method="POST" path="/api/qml-templates">Create new template</endpoint>
+        <endpoint method="GET" path="/api/workflows">List workflows</endpoint>
+        <endpoint method="POST" path="/api/workflows">Create new workflow</endpoint>
+        <endpoint method="GET" path="/api/batch/jobs">List batch jobs</endpoint>
+        <endpoint method="POST" path="/api/batch/jobs">Create new batch job</endpoint>
+      </api-endpoints>
+    </section>
+    
+    <section title="Error Codes">
+      <error-codes>
+        <code id="400" description="Bad Request - Invalid input parameters"/>
+        <code id="401" description="Unauthorized - Authentication required"/>
+        <code id="403" description="Forbidden - Insufficient permissions"/>
+        <code id="404" description="Not Found - Resource does not exist"/>
+        <code id="500" description="Internal Server Error - System failure"/>
+      </error-codes>
+    </section>
+  </appendix>
+</manual>

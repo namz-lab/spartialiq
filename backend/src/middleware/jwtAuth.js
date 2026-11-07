@@ -1,0 +1,407 @@
+/**
+ * JWT authentication middleware.
+ *
+ * Replaces the legacy `getUserIdFromToken('jwt_<ts>_<uuid>')` parser, which
+ * was a string split with no signature and no expiry — anyone could forge a
+ * token by guessing or learning a user UUID. This module:
+ *   - Signs tokens with HS256 using process.env.JWT_SECRET (required).
+ *   - Verifies signature + expiry on every request.
+ *   - Re-validates the user against the DB so revoked / suspended users
+ *     are kicked out immediately, not at next login.
+ *   - Exposes preHandlers usable directly with `fastify.route(..., { preHandler })`.
+ *
+ * Session-tied access tokens (added for logout invalidation / device
+ * revocation / inactivity timeout): access + refresh tokens carry a `sid`
+ * claim referencing a row in public.user_session (migration 097). A purely
+ * stateless JWT can never support real logout — the token stays valid until
+ * it naturally expires. Tying every request to a live session row means
+ * logout, admin suspension, and "revoke this device" take effect immediately,
+ * and idle sessions can be timed out server-side. Tokens without a `sid`
+ * are refused (security audit 2026-09-29). The 'api' plugin token is a
+ * different type and is checked by verifyApiTokenClaims instead.
+ */
+
+const { systemOf, setUser } = require('../lib/dbContext')
+const jwt = require('jsonwebtoken')
+const crypto = require('crypto')
+
+const ACCESS_TTL  = '12h'
+const REFRESH_TTL = '14d'
+const REFRESH_TTL_MS = 14 * 24 * 60 * 60 * 1000
+const SESSION_IDLE_MINUTES = Number(process.env.SESSION_IDLE_MINUTES) || 45
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
+
+/**
+ * Hard-fail at boot if the JWT secret is the placeholder shipped with the
+ * repo. This catches the most common mis-deploy where production runs with
+ * the example key.
+ */
+function getSecret() {
+  const secret = process.env.JWT_SECRET
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      '[auth] JWT_SECRET must be set and at least 32 characters. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64\'))"'
+    )
+  }
+  if (process.env.NODE_ENV === 'production' && secret.includes('change-in-production')) {
+    throw new Error('[auth] Refusing to run in production with the placeholder JWT secret.')
+  }
+  return secret
+}
+
+function signAccessToken(payload) {
+  return jwt.sign(
+    { sub: payload.id, role: payload.role, email: payload.email, type: 'access', sid: payload.sid || null },
+    getSecret(),
+    { expiresIn: ACCESS_TTL, issuer: 'vungu-portal' },
+  )
+}
+
+function signRefreshToken(payload) {
+  return jwt.sign(
+    { sub: payload.id, type: 'refresh', sid: payload.sid || null },
+    getSecret(),
+    { expiresIn: REFRESH_TTL, issuer: 'vungu-portal' },
+  )
+}
+
+/**
+ * Start a new session: insert the user_session row, then sign a matching
+ * access + refresh token pair carrying that session's id. Call this from
+ * login / MFA challenge / invite-accept / register — anywhere a fresh pair
+ * of tokens is issued.
+ */
+async function createSession(fastify, user, request) {
+  // How long a sign-in lasts is the council's to set (admin_setting
+  // security.session_max_hours, marked "enforced" in the IT console). Read
+  // here, at the one place a session's lifetime is decided — a setting the
+  // console calls enforced and nothing reads is worse than no setting.
+  //
+  // The 14-day literal this replaces was the refresh window; the setting is
+  // expressed in hours and defaults to 12, which is a council working day plus
+  // margin. A failure to read it falls back to the seeded default rather than
+  // refusing the sign-in.
+  let maxHours = 12
+  try {
+    const value = await getSetting(fastify, 'security.session_max_hours')
+    if (Number.isFinite(Number(value)) && Number(value) > 0) maxHours = Number(value)
+  } catch (err) {
+    fastify.log?.warn({ err }, 'session lifetime setting unreadable; using 12h')
+  }
+
+  // Placeholder hash reserves the row so we have a sid to embed in the real
+  // tokens; overwritten below with the actual refresh token's hash.
+  const placeholder = crypto.randomBytes(32).toString('hex')
+  const { rows } = await systemOf(fastify.pg).query(
+    `INSERT INTO public.user_session (user_id, refresh_token_hash, user_agent, ip, expires_at)
+     VALUES ($1, $2, $3, $4, NOW() + ($5 || ' hours')::interval)
+     RETURNING id`,
+    [user.id, placeholder, request?.headers?.['user-agent'] || null,
+     request?.ip || null,
+     String(maxHours)],
+  )
+  const sid = rows[0].id
+  const refreshToken = signRefreshToken({ id: user.id, sid })
+  await systemOf(fastify.pg).query(
+    'UPDATE public.user_session SET refresh_token_hash = $1 WHERE id = $2',
+    [hashToken(refreshToken), sid],
+  )
+  const accessToken = signAccessToken({ id: user.id, role: user.role, email: user.email, sid })
+  return { accessToken, refreshToken, sid }
+}
+
+/** Revoke one session row (logout, or admin/self "revoke this device"). */
+async function revokeSession(fastify, sessionId) {
+  await systemOf(fastify.pg).query(
+    'UPDATE public.user_session SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL',
+    [sessionId],
+  )
+}
+
+/** List a user's own active (non-revoked, non-expired) sessions. */
+async function listSessions(fastify, userId) {
+  const { rows } = await systemOf(fastify.pg).query(
+    `SELECT id, user_agent, ip, created_at, last_used_at, expires_at
+       FROM public.user_session
+      WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
+      ORDER BY last_used_at DESC`,
+    [userId],
+  )
+  return rows
+}
+
+// Short-lived token proving "password already verified, MFA still owed".
+// Deliberately a distinct type so it can never be accepted by requireAuth.
+function signMfaPendingToken(userId) {
+  return jwt.sign({ sub: userId, type: 'mfa_pending' }, getSecret(),
+    { expiresIn: '5m', issuer: 'vungu-portal' })
+}
+
+function verifyMfaPendingToken(token) {
+  const claims = verifyToken(token)
+  if (claims.type !== 'mfa_pending') throw new Error('wrong_token_type')
+  return claims
+}
+
+// Signed token for the QGIS plugin sync endpoints only. Carries type:'api' so
+// it can never be used as a user session, and a jti that must have a live row
+// in public.api_token (migration 130) so each token can be revoked.
+const API_TOKEN_DAYS = 90
+
+function signApiToken(payload) {
+  const jti = crypto.randomUUID()
+  const token = jwt.sign(
+    { sub: payload.id, type: 'api', plugin: payload.pluginName || null },
+    getSecret(),
+    { expiresIn: `${API_TOKEN_DAYS}d`, issuer: 'vungu-portal', jwtid: jti },
+  )
+  return { token, jti, expiresAt: new Date(Date.now() + API_TOKEN_DAYS * 86400000) }
+}
+
+/**
+ * Verify a QGIS/API token: signature, type:'api', a live registry row, and an
+ * issuer who is still an active admin or GIS officer. Returns the claims, or
+ * null with the reason in `out.reason`.
+ */
+async function verifyApiTokenClaims(pg, token, out = {}) {
+  let claims
+  try {
+    claims = verifyToken(token)
+  } catch {
+    out.reason = 'invalid_token'
+    return null
+  }
+  if (claims.type !== 'api' || !claims.jti) {
+    out.reason = 'wrong_token_type'
+    return null
+  }
+  const { rows } = await pg.query(
+    `SELECT t.revoked_at, u.role, u.active, u.status
+       FROM public.api_token t JOIN users u ON u.id = t.user_id
+      WHERE t.jti = $1 AND t.user_id = $2`,
+    [claims.jti, claims.sub],
+  )
+  const r = rows[0]
+  if (!r || r.revoked_at || !r.active || r.status === 'suspended' || !API_TOKEN_ROLES.includes(r.role)) {
+    out.reason = 'revoked'
+    return null
+  }
+  pg.query('UPDATE public.api_token SET last_used_at = NOW() WHERE jti = $1', [claims.jti]).catch(() => {})
+  return claims
+}
+const API_TOKEN_ROLES = ['admin', 'gis_officer']
+
+function verifyToken(token) {
+  return jwt.verify(token, getSecret(), { issuer: 'vungu-portal' })
+}
+
+/**
+ * Read & verify the access token (httpOnly cookie, falling back to the
+ * Bearer header for non-browser clients like the QGIS plugin), then
+ * re-load the user. Returns the user row, or sends a typed error reply
+ * and returns null.
+ */
+async function authenticate(fastify, request, reply) {
+  const authHeader = request.headers.authorization
+  const token = request.cookies?.vungu_at
+    || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null)
+
+  if (!token) {
+    reply.code(401).send({ success: false, error: 'unauthenticated', message: 'Authentication required' })
+    return null
+  }
+
+  let claims
+  try {
+    claims = verifyToken(token)
+  } catch (err) {
+    const message = err.name === 'TokenExpiredError'
+      ? 'Session expired'
+      : 'Invalid token'
+    reply.code(401).send({ success: false, error: 'unauthenticated', message })
+    return null
+  }
+
+  if (claims.type !== 'access') {
+    reply.code(401).send({ success: false, error: 'unauthenticated', message: 'Wrong token type' })
+    return null
+  }
+
+  // Session liveness + inactivity timeout. Every sign-in and refresh mints a
+  // sid; a token without one could never be logged out, so it is refused.
+  if (!claims.sid) {
+    reply.code(401).send({ success: false, error: 'unauthenticated', message: 'Session ended' })
+    return null
+  }
+  {
+    const { rows: sessionRows } = await systemOf(fastify.pg).query(
+      `SELECT id, revoked_at, expires_at, last_used_at FROM public.user_session WHERE id = $1`,
+      [claims.sid],
+    )
+    const session = sessionRows[0]
+    if (!session || session.revoked_at || new Date(session.expires_at) < new Date()) {
+      reply.code(401).send({ success: false, error: 'unauthenticated', message: 'Session ended' })
+      return null
+    }
+    const idleMs = Date.now() - new Date(session.last_used_at).getTime()
+    if (idleMs > SESSION_IDLE_MINUTES * 60 * 1000) {
+      await revokeSession(fastify, claims.sid)
+      reply.code(401).send({
+        success: false, error: 'session_idle_timeout',
+        message: `Signed out after ${SESSION_IDLE_MINUTES} minutes of inactivity.`,
+      })
+      return null
+    }
+    // Best-effort activity ping; a failure here must not block the request.
+    systemOf(fastify.pg).query('UPDATE public.user_session SET last_used_at = NOW() WHERE id = $1', [claims.sid])
+      .catch((err) => request.log.error({ err }, 'session activity update failed'))
+  }
+
+  // Re-validate against DB: catches suspension, deletion, role changes.
+  // authority_id / is_platform come from tenancy migrations (154+). Restored
+  // dumps need scripts/bootstrap-local-vungu-app.sql (adds the columns).
+  const { rows } = await systemOf(fastify.pg).query(
+    `SELECT id, email, COALESCE(full_name, name) AS name, role, organization,
+            job_title, department, phone, applicant_type,
+            national_id, physical_address, active, status, residency_status,
+            authority_id, COALESCE(is_platform, false) AS is_platform
+     FROM users WHERE id = $1`,
+    [claims.sub],
+  )
+  if (rows.length === 0) {
+    reply.code(401).send({ success: false, error: 'unauthenticated', message: 'User no longer exists' })
+    return null
+  }
+  const user = rows[0]
+  if (!user.active || user.status === 'suspended') {
+    reply.code(403).send({ success: false, error: 'account_suspended', message: 'Account suspended' })
+    return null
+  }
+
+  request.user = user
+  setUser(user) // the database connection now follows this person (src/lib/dbContext.js)
+  request.sessionId = claims.sid || null
+  return user
+}
+
+/**
+ * Fastify preHandler: requires a valid access token.
+ * Use as: `{ preHandler: requireAuth }`
+ */
+function requireAuth(fastify) {
+  return async (request, reply) => {
+    await authenticate(fastify, request, reply)
+  }
+}
+
+/**
+ * Fastify preHandler: requires the user to have one of the allowed roles.
+ */
+function requireRole(fastify, allowed) {
+  const allowedSet = new Set(Array.isArray(allowed) ? allowed : [allowed])
+  return async (request, reply) => {
+    const user = await authenticate(fastify, request, reply)
+    if (!user) return
+    if (!allowedSet.has(user.role)) {
+      reply.code(403).send({
+        success: false,
+        error: 'forbidden',
+        message: 'Insufficient permissions for this action',
+      })
+    }
+  }
+}
+
+const requireAdmin = (fastify) => requireRole(fastify, 'admin')
+
+/**
+ * Fastify preHandler for PUBLIC routes that show more to a signed-in person: if there is a valid
+ * session, request.user is set; if there is none (or it is stale) the request simply stays anonymous.
+ * It never replies. Pair it with the tenancy helper so the database shows the right rows.
+ */
+function optionalAuth(fastify) {
+  return async (request) => {
+    const header = request.headers.authorization
+    const hasToken = request.cookies?.vungu_at || (header && header.startsWith('Bearer '))
+    if (!hasToken) return
+    const sink = { code() { return sink }, send() { return sink } }
+    try { await authenticate(fastify, request, sink) } catch { /* anonymous */ }
+  }
+}
+
+// Required lazily inside createSession's own module scope rather than at the
+// top: adminSettings.js is a leaf that needs nothing from here, but jwtAuth is
+// loaded by almost every route file and a top-level cycle is easy to introduce.
+const { getSetting } = require('../services/adminSettings')
+
+// ── Cookie helpers ──────────────────────────────────────────────────────
+// httpOnly + Secure (outside dev) + SameSite=Lax. Lax (not Strict) so a
+// citizen following an external link (e.g. a payment gateway redirect back)
+// still carries the cookie on that top-level GET navigation.
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/',
+}
+
+function setAuthCookies(reply, { accessToken, refreshToken }) {
+  reply.setCookie('vungu_at', accessToken, { ...COOKIE_OPTS, maxAge: 12 * 60 * 60 })
+  reply.setCookie('vungu_rt', refreshToken, { ...COOKIE_OPTS, maxAge: REFRESH_TTL_MS / 1000, path: '/api/auth' })
+}
+
+function clearAuthCookies(reply) {
+  reply.clearCookie('vungu_at', { path: '/' })
+  reply.clearCookie('vungu_rt', { path: '/api/auth' })
+}
+
+// ── MFA (TOTP) ──────────────────────────────────────────────────────────
+const { authenticator } = require('otplib')
+
+function generateMfaSecret(email) {
+  const secret = authenticator.generateSecret()
+  return { secret, otpauthUrl: authenticator.keyuri(email, 'Vungu RDC', secret) }
+}
+
+function verifyMfaToken(secret, token) {
+  if (!secret || !token) return false
+  try {
+    return authenticator.verify({ token: String(token).trim(), secret })
+  } catch {
+    return false
+  }
+}
+
+function generateBackupCodes(count = 8) {
+  return Array.from({ length: count }, () => crypto.randomBytes(5).toString('hex'))
+}
+
+module.exports = {
+  signAccessToken,
+  signRefreshToken,
+  signApiToken,
+  verifyApiTokenClaims,
+  verifyToken,
+  authenticate,
+  requireAuth,
+  requireRole,
+  requireAdmin,
+  optionalAuth,
+  createSession,
+  revokeSession,
+  listSessions,
+  hashToken,
+  setAuthCookies,
+  clearAuthCookies,
+  generateMfaSecret,
+  verifyMfaToken,
+  generateBackupCodes,
+  signMfaPendingToken,
+  verifyMfaPendingToken,
+  ACCESS_TTL,
+  REFRESH_TTL,
+}

@@ -1,0 +1,158 @@
+const fs = require('node:fs')
+const path = require('node:path')
+const { MIGRATIONS } = require('./migrate')
+
+describe('migration plan', () => {
+  test('references SQL migration files that exist in order', () => {
+    expect(MIGRATIONS).toEqual([
+      // Reviewed 2026-10-03: empty-but-shaped placeholders for the legacy
+      // spatial tables (buildings, development_matrix, ...). They exist so a
+      // fresh database's indexes, foreign keys and views parse before the real
+      // ogr2ogr / supervisor-dump imports populate them. Legitimate, and it
+      // must stay first -- everything else assumes those tables exist.
+      '000_legacy_spatial_stubs.sql',
+      '001_initial_schema.sql',
+      '042_development_applications.sql',
+      '060_invite_system_and_roles.sql',
+      '061_applicant_type_and_invite_roles.sql',
+      '062_stands_and_planning_templates.sql',
+      '063_notifications_and_inspections.sql',
+      '064_payments_and_documents.sql',
+      '065_plan_review.sql',
+      '070_development_management_handbook_v1_2.sql',
+      '071_stage_inspection_photos_and_flags.sql',
+      '072_per_item_inspection_scoring.sql',
+      '073_score_includes_na_as_zero.sql',
+      '074_spatial_tile_indexes.sql',
+      '075_v_application_summary_add_created_by.sql',
+      '075_notifications_and_kyc.sql',
+      '076_available_stands.sql',
+      '076_production_hardening.sql',
+      '077_permit_application_pending_payment.sql',
+      '078_3nf_normalization.sql',
+      '078_missing_gist_indexes.sql',
+      '079_filter_buildings_to_council_buffer.sql',
+      '080_survey_tasks.sql',
+      '080_stands_tile_view.sql',
+      '081_v_application_summary_add_lnglat.sql',
+      '082_planner_case_and_audit.sql',
+      '083_committee_meetings.sql',
+      '084_property_register.sql',
+      '085_planner_case_backend.sql',
+      '086_eo_decision_returns.sql',
+      '087_generated_document_content.sql',
+      '088_map_evidence_doc_type.sql',
+      '089_public_notice.sql',
+      '090_consultation_blocking_escalation.sql',
+      '091_gis_editable_features.sql',
+      '092_gis_feature_history.sql',
+      '093_user_applicant_profile.sql',
+      '094_site_content.sql',
+      '095_planning_projects.sql',
+      '096_planning_revisions.sql',
+      '097_case_locking_mfa_sessions.sql',
+      '098_control_points.sql',
+      '099_survey_parcels.sql',
+      '100_survey_task_zone_docs.sql',
+      '101_statutory_plans.sql',
+      '102_survey_task_manager.sql',
+      '103_soft_delete.sql',
+      '104_committee_quorum_attendance.sql',
+      '105_stand_allocation.sql',
+      '106_geometry_validation.sql',
+      '107_stands_topology.sql',
+      '075_fix_check_development_permission.sql',
+      '108_planning_project_case_link.sql',
+      '109_spatial_change_notify.sql',
+      '110_local_authorities.sql',
+      '111_spatial_layers_catalogue.sql',
+      '112_zones_master_view.sql',
+      '113_zones_master_columns.sql',
+      '114_gis_style_registry.sql',
+      '115_residency_verification.sql',
+      '116_inspector_work_queue.sql',
+      '117_stage_inspection_field_events.sql',
+      '118_inspector_site_geometry.sql',
+      '119_permit_document_uploads.sql',
+      '120_building_complaints.sql',
+      '121_environmental_health_registers.sql',
+      '122_environmental_health_operations.sql',
+      '123_council_ops_asset_registers.sql',
+      '124_planning_clerk_registers.sql',
+      '125_service_desk_tickets.sql',
+      '126_stands_zone_id_integer.sql',
+      '127_admin_console.sql',
+      '128_planning_clerk_registers.sql',
+      '129_password_reset.sql',
+      '130_api_token_registry.sql',
+      '131_page_view.sql',
+      '132_gis_core_register.sql',
+      '133_gms_editing.sql',
+      '134_zones_single_source.sql',
+      '135_zones_area_ha.sql',
+      '136_zones_id_sequence.sql',
+      '138_district_development_matrix.sql',
+      '139_plan_model_foundation.sql',
+      '140_plan_scoped_matrix.sql',
+      '141_reference_classification_and_urban_starter.sql',
+      '142_rural_starter_palette_and_palette_tools.sql',
+      '143_decision_pathways_and_zone_standards.sql',
+      '144_parcel_zoning.sql',
+      '145_application_rule_snapshots.sql',
+      '146_permit_parcel_and_rule_snapshots.sql',
+      '147_vungu_plan_land_uses.sql',
+      '148_zone_rename_keeps_zone_type.sql',
+      '149_drop_gweru_peri_urban_zone.sql',
+      '150_plan_workbench.sql',
+      '151_analytics_settings.sql',
+      '152_layer_publication.sql',
+      '154_authority_row_level_security.sql',
+      '155_permit_children_row_level_security.sql',
+      '156_land_use_group_hierarchy.sql',
+      '157_development_activity.sql',
+      '158_activity_standard_kinds.sql',
+      '159_existing_use_land_use_group.sql',
+      '160_plan_matrix_audit.sql',
+      '161_provisional_rules.sql',
+      '162_spatial_concepts.sql',
+      '163_admin_ward_authority_area.sql',
+      '164_land_parcel_kinds.sql',
+      '165_tenancy_contract.sql',
+      '166_direct_client_roles.sql',
+      '167_make_tenant.sql',
+      '168_runtime_role.sql',
+      '169_spatial_planning_tenancy.sql',
+      '170_statutory_periods.sql',
+      '171_acknowledgement_starts_clock.sql',
+      '172_stands_revenue_legacy_tenancy.sql',
+      '173_embedded_survey_legacy.sql',
+      '174_parcel_survey_class.sql',
+      '175_parcel_event.sql',
+      '176_surveypro_import_run.sql',
+    ])
+
+    for (const filename of MIGRATIONS) {
+      const migrationPath = path.join(__dirname, '..', 'migrations', filename)
+      expect(fs.existsSync(migrationPath)).toBe(true)
+    }
+  })
+
+  // The list above is a pin: changing the deploy plan should be a deliberate,
+  // reviewed edit rather than a side effect. The cost is that it goes stale
+  // silently — 114 and 115 were added to migrate.js without it, and the
+  // suite sat red until somebody looked. These two invariants fail with a
+  // message that says what is wrong, so the next drift is diagnosable in one
+  // line rather than in a 60-entry array diff.
+  test('every allowlisted migration exists and appears once', () => {
+    const missing = MIGRATIONS.filter(
+      (f) => !fs.existsSync(path.join(__dirname, '..', 'migrations', f)),
+    )
+    expect(missing).toEqual([])
+
+    const seen = new Set()
+    const duplicates = MIGRATIONS.filter((f) => (seen.has(f) ? true : (seen.add(f), false)))
+    // A migration run twice is a migration whose second run has to be
+    // idempotent for reasons nobody wrote down.
+    expect(duplicates).toEqual([])
+  })
+})

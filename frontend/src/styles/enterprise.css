@@ -1,0 +1,142 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  VUNGU RDC — ENTERPRISE DESIGN SYSTEM
+  Single source of truth for the professional planning & spatial-intelligence
+  workspace. All chrome (panels, tables, forms, toolbars, navigation, status,
+  GIS overlays) references these `--ent-*` tokens. Never hardcode a hex/px in a
+  component style block — add or reuse a token here.
+
+  Direction: serious GIS / planning / engineering / government enterprise
+  software — NOT consumer SaaS. Information-efficient, clear hierarchy, high
+  scanability. Restrained cool-neutral foundation that FRAMES the warm
+  cartographic map (land = #f5f3ee); a single controlled blue accent; flat,
+  government-sober elevation. No gradients, no purple, no decorative cards, no
+  oversized radii, no wasted space.
+
+  Supersedes, and deprecates, the earlier civic `--ink-*` / `--accent-*`
+  (emerald) scale and the `--login-*` set. Those remain only until each legacy
+  screen migrates onto the tokens below. New and migrated code uses `--ent-*`.
+  ═══════════════════════════════════════════════════════════════════════════
+*/
+:root {
+  /* ── FONT FAMILIES ──────────────────────────────────────────────────────
+     Geist is self-hosted (see index.html). Mono is reserved for machine
+     identifiers: stand numbers, permit refs, coordinates, register numbers. */
+  --ent-font:      'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ent-font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Mono', monospace;
+
+  /* ── NEUTRAL FOUNDATION ─────────────────────────────────────────────────
+     Cool greys, lightly desaturated. Read as "figure vs. ground" against the
+     warm map. Four surface elevations + two border weights + three text ranks. */
+  --ent-canvas:         #eceff3;  /* app background behind panels / content wells */
+  --ent-surface:        #ffffff;  /* panels, cards, table body, popovers, modals */
+  --ent-surface-2:      #f4f6f9;  /* panel headers, hovered rows, inset wells */
+  --ent-surface-sunken: #e8ecf1;  /* left rails, toolbars, disabled fields */
+
+  --ent-line:           #dde2e9;  /* hairline borders, row dividers */
+  --ent-line-strong:    #c4ccd7;  /* section separators, input outlines, resize handles */
+
+  --ent-text:           #1a2430;  /* headings, primary body, key values */
+  --ent-text-2:         #515c6b;  /* secondary text, table cells, meta */
+  --ent-text-3:         #7b8797;  /* tertiary: helper, placeholder, timestamps */
+  --ent-text-on-accent: #ffffff;
+
+  /* ── ACCENT — one controlled colour, ≤10% of any surface ────────────────
+     Deep steel blue. Primary actions, selected rows/features, active nav,
+     links. Government-serious, never neon. */
+  --ent-accent:        #1f5aa8;
+  --ent-accent-hover:  #194a8c;
+  --ent-accent-active: #143c72;
+  --ent-accent-soft:   #e8f0f9;  /* tinted backgrounds: active nav, selected row */
+  --ent-accent-line:   #b9d1ec;  /* borders on accent-soft surfaces */
+  --ent-accent-ring:   rgba(31, 90, 168, 0.32);
+
+  /* ── SEMANTIC — used for meaning, never decoration ──────────────────────*/
+  --ent-success:       #1d7a4d;
+  --ent-success-soft:  #e5f1ea;
+  --ent-warning:       #a8620a;  /* amber-brown, not a bright caution yellow */
+  --ent-warning-soft:  #f8efdd;
+  --ent-danger:        #bd2f28;
+  --ent-danger-soft:   #fbe9e8;
+  --ent-info:          var(--ent-accent);
+  --ent-info-soft:     var(--ent-accent-soft);
+
+  /* ── WORKFLOW / STATUS TONES ────────────────────────────────────────────
+     The five tones every status badge, chip and case indicator maps onto.
+     Keeping the taxonomy here (not per-component) guarantees a permit that is
+     "Approved" reads identically in the register, the dashboard and the map. */
+  --ent-tone-neutral-bg:  #eef1f5;  --ent-tone-neutral-fg:  #48515e;  --ent-tone-neutral-line:  #d6dce4;
+  --ent-tone-info-bg:     var(--ent-accent-soft);  --ent-tone-info-fg:     var(--ent-accent);   --ent-tone-info-line:     var(--ent-accent-line);
+  --ent-tone-positive-bg: var(--ent-success-soft); --ent-tone-positive-fg: var(--ent-success);  --ent-tone-positive-line: #bfe0cd;
+  --ent-tone-warning-bg:  var(--ent-warning-soft); --ent-tone-warning-fg:  var(--ent-warning);  --ent-tone-warning-line:  #e8cfa2;
+  --ent-tone-negative-bg: var(--ent-danger-soft);  --ent-tone-negative-fg: var(--ent-danger);   --ent-tone-negative-line: #eec4c1;
+
+  /* ── TYPE SCALE — efficient, hierarchical, never tiny for its own sake ───*/
+  --ent-fs-micro: 0.6875rem;  /* 11px — eyebrows, scale-bar, dense meta */
+  --ent-fs-xs:    0.75rem;     /* 12px — labels, chips, secondary meta */
+  --ent-fs-sm:    0.8125rem;   /* 13px — table cells, secondary body */
+  --ent-fs-base:  0.875rem;    /* 14px — body default, controls */
+  --ent-fs-md:    0.9375rem;   /* 15px — sub-section headings */
+  --ent-fs-lg:    1.0625rem;   /* 17px — section / panel titles */
+  --ent-fs-xl:    1.375rem;    /* 22px — page / view titles */
+  --ent-fs-num:   1.625rem;    /* 26px — KPI numerics */
+
+  --ent-fw-normal:   400;
+  --ent-fw-medium:   500;
+  --ent-fw-semibold: 600;
+  --ent-fw-bold:     700;
+
+  --ent-lh-tight: 1.25;  /* headings, numerics */
+  --ent-lh:       1.45;  /* body */
+
+  /* ── SPACING — 8pt rhythm with 4px half-steps, chosen per surface ───────*/
+  --ent-s1: 4px;   --ent-s2: 8px;   --ent-s3: 12px;  --ent-s4: 16px;
+  --ent-s5: 20px;  --ent-s6: 24px;  --ent-s7: 32px;  --ent-s8: 40px;
+
+  /* ── RADII — restrained. Panels cap at 10px; pill for badges only ───────*/
+  --ent-r-sm:   4px;   /* chips, inputs, small buttons */
+  --ent-r:      6px;   /* buttons, controls */
+  --ent-r-md:   8px;   /* panels, popovers, dropdowns */
+  --ent-r-lg:   10px;  /* modals, floating map panels */
+  --ent-r-pill: 9999px;/* status badges, segmented controls ONLY */
+
+  /* ── ELEVATION — subtle, ink-tinted, government-flat. No colour shadows ─*/
+  --ent-e1: 0 1px 2px rgba(17, 29, 45, 0.06);
+  --ent-e2: 0 2px 6px rgba(17, 29, 45, 0.09);
+  --ent-e3: 0 8px 24px rgba(17, 29, 45, 0.14);
+  --ent-e4: 0 18px 44px rgba(17, 29, 45, 0.18);
+
+  /* ── CONTROLS & DATA DENSITY ────────────────────────────────────────────*/
+  --ent-control-h:    34px;  /* buttons, inputs, selects — comfortable-efficient */
+  --ent-control-h-sm: 28px;  /* toolbar / inline controls */
+  --ent-control-px:   12px;
+  --ent-row-h:        36px;  /* table row — scannable, not cramped */
+  --ent-row-h-sm:     30px;  /* dense reference tables */
+  --ent-focus-ring:   0 0 0 3px var(--ent-accent-ring);
+
+  /* ── NAVIGATION ─────────────────────────────────────────────────────────*/
+  --ent-rail-w:            240px;
+  --ent-rail-w-collapsed:  52px;
+  --ent-topbar-h:          52px;
+
+  /* ── GIS MAP OVERLAY PANELS ─────────────────────────────────────────────
+     Floating controls sit ON the map, so they read at 96% opacity with a
+     hairline and e2, never a heavy card. */
+  --ent-map-panel-bg:    rgba(255, 255, 255, 0.96);
+  --ent-map-panel-line:  var(--ent-line-strong);
+  --ent-map-panel-shadow: var(--ent-e2);
+
+  /* ── MOTION ─────────────────────────────────────────────────────────────*/
+  --ent-ease:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ent-dur:     150ms;
+  --ent-dur-lg:  240ms;
+
+  /* ── LAYERING ───────────────────────────────────────────────────────────*/
+  --ent-z-sticky:  10;
+  --ent-z-rail:    20;
+  --ent-z-popover: 100;
+  --ent-z-modal:   1000;
+  --ent-z-toast:   1100;
+}
+
+/* Reduced motion: honoured globally in main.css already; nothing extra here. */

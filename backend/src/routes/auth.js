@@ -1,0 +1,1318 @@
+/**
+ * Authentication routes.
+ *
+ * Hardened (audit fixes):
+ *   - Real signed JWTs via src/middleware/jwtAuth (HS256, expiry, issuer).
+ *   - Customer self-register pinned to 'registered' / 'public'. Anything
+ *     else from the body is ignored. Internal roles are issued only via
+ *     the invite flow.
+ *   - applicant_type column persisted (resident, landowner, business,
+ *     consultant, visitor) for council routing and statistics.
+ *   - Invite-accept now properly bcrypts the password (was a string concat).
+ *   - Plaintext "hashed_<password>" login fallback removed.
+ *   - PII (email + role) no longer logged.
+ *   - /admin/users protected via requireAdmin preHandler.
+ *
+ * NOTE: Per-route rate-limit configs are wired in server.js when this
+ * plugin is registered; this file does not need to set them itself.
+ */
+
+const { systemOf } = require('../lib/dbContext')
+const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
+const { v4: uuidv4 } = require('uuid')
+
+const {
+  signAccessToken,
+  signApiToken,
+  verifyApiTokenClaims,
+  verifyToken,
+  requireAuth,
+  requireAdmin,
+  createSession,
+  revokeSession,
+  listSessions,
+  setAuthCookies,
+  clearAuthCookies,
+  generateMfaSecret,
+  verifyMfaToken,
+  generateBackupCodes,
+  signMfaPendingToken,
+  verifyMfaPendingToken,
+} = require('../middleware/jwtAuth')
+
+const notifier = require('../services/notifier')
+const {
+  verifyCaptchaChallenge,
+  honeypotTripped,
+} = require('../utils/captchaChallenge')
+
+function demoLoginsAllowed() {
+  // Production blocks @vungu.test unless ALLOW_DEMO_LOGIN=1 (never on a public host).
+  if (process.env.ALLOW_DEMO_LOGIN === '1') return true
+  if (process.env.ALLOW_DEMO_LOGIN === '0') return false
+  return process.env.NODE_ENV !== 'production'
+}
+
+async function captchaOk(request, body, email) {
+  // Demo accounts in local development skip the check so staff can still
+  // one-click sign in; production always requires a valid challenge.
+  if (demoLoginsAllowed() && typeof email === 'string' && email.endsWith('@vungu.test')) {
+    return { ok: true }
+  }
+  if (honeypotTripped(body)) return { ok: false, reason: 'bot' }
+  return verifyCaptchaChallenge(body?.captcha_token, request.ip)
+}
+const loginSecurity = require('../services/loginSecurity')
+const { getSetting } = require('../services/adminSettings')
+
+// Customer-facing registration is pinned to one of these two roles only.
+// Anything else (including 'admin', 'planner', etc.) coming from the body
+// is silently ignored. Internal roles flow exclusively through invites.
+const CUSTOMER_ROLES = new Set(['registered', 'public'])
+
+const APPLICANT_TYPES = new Set([
+  'resident', 'landowner', 'business', 'consultant', 'visitor',
+])
+
+// Roles that can be issued via the invite system (employees). `viewer` is a
+// client (citizen) role — routing, permit ownership scoping and every data
+// route already treat it that way — so it can never be granted to an employee.
+const INVITABLE_ROLES = new Set([
+  'admin', 'planner',
+  'eo', 'env_officer', 'building_inspector', 'planning_clerk',
+  'surveyor', 'gis_officer', 'finance_officer',
+  // GIS Branch (migration 132)
+  'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
+])
+
+const VALID_USER_ROLES = new Set([
+  'public', 'registered', 'viewer',
+  'admin', 'planner', 'eo', 'env_officer', 'building_inspector',
+  'planning_clerk', 'surveyor', 'gis_officer', 'finance_officer',
+  'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
+])
+
+// Council staff = employees. Identical to INVITABLE_ROLES today, but named
+// separately because it answers a different question — "is this an employee,
+// not a citizen?" — used to scope GET /admin/users?staff=true. Derived from
+// INVITABLE_ROLES so the two never drift.
+// Clients (public / registered / viewer) are never in this list.
+const STAFF_ROLES = [...INVITABLE_ROLES]
+
+// Crude but cheap input checks. Joi/zod is overkill here.
+const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const isString = (v, max = 255) => typeof v === 'string' && v.length > 0 && v.length <= max
+
+function userToDTO(row) {
+  return {
+    id:             row.id,
+    email:          row.email,
+    name:           row.name,
+    role:           row.role,
+    organization:   row.organization,
+    jobTitle:       row.job_title,
+    department:     row.department,
+    applicantType:  row.applicant_type ?? null,
+    phone:          row.phone ?? null,
+    nationalId:     row.national_id ?? null,
+    address:        row.physical_address ?? null,
+    residencyStatus: row.residency_status ?? null,
+  }
+}
+
+async function authRoutes(fastify) {
+  // ── Register (customer self-service) ──────────────────────────────────
+  fastify.post('/auth/register', async (request, reply) => {
+    try {
+      const body = request.body || {}
+      const { name, email, phone, organization, password } = body
+
+      const cap = await captchaOk(request, body, email)
+      if (!cap.ok) {
+        return reply.code(400).send({
+          success: false,
+          error: 'captcha_failed',
+          message: cap.reason === 'expired'
+            ? 'The security check expired. It has restarted — try again.'
+            : 'The security check did not pass. It has restarted — try again.',
+        })
+      }
+
+      if (!isString(name, 120) || !isString(email, 255) || !isString(password, 255)) {
+        return reply.code(400).send({ success: false, message: 'Name, email, and password are required' })
+      }
+      if (!EMAIL_RX.test(email)) {
+        return reply.code(400).send({ success: false, message: 'Invalid email address' })
+      }
+
+      const minLength = await getSetting(fastify, 'security.password_min_length')
+      if (password.length < minLength) {
+        return reply.code(400).send({ success: false, message: `Password must be at least ${minLength} characters` })
+      }
+
+      // Map client `applicant_type` → safe role. Body `role` is ignored.
+      const applicantType = APPLICANT_TYPES.has(body.applicant_type)
+        ? body.applicant_type
+        : null
+      const role = applicantType === 'visitor' ? 'public' : 'registered'
+
+      const existing = await systemOf(fastify.pg).query('SELECT id FROM users WHERE email = $1', [email])
+      if (existing.rows.length > 0) {
+        return reply.code(409).send({ success: false, message: 'An account with this email already exists' })
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10)
+
+      // Reusable applicant identity, captured once at sign-up.
+      const nationalId = isString(body.national_id, 64) ? body.national_id : null
+      const address    = isString(body.address, 500) ? body.address : null
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `INSERT INTO users (
+           email, name, full_name, role, organization, phone,
+           applicant_type, national_id, physical_address,
+           password_hash, status, active, created_at
+         )
+         VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, 'active', true, NOW())
+         RETURNING id, email, full_name AS name, role, organization,
+                   job_title, department, applicant_type,
+                   phone, national_id, physical_address, residency_status`,
+        [
+          email, name, role,
+          organization || null, phone || null, applicantType,
+          nationalId, address, passwordHash,
+        ],
+      )
+
+      const user = rows[0]
+      const { accessToken, refreshToken } = await createSession(fastify, user, request)
+      setAuthCookies(reply, { accessToken, refreshToken })
+
+      return reply.send({
+        success: true,
+        data: { user: userToDTO(user), token: accessToken },
+        message: 'Account created',
+      })
+    } catch (err) {
+      request.log.error({ err }, 'register failed')
+      return reply.code(500).send({ success: false, message: 'Registration failed' })
+    }
+  })
+
+  // ── Login ─────────────────────────────────────────────────────────────
+  // Every exit below records the attempt through loginSecurity, because the
+  // lockout counts consecutive failures and a lockout that missed an exit
+  // would be a lockout with a hole in it. The console's Sign-in security
+  // section reads the same rows to show WHY each attempt failed.
+  fastify.post('/auth/login', async (request, reply) => {
+    try {
+      const body = request.body || {}
+      const { email, password } = body
+
+      if (!isString(email) || !isString(password)) {
+        return reply.code(400).send({
+          success: false, error: 'missing_credentials', message: 'Email and password are required',
+        })
+      }
+
+      if (typeof email === 'string' && email.endsWith('@vungu.test') && !demoLoginsAllowed()) {
+        return reply.code(403).send({
+          success: false,
+          error: 'demo_disabled',
+          message: 'Demo accounts are disabled on this host.',
+        })
+      }
+
+      const cap = await captchaOk(request, body, email)
+      if (!cap.ok) {
+        return reply.code(400).send({
+          success: false,
+          error: 'captcha_failed',
+          message: cap.reason === 'expired'
+            ? 'The security check expired. It has restarted — try again.'
+            : 'The security check did not pass. It has restarted — try again.',
+        })
+      }
+
+      // A blocked address is turned away before the password is even read, so
+      // a blocklisted host cannot use the sign-in form as an oracle.
+      const block = await loginSecurity.ipBlock(fastify, request)
+      if (block) {
+        await loginSecurity.record(fastify, request, {
+          email, succeeded: false, reason: loginSecurity.REASONS.IP_BLOCKED,
+        })
+        return reply.code(403).send({
+          success: false, error: 'ip_blocked',
+          message: 'Sign-in from this network has been blocked. Contact council IT.',
+        })
+      }
+
+      // Checked before the password so a locked address gets the same answer
+      // whether or not the guess was right — otherwise the lockout leaks the
+      // very thing it protects.
+      const lockout = await loginSecurity.lockoutState(fastify, email)
+      if (lockout.locked) {
+        await loginSecurity.record(fastify, request, {
+          email, succeeded: false, reason: loginSecurity.REASONS.LOCKED_OUT,
+        })
+        return reply.code(429).send({
+          success: false, error: 'locked_out',
+          message: 'Too many failed sign-in attempts. Try again later or contact council IT.',
+          data: { retryAt: lockout.until },
+        })
+      }
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT id, email, COALESCE(full_name, name) AS name, role, organization,
+                job_title, department, applicant_type, phone,
+                national_id, physical_address, password_hash, active, status,
+                mfa_enabled, residency_status
+         FROM users WHERE email = $1`,
+        [email],
+      )
+
+      // Constant-ish-time response for unknown email — bcrypt against a
+      // dummy hash so the timing matches a real check. Avoids username probing.
+      const user = rows[0]
+      const dummyHash = '$2b$10$abcdefghijklmnopqrstuv0000000000000000000000000000000'
+      if (!user) {
+        await bcrypt.compare(password, dummyHash)
+        await loginSecurity.record(fastify, request, {
+          email, succeeded: false, reason: loginSecurity.REASONS.NO_SUCH_USER,
+        })
+        return reply.code(401).send({
+          success: false, error: 'invalid_credentials', message: 'Invalid email or password',
+        })
+      }
+
+      if (!user.active || user.status === 'suspended') {
+        await loginSecurity.record(fastify, request, {
+          email, userId: user.id, succeeded: false,
+          reason: user.status === 'deleted' ? loginSecurity.REASONS.DELETED : loginSecurity.REASONS.SUSPENDED,
+        })
+        return reply.code(403).send({
+          success: false, error: 'account_suspended', message: 'Your account has been suspended.',
+        })
+      }
+
+      // Only accept bcrypt hashes. The legacy `'hashed_<password>'` format
+      // and bare-string fallback have been removed (they bypassed hashing).
+      if (!user.password_hash || !user.password_hash.startsWith('$2')) {
+        request.log.warn({ userId: user.id }, 'legacy password hash; forcing reset')
+        return reply.code(401).send({
+          success: false, error: 'password_reset_required',
+          message: 'Please reset your password.',
+        })
+      }
+
+      const ok = await bcrypt.compare(password, user.password_hash)
+      if (!ok) {
+        await loginSecurity.record(fastify, request, {
+          email, userId: user.id, succeeded: false, reason: loginSecurity.REASONS.BAD_PASSWORD,
+        })
+        // Tell the officer how many tries remain rather than locking them out
+        // without warning — the count is already knowable by trying, and a
+        // silent lockout generates a support call the council has to answer.
+        const remaining = lockout.max > 0 ? Math.max(0, lockout.max - lockout.failures - 1) : null
+        return reply.code(401).send({
+          success: false, error: 'invalid_credentials',
+          message: remaining !== null && remaining <= 2
+            ? `Invalid email or password. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.`
+            : 'Invalid email or password',
+          data: remaining !== null ? { attemptsRemaining: remaining } : undefined,
+        })
+      }
+
+      if (user.mfa_enabled) {
+        // Second factor required. Issue a short-lived pending token (not a
+        // session) — the client must complete /auth/mfa/challenge with it
+        // before any real access/refresh token or session row is created.
+        const mfaToken = signMfaPendingToken(user.id)
+        return reply.send({ success: true, data: { mfaRequired: true, mfaToken } })
+      }
+
+      await systemOf(fastify.pg).query(
+        'UPDATE users SET last_login_at = NOW(), last_login = NOW() WHERE id = $1',
+        [user.id],
+      )
+      // The success row is what clears the failure count: lockoutState only
+      // counts failures since the last success, so there is no counter to reset.
+      await loginSecurity.record(fastify, request, { email, userId: user.id, succeeded: true })
+
+      const { accessToken, refreshToken } = await createSession(fastify, user, request)
+      setAuthCookies(reply, { accessToken, refreshToken })
+
+      return reply.send({
+        success: true,
+        data: { user: userToDTO(user), token: accessToken },
+        message: 'Login successful',
+      })
+    } catch (err) {
+      request.log.error({ err }, 'login failed')
+      return reply.code(500).send({
+        success: false, error: 'internal', message: 'Failed to login',
+      })
+    }
+  })
+
+  // ── Get current user profile ─────────────────────────────────────────
+  fastify.get('/auth/me', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    return reply.send({ success: true, data: userToDTO(request.user) })
+  })
+
+  // ── Logout ───────────────────────────────────────────────────────────
+  // Session-aware: revokes the user_session row behind the refresh cookie
+  // so the access token stops working immediately (authenticate() checks
+  // session liveness on every request) instead of drifting on until its
+  // natural 12h expiry.
+  fastify.post('/auth/logout', async (request, reply) => {
+    const refreshToken = request.cookies?.vungu_rt
+    if (refreshToken) {
+      try {
+        const claims = verifyToken(refreshToken)
+        if (claims.sid) await revokeSession(fastify, claims.sid)
+      } catch (err) {
+        request.log.warn({ err }, 'logout: could not verify refresh cookie (already expired?)')
+      }
+    }
+    clearAuthCookies(reply)
+    return reply.send({ success: true, message: 'Logged out' })
+  })
+
+  // ── Refresh token ────────────────────────────────────────────────────
+  // ponytail: re-mints the access token against the existing session
+  // (bumping last_used_at / resetting the idle clock) rather than rotating
+  // the refresh token itself on every call. Full rotate-on-use is the next
+  // hardening step if a stolen-refresh-token replay scenario needs closing.
+  fastify.post('/auth/refresh', async (request, reply) => {
+    try {
+      const refreshToken = request.cookies?.vungu_rt || request.body?.refreshToken
+      if (!isString(refreshToken)) {
+        return reply.code(400).send({ success: false, message: 'No refresh token' })
+      }
+
+      let claims
+      try {
+        claims = verifyToken(refreshToken)
+      } catch {
+        return reply.code(401).send({ success: false, error: 'invalid_token' })
+      }
+      if (claims.type !== 'refresh') {
+        return reply.code(401).send({ success: false, error: 'wrong_token_type' })
+      }
+
+      if (!claims.sid) {
+        clearAuthCookies(reply)
+        return reply.code(401).send({ success: false, error: 'session_revoked' })
+      }
+      {
+        const { rows: sessionRows } = await systemOf(fastify.pg).query(
+          'SELECT revoked_at, expires_at FROM public.user_session WHERE id = $1', [claims.sid])
+        const session = sessionRows[0]
+        if (!session || session.revoked_at || new Date(session.expires_at) < new Date()) {
+          clearAuthCookies(reply)
+          return reply.code(401).send({ success: false, error: 'session_revoked' })
+        }
+      }
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT id, email, role, active, status FROM users WHERE id = $1`,
+        [claims.sub],
+      )
+      const user = rows[0]
+      if (!user || !user.active || user.status === 'suspended') {
+        return reply.code(401).send({ success: false, error: 'invalid_user' })
+      }
+
+      const accessToken = signAccessToken({ id: user.id, role: user.role, email: user.email, sid: claims.sid })
+      reply.setCookie('vungu_at', accessToken, {
+        httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 12 * 60 * 60,
+      })
+      return reply.send({ success: true, data: { user: userToDTO(user) } })
+    } catch (err) {
+      request.log.error({ err }, 'refresh failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ════════════════════════════════════════════════════════════════════
+  // PASSWORD RESET (self-service)
+  //
+  // Three endpoints, and the shape of all three is decided by one rule: an
+  // unauthenticated caller must learn NOTHING about whether an address has
+  // an account here. /auth/forgot-password therefore answers with the same
+  // 200 and the same sentence for a council planner, a citizen, a suspended
+  // account, and an address that has never existed.
+  //
+  // What is emailed is 32 random bytes; what is stored is their SHA-256
+  // (migration 126). The token lasts one hour, is single-use, and completing
+  // a reset revokes every session the account had — a reset is how someone
+  // recovers an account they believe was taken, so leaving the taker signed
+  // in would defeat the whole exercise.
+  // ════════════════════════════════════════════════════════════════════
+
+  const RESET_TTL_MINUTES = 60
+  // Re-requesting inside this window returns the same 200 without sending a
+  // second email, so the form cannot be used to flood someone's inbox.
+  const RESET_RESEND_COOLDOWN_SEC = 60
+  const RESET_SAME_ANSWER =
+    'If that address has an account, a reset link is on its way. It is valid for one hour.'
+
+  const hashResetToken = (raw) => crypto.createHash('sha256').update(String(raw)).digest('hex')
+
+  /** `planner@vungurdc.gov.zw` -> `p******@vungurdc.gov.zw`. */
+  function maskEmail(email) {
+    const [local = '', domain = ''] = String(email).split('@')
+    return `${local.slice(0, 1)}${'*'.repeat(Math.max(local.length - 1, 1))}@${domain}`
+  }
+
+  fastify.post('/auth/forgot-password', async (request, reply) => {
+    try {
+      const body = request.body || {}
+      const { email } = body
+
+      if (!isString(email, 255) || !EMAIL_RX.test(email)) {
+        return reply.code(400).send({
+          success: false, error: 'invalid_email', message: 'Enter the email address on your account.',
+        })
+      }
+
+      const cap = await captchaOk(request, body, email)
+      if (!cap.ok) {
+        return reply.code(400).send({
+          success: false,
+          error: 'captcha_failed',
+          message: cap.reason === 'expired'
+            ? 'The security check expired. It has restarted — try again.'
+            : 'The security check did not pass. It has restarted — try again.',
+        })
+      }
+
+      // Everything below this line ends in the same answer. Failures are
+      // logged, never returned.
+      try {
+        const { rows } = await systemOf(fastify.pg).query(
+          `SELECT id, email, COALESCE(full_name, name) AS name, active, status
+             FROM users WHERE lower(email) = lower($1)`,
+          [email],
+        )
+        const user = rows[0]
+
+        // A suspended or deleted account gets no link. Restoring it is the IT
+        // desk's decision, not a password's.
+        if (user && user.active && user.status !== 'suspended') {
+          const { rows: recent } = await systemOf(fastify.pg).query(
+            `SELECT 1 FROM public.password_reset_token
+              WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW()
+                AND created_at > NOW() - ($2 || ' seconds')::interval
+              LIMIT 1`,
+            [user.id, String(RESET_RESEND_COOLDOWN_SEC)],
+          )
+
+          if (recent.length === 0) {
+            // A live token from an earlier request is spent the moment a new
+            // one is asked for, so only the newest email ever works.
+            await systemOf(fastify.pg).query(
+              `UPDATE public.password_reset_token SET used_at = NOW()
+                WHERE user_id = $1 AND used_at IS NULL`,
+              [user.id],
+            )
+
+            const raw = crypto.randomBytes(32).toString('base64url')
+            await systemOf(fastify.pg).query(
+              `INSERT INTO public.password_reset_token
+                 (user_id, token_hash, expires_at, requested_ip, requested_ua)
+               VALUES ($1, $2, NOW() + ($3 || ' minutes')::interval, $4, $5)`,
+              [
+                user.id,
+                hashResetToken(raw),
+                String(RESET_TTL_MINUTES),
+                loginSecurity.clientIp(request),
+                String(request.headers?.['user-agent'] || '').slice(0, 500) || null,
+              ],
+            )
+
+            const appBase = process.env.FRONTEND_URL || 'http://localhost:5174'
+            const resetUrl = `${appBase}/reset-password?token=${raw}`
+            await notifier.enqueue(systemOf(fastify.pg), {
+              userId: user.id,
+              email:  user.email,
+              kind:   'password_reset',
+              subject: 'Reset your Vungu RDC portal password',
+              text: [
+                `Dear ${user.name || 'portal user'},`,
+                'Someone asked to reset the password for your Vungu Rural District Council portal account.',
+                `Open this link to choose a new password. It stops working in ${RESET_TTL_MINUTES} minutes and can be used once:`,
+                resetUrl,
+                'If this was not you, no action is needed and your password has not changed. If these arrive often, tell council IT.',
+                'Vungu Rural District Council',
+              ].join('\n\n'),
+              payload: { requestedIp: loginSecurity.clientIp(request) },
+            })
+          }
+        }
+      } catch (err) {
+        // Deliberately swallowed: the caller must not be able to tell a send
+        // failure from an address that has no account.
+        request.log.error({ err }, 'forgot-password issue failed')
+      }
+
+      return reply.send({ success: true, message: RESET_SAME_ANSWER })
+    } catch (err) {
+      request.log.error({ err }, 'forgot-password failed')
+      // Same shape even here — a 500 on a known address would itself be a tell.
+      return reply.send({ success: true, message: RESET_SAME_ANSWER })
+    }
+  })
+
+  // Checked before the form renders, so someone on a dead link is told so
+  // instead of typing a new password twice into a page that cannot save it.
+  fastify.get('/auth/reset-password/validate', async (request, reply) => {
+    try {
+      const { token } = request.query || {}
+      if (!isString(token, 200)) {
+        return reply.code(400).send({ success: false, valid: false, error: 'token_required' })
+      }
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT t.used_at, t.expires_at, u.email, u.active, u.status
+           FROM public.password_reset_token t
+           JOIN users u ON u.id = t.user_id
+          WHERE t.token_hash = $1`,
+        [hashResetToken(token)],
+      )
+      const row = rows[0]
+      if (!row) return reply.code(404).send({ success: false, valid: false, error: 'not_found' })
+      if (row.used_at) return reply.code(410).send({ success: false, valid: false, error: 'used' })
+      if (new Date(row.expires_at) < new Date()) {
+        return reply.code(410).send({ success: false, valid: false, error: 'expired' })
+      }
+      if (!row.active || row.status === 'suspended') {
+        return reply.code(403).send({ success: false, valid: false, error: 'account_suspended' })
+      }
+
+      const minLength = await getSetting(fastify, 'security.password_min_length')
+      return reply.send({
+        success: true, valid: true,
+        // Masked: whoever holds the token read it in that mailbox, so the hint
+        // confirms the account without the link itself disclosing an address.
+        data: { email: maskEmail(row.email), expiresAt: row.expires_at, passwordMinLength: minLength },
+      })
+    } catch (err) {
+      request.log.error({ err }, 'reset-password validate failed')
+      return reply.code(500).send({ success: false, valid: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/auth/reset-password', async (request, reply) => {
+    try {
+      const { token, password } = request.body || {}
+      if (!isString(token, 200) || !isString(password, 255)) {
+        return reply.code(400).send({
+          success: false, error: 'missing_fields', message: 'A reset link and a new password are required.',
+        })
+      }
+
+      const minLength = await getSetting(fastify, 'security.password_min_length')
+      if (password.length < minLength) {
+        return reply.code(400).send({
+          success: false, error: 'password_too_short',
+          message: `Password must be at least ${minLength} characters`,
+        })
+      }
+
+      // Claim the token and read the account in one statement: the UPDATE only
+      // matches a token that is unused and unexpired, so two tabs submitting
+      // the same link cannot both succeed.
+      const { rows } = await systemOf(fastify.pg).query(
+        `WITH claimed AS (
+           UPDATE public.password_reset_token
+              SET used_at = NOW()
+            WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+            RETURNING user_id
+         )
+         SELECT u.id, u.email, u.active, u.status
+           FROM claimed JOIN users u ON u.id = claimed.user_id`,
+        [hashResetToken(token)],
+      )
+      const user = rows[0]
+      if (!user) {
+        return reply.code(410).send({
+          success: false, error: 'invalid_token',
+          message: 'This reset link has expired or has already been used. Request a new one.',
+        })
+      }
+      if (!user.active || user.status === 'suspended') {
+        return reply.code(403).send({
+          success: false, error: 'account_suspended', message: 'Your account has been suspended.',
+        })
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10)
+      await systemOf(fastify.pg).query(
+        'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+        [passwordHash, user.id],
+      )
+
+      // A reset is how someone recovers an account they think was taken, so
+      // every existing session goes with the old password.
+      await systemOf(fastify.pg).query(
+        'UPDATE public.user_session SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+        [user.id],
+      )
+
+      // Recorded as a success, which is also what lifts the lockout —
+      // lockoutState counts failures since the last success. A locked-out
+      // officer who completes a reset can sign in at once, and the failures
+      // stay in the record rather than being deleted.
+      await loginSecurity.record(fastify, request, {
+        email: user.email, userId: user.id, succeeded: true,
+      })
+
+      // Deliberately NOT signed in here. Typing the new password on the
+      // sign-in screen proves it was remembered, and keeps MFA in the loop
+      // for the staff accounts that have it.
+      return reply.send({ success: true, message: 'Password changed. Sign in with your new password.' })
+    } catch (err) {
+      request.log.error({ err }, 'reset-password failed')
+      return reply.code(500).send({ success: false, error: 'internal', message: 'Could not reset the password.' })
+    }
+  })
+
+  // ── MFA challenge (second step of login when mfa_enabled) ────────────
+  fastify.post('/auth/mfa/challenge', async (request, reply) => {
+    try {
+      const { mfaToken, code } = request.body || {}
+      if (!isString(mfaToken) || !isString(code, 20)) {
+        return reply.code(400).send({ success: false, message: 'mfaToken and code are required' })
+      }
+      let claims
+      try {
+        claims = verifyMfaPendingToken(mfaToken)
+      } catch {
+        return reply.code(401).send({ success: false, error: 'invalid_or_expired_mfa_token' })
+      }
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT id, email, COALESCE(full_name, name) AS name, role, organization,
+                job_title, department, applicant_type, phone,
+                national_id, physical_address, active, status,
+                mfa_secret, mfa_backup_codes, residency_status
+         FROM users WHERE id = $1`,
+        [claims.sub],
+      )
+      const user = rows[0]
+      if (!user || !user.active || user.status === 'suspended') {
+        return reply.code(401).send({ success: false, error: 'invalid_user' })
+      }
+
+      let ok = verifyMfaToken(user.mfa_secret, code)
+      if (!ok && Array.isArray(user.mfa_backup_codes)) {
+        for (let i = 0; i < user.mfa_backup_codes.length; i++) {
+          if (await bcrypt.compare(code, user.mfa_backup_codes[i])) {
+            ok = true
+            const remaining = user.mfa_backup_codes.filter((_, idx) => idx !== i)
+            await systemOf(fastify.pg).query(
+              'UPDATE users SET mfa_backup_codes = $1::jsonb WHERE id = $2',
+              [JSON.stringify(remaining), user.id],
+            )
+            break
+          }
+        }
+      }
+      if (!ok) {
+        // Same counter as the password step. A second factor that did not feed
+        // the lockout would leave the code guessable without limit once the
+        // password was known.
+        await loginSecurity.record(fastify, request, {
+          email: user.email, userId: user.id, succeeded: false,
+          reason: loginSecurity.REASONS.MFA_FAILED,
+        })
+        return reply.code(401).send({ success: false, error: 'invalid_mfa_code' })
+      }
+
+      await systemOf(fastify.pg).query(
+        'UPDATE users SET last_login_at = NOW(), last_login = NOW() WHERE id = $1', [user.id])
+      await loginSecurity.record(fastify, request, { email: user.email, userId: user.id, succeeded: true })
+
+      const { accessToken, refreshToken } = await createSession(fastify, user, request)
+      setAuthCookies(reply, { accessToken, refreshToken })
+      return reply.send({ success: true, data: { user: userToDTO(user), token: accessToken }, message: 'Login successful' })
+    } catch (err) {
+      request.log.error({ err }, 'mfa challenge failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── MFA enrolment (self-service, staff/admin) ─────────────────────────
+  fastify.post('/auth/mfa/setup', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    const { secret, otpauthUrl } = generateMfaSecret(request.user.email)
+    await systemOf(fastify.pg).query('UPDATE users SET mfa_secret = $1 WHERE id = $2', [secret, request.user.id])
+    return reply.send({ success: true, data: { secret, otpauthUrl } })
+  })
+
+  fastify.post('/auth/mfa/verify-setup', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    const { code } = request.body || {}
+    const { rows } = await systemOf(fastify.pg).query('SELECT mfa_secret FROM users WHERE id = $1', [request.user.id])
+    const secret = rows[0]?.mfa_secret
+    if (!secret || !verifyMfaToken(secret, code)) {
+      return reply.code(400).send({ success: false, error: 'invalid_code' })
+    }
+    const backupCodes = generateBackupCodes()
+    const hashed = await Promise.all(backupCodes.map((c) => bcrypt.hash(c, 10)))
+    await systemOf(fastify.pg).query(
+      'UPDATE users SET mfa_enabled = true, mfa_backup_codes = $1::jsonb WHERE id = $2',
+      [JSON.stringify(hashed), request.user.id],
+    )
+    return reply.send({ success: true, data: { backupCodes } })
+  })
+
+  fastify.post('/auth/mfa/disable', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    const { password } = request.body || {}
+    const { rows } = await systemOf(fastify.pg).query('SELECT password_hash FROM users WHERE id = $1', [request.user.id])
+    const ok = rows[0]?.password_hash && await bcrypt.compare(password || '', rows[0].password_hash)
+    if (!ok) return reply.code(401).send({ success: false, error: 'invalid_credentials' })
+    await systemOf(fastify.pg).query(
+      'UPDATE users SET mfa_enabled = false, mfa_secret = NULL, mfa_backup_codes = NULL WHERE id = $1',
+      [request.user.id],
+    )
+    return reply.send({ success: true })
+  })
+
+  // ── Sessions (device/session revocation) ──────────────────────────────
+  fastify.get('/auth/sessions', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    const sessions = await listSessions(fastify, request.user.id)
+    return reply.send({
+      success: true,
+      data: sessions.map((s) => ({ ...s, current: s.id === request.sessionId })),
+    })
+  })
+
+  fastify.delete('/auth/sessions/:id', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    // Scope the revoke to the caller's own sessions — no cross-user reach.
+    const { rows } = await systemOf(fastify.pg).query(
+      'SELECT id FROM public.user_session WHERE id = $1 AND user_id = $2',
+      [request.params.id, request.user.id],
+    )
+    if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    await revokeSession(fastify, request.params.id)
+    return reply.send({ success: true })
+  })
+
+  // ── Update profile ───────────────────────────────────────────────────
+  fastify.put('/auth/profile', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    try {
+      const userId = request.user.id
+      const { name, organization, jobTitle, department, phone, nationalId, address } = request.body || {}
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `UPDATE users SET
+           name             = COALESCE($1, name),
+           full_name        = COALESCE($1, full_name),
+           organization     = COALESCE($2, organization),
+           job_title        = COALESCE($3, job_title),
+           department       = COALESCE($4, department),
+           phone            = COALESCE($5, phone),
+           national_id      = COALESCE($6, national_id),
+           physical_address = COALESCE($7, physical_address),
+           updated_at       = NOW()
+         WHERE id = $8
+         RETURNING id, email, COALESCE(full_name, name) AS name, role, organization,
+                   job_title, department, applicant_type,
+                   phone, national_id, physical_address, residency_status`,
+        [
+          isString(name, 120) ? name : null,
+          isString(organization, 255) ? organization : null,
+          isString(jobTitle, 120) ? jobTitle : null,
+          isString(department, 120) ? department : null,
+          isString(phone, 32) ? phone : null,
+          isString(nationalId, 64) ? nationalId : null,
+          isString(address, 500) ? address : null,
+          userId,
+        ],
+      )
+
+      if (rows.length === 0) {
+        return reply.code(404).send({ success: false, error: 'not_found' })
+      }
+      return reply.send({ success: true, data: userToDTO(rows[0]) })
+    } catch (err) {
+      request.log.error({ err }, 'profile update failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ── Change password (self) ───────────────────────────────────────────
+  fastify.post('/auth/change-password', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    try {
+      const { currentPassword, newPassword } = request.body || {}
+      if (!isString(currentPassword) || !isString(newPassword)) {
+        return reply.code(400).send({ success: false, message: 'Both passwords required' })
+      }
+      const minLength = await getSetting(fastify, 'security.password_min_length')
+      if (newPassword.length < minLength) {
+        return reply.code(400).send({ success: false, message: `Password must be at least ${minLength} characters` })
+      }
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT password_hash FROM users WHERE id = $1`,
+        [request.user.id],
+      )
+      const hash = rows[0]?.password_hash
+      if (!hash || !hash.startsWith('$2')) {
+        return reply.code(400).send({ success: false, error: 'password_reset_required' })
+      }
+      const ok = await bcrypt.compare(currentPassword, hash)
+      if (!ok) {
+        return reply.code(401).send({ success: false, error: 'invalid_credentials' })
+      }
+
+      const newHash = await bcrypt.hash(newPassword, 10)
+      await systemOf(fastify.pg).query(
+        `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+        [newHash, request.user.id],
+      )
+      return reply.send({ success: true, message: 'Password updated' })
+    } catch (err) {
+      request.log.error({ err }, 'change password failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ════════════════════════════════════════════════════════════════════
+  // INVITE SYSTEM (employees only)
+  // ════════════════════════════════════════════════════════════════════
+
+  fastify.post('/auth/invite', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    try {
+      const admin = request.user
+      const { email, role, jobTitle, department } = request.body || {}
+
+      if (!isString(email) || !EMAIL_RX.test(email) || !isString(role)) {
+        return reply.code(400).send({ success: false, message: 'Email and role are required' })
+      }
+      if (!INVITABLE_ROLES.has(role)) {
+        return reply.code(400).send({ success: false, message: 'Invalid role for invite' })
+      }
+
+      const existing = await systemOf(fastify.pg).query('SELECT id FROM users WHERE email = $1', [email])
+      if (existing.rows.length > 0) {
+        return reply.code(409).send({ success: false, message: 'A user with this email already exists' })
+      }
+
+      // Invalidate any pending invites for this email.
+      await systemOf(fastify.pg).query(
+        'UPDATE invites SET used = true, used_at = NOW() WHERE email = $1 AND used = false',
+        [email],
+      )
+
+      const token = uuidv4()
+      const { rows } = await systemOf(fastify.pg).query(
+        `INSERT INTO invites (token, email, role, job_title, department, invited_by, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW() + INTERVAL '7 days')
+         RETURNING id, token, email, role, job_title, department, expires_at, created_at`,
+        [token, email, role, jobTitle || null, department || null, admin.id],
+      )
+      const invite = rows[0]
+
+      // Queue the invite email (outbox → emailWorker → SMTP). The link must be
+      // absolute so it works from an email client. A notifier failure must not
+      // fail the invite — the admin still gets the copyable link below.
+      const appBase = process.env.FRONTEND_URL || 'http://localhost:5174'
+      const absoluteUrl = `${appBase}/invite?token=${invite.token}`
+      let emailQueued = false
+      try {
+        await notifier.enqueueStaffInvite(systemOf(fastify.pg), {
+          email:         invite.email,
+          inviteUrl:     absoluteUrl,
+          role:          invite.role,
+          jobTitle:      invite.job_title,
+          department:    invite.department,
+          invitedByName: admin.name || admin.full_name || admin.email,
+          expiresAt:     invite.expires_at,
+        })
+        emailQueued = true
+      } catch (err) {
+        request.log.error({ err }, 'invite email enqueue failed')
+      }
+
+      return reply.send({
+        success: true,
+        data: {
+          token:     invite.token,
+          email:     invite.email,
+          role:      invite.role,
+          jobTitle:  invite.job_title,
+          department: invite.department,
+          expiresAt: invite.expires_at,
+          inviteUrl: `/invite?token=${invite.token}`,
+          emailQueued,
+        },
+      })
+    } catch (err) {
+      request.log.error({ err }, 'invite create failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/auth/invite/validate', async (request, reply) => {
+    try {
+      const { token } = request.query || {}
+      if (!isString(token)) {
+        return reply.code(400).send({ success: false, error: 'token_required', valid: false })
+      }
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT token, email, role, job_title, department, expires_at, used
+         FROM invites WHERE token = $1`,
+        [token],
+      )
+      if (rows.length === 0) {
+        return reply.code(404).send({ success: false, error: 'not_found', valid: false })
+      }
+      const invite = rows[0]
+      if (invite.used) {
+        return reply.code(410).send({ success: false, error: 'used', valid: false })
+      }
+      if (new Date(invite.expires_at) < new Date()) {
+        return reply.code(410).send({ success: false, error: 'expired', valid: false })
+      }
+      return reply.send({
+        success: true, valid: true,
+        data: {
+          token:     invite.token,
+          email:     invite.email,
+          role:      invite.role,
+          jobTitle:  invite.job_title,
+          department: invite.department,
+          expiresAt: invite.expires_at,
+        },
+      })
+    } catch (err) {
+      request.log.error({ err }, 'invite validate failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/auth/invite/accept', async (request, reply) => {
+    try {
+      const { token, name, password } = request.body || {}
+      if (!isString(token) || !isString(name) || !isString(password)) {
+        return reply.code(400).send({ success: false, message: 'token, name and password are required' })
+      }
+      const minLength = await getSetting(fastify, 'security.password_min_length')
+      if (password.length < minLength) {
+        return reply.code(400).send({ success: false, message: `Password must be at least ${minLength} characters` })
+      }
+
+      const { rows: inviteRows } = await systemOf(fastify.pg).query(
+        'SELECT * FROM invites WHERE token = $1 AND used = false AND expires_at > NOW()',
+        [token],
+      )
+      if (inviteRows.length === 0) {
+        return reply.code(410).send({ success: false, error: 'invite_invalid' })
+      }
+      const invite = inviteRows[0]
+
+      const existing = await systemOf(fastify.pg).query('SELECT id FROM users WHERE email = $1', [invite.email])
+      if (existing.rows.length > 0) {
+        return reply.code(409).send({ success: false, message: 'Account already exists' })
+      }
+
+      // FIX: previously `'hashed_' + password` was stored, defeating bcrypt.
+      const passwordHash = await bcrypt.hash(password, 10)
+
+      const { rows: userRows } = await systemOf(fastify.pg).query(
+        `INSERT INTO users (
+           email, name, full_name, role, job_title, department,
+           password_hash, status, active, created_at
+         )
+         VALUES ($1, $2, $2, $3, $4, $5, $6, 'active', true, NOW())
+         RETURNING id, email, COALESCE(full_name, name) AS name, role,
+                   organization, job_title, department, applicant_type`,
+        [
+          invite.email, name, invite.role, invite.job_title, invite.department,
+          passwordHash,
+        ],
+      )
+
+      await systemOf(fastify.pg).query('UPDATE invites SET used = true, used_at = NOW() WHERE id = $1', [invite.id])
+
+      const user = userRows[0]
+      const { accessToken, refreshToken } = await createSession(fastify, user, request)
+      setAuthCookies(reply, { accessToken, refreshToken })
+
+      return reply.send({
+        success: true,
+        data: { user: userToDTO(user), token: accessToken },
+        message: `Welcome to Vungu RDC, ${name}.`,
+      })
+    } catch (err) {
+      request.log.error({ err }, 'invite accept failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ════════════════════════════════════════════════════════════════════
+  // ADMIN USER MANAGEMENT
+  // ════════════════════════════════════════════════════════════════════
+
+  fastify.get('/admin/users', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    try {
+      // Optional scoping (omit for back-compat: returns everyone):
+      //   ?staff=true  → council employees only (the staff console default)
+      //   ?staff=false → citizens only (everyone not in a staff role)
+      const staff = request.query?.staff
+      const where = ['deleted_at IS NULL']
+      const params = []
+      if (staff === 'true') {
+        params.push(STAFF_ROLES)
+        where.push(`role = ANY($${params.length})`)
+      } else if (staff === 'false') {
+        params.push(STAFF_ROLES)
+        where.push(`(role IS NULL OR NOT (role = ANY($${params.length})))`)
+      }
+      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT id, email, COALESCE(full_name, name) AS name, role, organization,
+                job_title, department, applicant_type, active, status,
+                created_at, last_login_at
+         FROM users ${whereSql} ORDER BY created_at DESC`,
+        params,
+      )
+      return reply.send({
+        success: true,
+        data: rows.map(u => ({
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          organization: u.organization,
+          jobTitle: u.job_title,
+          department: u.department,
+          applicantType: u.applicant_type,
+          active: u.active,
+          status: u.status || (u.active ? 'active' : 'suspended'),
+          createdAt: u.created_at,
+          lastLogin: u.last_login_at,
+        })),
+      })
+    } catch (err) {
+      reply.log.error({ err }, 'list users failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.put('/admin/users/:id', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    try {
+      const { id } = request.params
+      const { role, status, jobTitle, department, name } = request.body || {}
+
+      if (role && !VALID_USER_ROLES.has(role)) {
+        return reply.code(400).send({ success: false, message: 'Invalid role' })
+      }
+      if (status && !['active', 'suspended'].includes(status)) {
+        return reply.code(400).send({ success: false, message: 'Invalid status' })
+      }
+
+      const { rows } = await systemOf(fastify.pg).query(
+        `UPDATE users SET
+           role       = COALESCE($1, role),
+           status     = COALESCE($2, status),
+           active     = CASE
+                          WHEN $2 = 'suspended' THEN false
+                          WHEN $2 = 'active'    THEN true
+                          ELSE active
+                        END,
+           job_title  = COALESCE($3, job_title),
+           department = COALESCE($4, department),
+           name       = COALESCE($5, name),
+           full_name  = COALESCE($5, full_name),
+           updated_at = NOW()
+         WHERE id = $6
+         RETURNING id, email, COALESCE(full_name, name) AS name, role, status,
+                   active, job_title, department, applicant_type`,
+        [
+          role || null, status || null,
+          isString(jobTitle, 120) ? jobTitle : null,
+          isString(department, 120) ? department : null,
+          isString(name, 120) ? name : null,
+          id,
+        ],
+      )
+      if (rows.length === 0) return reply.code(404).send({ success: false, error: 'not_found' })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'update user failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/admin/users/:id/suspend', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    try {
+      const { id } = request.params
+      const { suspended } = request.body || {}
+      const newStatus = suspended ? 'suspended' : 'active'
+      const { rows } = await systemOf(fastify.pg).query(
+        `UPDATE users SET status = $1, active = $2, updated_at = NOW() WHERE id = $3
+         RETURNING id, email, status, active`,
+        [newStatus, !suspended, id],
+      )
+      if (rows.length === 0) return reply.code(404).send({ success: false, error: 'not_found' })
+      return reply.send({ success: true, data: rows[0] })
+    } catch (err) {
+      request.log.error({ err }, 'suspend user failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.delete('/admin/users/:id', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    try {
+      const { id } = request.params
+      if (id === request.user.id) {
+        return reply.code(400).send({ success: false, error: 'cannot_delete_self' })
+      }
+      // Soft delete (migration 103): the row stays for audit-log attribution and
+      // recovery; active=false + status='deleted' lock the account out of login
+      // and authenticate(). The email stays reserved until an admin restores or
+      // a DBA anonymises the row.
+      const { rowCount } = await systemOf(fastify.pg).query(
+        `UPDATE users
+            SET active = false, status = 'deleted',
+                deleted_at = NOW(), deleted_by = $2, updated_at = NOW()
+          WHERE id = $1 AND deleted_at IS NULL`,
+        [id, request.user.id],
+      )
+      if (rowCount === 0) return reply.code(404).send({ success: false, error: 'not_found' })
+      return reply.send({ success: true })
+    } catch (err) {
+      request.log.error({ err }, 'delete user failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.post('/admin/users/:id/reset-password', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    try {
+      const { id } = request.params
+      const { newPassword } = request.body || {}
+      // The council's own minimum (admin_setting security.password_min_length),
+      // not a literal — the console offers the control, so it has to bite here.
+      const minLength = await getSetting(fastify, 'security.password_min_length')
+      if (!isString(newPassword) || newPassword.length < minLength) {
+        return reply.code(400).send({ success: false, message: `New password must be at least ${minLength} characters` })
+      }
+      const passwordHash = await bcrypt.hash(newPassword, 10)
+      const { rows } = await systemOf(fastify.pg).query(
+        'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 RETURNING id',
+        [passwordHash, id],
+      )
+      if (rows.length === 0) return reply.code(404).send({ success: false, error: 'not_found' })
+      return reply.send({ success: true })
+    } catch (err) {
+      request.log.error({ err }, 'reset password failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.get('/admin/invites', { preHandler: requireAdmin(fastify) }, async (_request, reply) => {
+    try {
+      const { rows } = await systemOf(fastify.pg).query(
+        `SELECT i.id, i.token, i.email, i.role, i.job_title, i.department,
+                i.used, i.used_at, i.expires_at, i.created_at,
+                COALESCE(u.full_name, u.name) AS invited_by_name
+         FROM invites i
+         LEFT JOIN users u ON u.id = i.invited_by
+         ORDER BY i.created_at DESC`,
+      )
+      return reply.send({
+        success: true,
+        data: rows.map(r => ({
+          id: r.id,
+          token: r.token,
+          email: r.email,
+          role: r.role,
+          jobTitle: r.job_title,
+          department: r.department,
+          used: r.used,
+          usedAt: r.used_at,
+          expiresAt: r.expires_at,
+          createdAt: r.created_at,
+          invitedBy: r.invited_by_name,
+          inviteUrl: `/invite?token=${r.token}`,
+        })),
+      })
+    } catch (err) {
+      reply.log.error({ err }, 'list invites failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  fastify.delete('/admin/invites/:id', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    try {
+      const { id } = request.params
+      await systemOf(fastify.pg).query('DELETE FROM invites WHERE id = $1 AND used = false', [id])
+      return reply.send({ success: true })
+    } catch (err) {
+      request.log.error({ err }, 'revoke invite failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // ════════════════════════════════════════════════════════════════════
+  // QGIS API token — admin-provisioned, cryptographically signed (fix F3).
+  // The old format accepted any string starting `vungu-api-`; validation
+  // now verifies an HS256 signature + type:'api' claim, so tokens cannot be
+  // forged. Minting is restricted to admins (they set up the plugin).
+  // ════════════════════════════════════════════════════════════════════
+  fastify.post('/auth/generate-api-token', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    const pluginName = isString(request.body?.pluginName, 100) ? request.body.pluginName : 'vungu-qgis-plugin'
+    const { token, jti, expiresAt } = signApiToken({ id: request.user.id, pluginName })
+    await systemOf(fastify.pg).query(
+      'INSERT INTO public.api_token (jti, user_id, plugin, expires_at) VALUES ($1, $2, $3, $4)',
+      [jti, request.user.id, pluginName, expiresAt],
+    )
+    return reply.send({
+      success: true,
+      data: { apiToken: token, id: jti, email: request.user.email, pluginName, expiresAt: expiresAt.toISOString() },
+    })
+  })
+
+  // Every issued token (never the token itself), newest first, for the admin console.
+  fastify.get('/auth/api-tokens', { preHandler: requireAdmin(fastify) }, async (_request, reply) => {
+    const { rows } = await systemOf(fastify.pg).query(
+      `SELECT t.jti AS id, t.plugin, t.issued_at, t.expires_at, t.last_used_at, t.revoked_at,
+              u.email AS issued_to
+         FROM public.api_token t JOIN users u ON u.id = t.user_id
+        ORDER BY t.issued_at DESC LIMIT 500`)
+    return reply.send({ success: true, data: rows })
+  })
+
+  // Revoke one token. Takes effect on its next request.
+  fastify.post('/auth/api-tokens/:id/revoke', { preHandler: requireAdmin(fastify) }, async (request, reply) => {
+    const id = String(request.params.id)
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return reply.code(404).send({ success: false, error: 'not_found' })
+    const { rowCount } = await systemOf(fastify.pg).query(
+      `UPDATE public.api_token SET revoked_at = COALESCE(revoked_at, NOW()), revoked_by = COALESCE(revoked_by, $2)
+        WHERE jti = $1::uuid`, [id, request.user.id])
+    if (!rowCount) return reply.code(404).send({ success: false, error: 'not_found' })
+    return reply.send({ success: true })
+  })
+
+  fastify.post('/auth/validate-api-token', async (request, reply) => {
+    const { token } = request.body || {}
+    // JWTs routinely exceed the 255-char default (extra claims like plugin
+    // name push them past it) -- cap generously instead of on the general
+    // short-string default.
+    if (!isString(token, 4096)) return reply.code(400).send({ success: false, error: 'token_required', valid: false })
+    const out = {}
+    const claims = await verifyApiTokenClaims(systemOf(fastify.pg), token, out)
+    if (!claims) {
+      return reply.code(401).send({ success: false, error: out.reason, valid: false })
+    }
+    // What the token can actually do: push to qgis_* staging tables and pull
+    // qgis_* and published layers. No other route accepts it.
+    return reply.send({ success: true, data: { valid: true, permissions: ['layers.sync'] } })
+  })
+}
+
+module.exports = { authRoutes }

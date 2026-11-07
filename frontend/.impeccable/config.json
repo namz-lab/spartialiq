@@ -1,0 +1,29 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "codex-grid-background",
+        "value": "*",
+        "files": [
+          "src/views/planner/PlanningStudio.vue"
+        ],
+        "createdAt": "2026-09-26T08:15:50.940Z",
+        "reason": "Claude triage: L1790 is the Planning Studio CAD drafting canvas metre grid (synced to survey coords via syncGrid) - a real measurement surface, the rule's own stated exception"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-09-29T07:10:39.226Z",
+        "reason": "project design system: --ent-font in src/styles/enterprise.css is Geist (enterprise SSOT)"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist mono",
+        "createdAt": "2026-09-29T07:10:39.752Z",
+        "reason": "project design system: --ent-font-mono in src/styles/enterprise.css is Geist Mono (enterprise SSOT)"
+      }
+    ]
+  }
+}

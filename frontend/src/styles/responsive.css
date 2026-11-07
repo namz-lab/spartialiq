@@ -1,0 +1,538 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  VUNGU RDC — RESPONSIVE FOUNDATION
+  The device dimension of the enterprise design system. Loaded immediately
+  after enterprise.css, which it extends: every token here either is new
+  (breakpoints, safe area, touch) or re-values an existing --ent-* token for
+  a different input method or viewport. No component should need to know a
+  raw pixel breakpoint; it consumes these tokens or the four media queries
+  named below.
+
+  WHY A SEPARATE FILE
+  enterprise.css describes the product's visual language, which does not
+  change between a 27-inch planning workstation and a field officer's phone.
+  What changes is density, reach, and structure. Keeping that split explicit
+  stops "mobile styles" leaking into the palette and back again.
+
+  ── BREAKPOINT SYSTEM (Phase 19: four meaningful steps, not 22 accidents) ──
+
+    mobile   ≤ 767px    phone, portrait and landscape. Touch. One column.
+    tablet   768–1023   iPad portrait, 820, small Android tablets. Touch.
+    desktop  1024–1439  laptop, iPad landscape with keyboard. Pointer.
+    wide     ≥ 1440     planning workstation, dual monitor. Pointer.
+
+  768 and 1024 were chosen because the codebase already used them (1024 in
+  VunguPlannerView's rail-overlay switch, 768 across the public pages) and
+  they match Tailwind's md/lg, so utility classes and hand-written CSS agree.
+  The 900px value used in 34 places is the accident being retired: it splits
+  the tablet range in half for no reason and leaves 768–899 unstyled.
+
+  Canonical queries, copy these verbatim:
+
+    @media (max-width: 767px)  { }                      mobile only
+    @media (min-width: 768px)  { }                      tablet and up
+    @media (min-width: 1024px) { }                      desktop and up
+    @media (min-width: 1440px) { }                      wide only
+    @media (pointer: coarse)   { }                      touch, any size
+
+  Input method is deliberately independent of width. A 1024px iPad Pro in
+  landscape is a desktop-width TOUCH device: it gets the desktop layout and
+  the touch target sizes. Testing `pointer: coarse` rather than width is what
+  makes that correct.
+  ═══════════════════════════════════════════════════════════════════════════
+*/
+
+:root {
+  /* ── BREAKPOINTS (documentation + JS parity) ───────────────────────────
+     CSS cannot use custom properties inside a media query, so these exist to
+     be read by useBreakpoint.ts and to give the values one written-down home.
+     Change here, change in useBreakpoint.ts, nowhere else. */
+  --ent-bp-mobile:  767px;
+  --ent-bp-tablet:  768px;
+  --ent-bp-desktop: 1024px;
+  --ent-bp-wide:    1440px;
+
+  /* ── SAFE AREA ─────────────────────────────────────────────────────────
+     Notches, home indicators, rounded display corners. env() resolves to 0px
+     on hardware without insets, so these are unconditionally safe to add to
+     any padding. Requires viewport-fit=cover in index.html, which is set. */
+  --ent-safe-top:    env(safe-area-inset-top, 0px);
+  --ent-safe-right:  env(safe-area-inset-right, 0px);
+  --ent-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ent-safe-left:   env(safe-area-inset-left, 0px);
+
+  /* ── MOBILE CHROME ─────────────────────────────────────────────────────*/
+  --ent-bottomnav-h: 56px;   /* bottom navigation bar, excluding safe area */
+  --ent-mobile-topbar-h: 52px;
+  --ent-sheet-radius: 14px;  /* bottom sheet top corners */
+  --ent-drawer-w: min(19rem, 84vw); /* off-canvas nav, never edge-to-edge so
+                                       the scrim stays tappable to dismiss */
+
+  /* ── TOUCH ─────────────────────────────────────────────────────────────
+     WCAG 2.2 AA Target Size (Minimum, 2.5.8) is 24px; that is a floor, not a
+     goal. Apple HIG and Material both say 44/48. We use 44 as the minimum
+     and 48 for primary actions, per Phase 7. */
+  --ent-touch-min:     44px;
+  --ent-touch-primary: 48px;
+
+  /* Viewport height that does not jump when mobile browser chrome retracts.
+     dvh is supported everywhere we ship; the vh value is the fallback for
+     any engine that ignores the @supports block below. */
+  --ent-vh: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root { --ent-vh: 100dvh; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   1. OVERFLOW CONTAINMENT
+   The single highest-leverage fix in this file. A grid or flex child
+   defaults to `min-width: auto`, meaning it refuses to shrink below its
+   content's intrinsic minimum — one long permit reference, one wide table,
+   one unbroken URL and the whole page gains a horizontal scrollbar and every
+   fixed/sticky element misaligns.
+
+   `:where()` carries zero specificity, so any component rule (including
+   Vue's scoped [data-v-*] selectors) overrides these without !important.
+   That is the point: this is a floor, not a mandate.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+html,
+body {
+  /* clip, not hidden: clip does not create a scroll container, so
+     position:sticky inside the page keeps working. */
+  overflow-x: clip;
+  max-width: 100%;
+}
+
+/* Long machine identifiers (stand numbers, permit refs, coordinates) are
+   unbreakable strings. Allow them to wrap rather than force a scrollbar. */
+:where(body) {
+  overflow-wrap: break-word;
+}
+
+/* Flex/grid children may shrink below their intrinsic *width*, so a long
+   permit ref cannot force a page-level horizontal scrollbar. Do NOT also
+   zero min-height: nested column flex then crushes cards and their text
+   overflows onto the next card. Shells that need a child to shrink so an
+   inner pane can scroll set min-height: 0 themselves. */
+:where(*) {
+  min-width: 0;
+}
+
+/* Replaced elements never exceed their column. */
+:where(img, svg, video, canvas, iframe, embed, object) {
+  max-width: 100%;
+}
+:where(img, video) {
+  height: auto;
+}
+
+/* MapLibre sizes its canvas imperatively; the rules above must not touch it. */
+:where(.maplibregl-canvas, .maplibregl-canvas-container, .mapboxgl-canvas) {
+  max-width: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2. VIEWPORT STABILITY
+   43 places in this codebase size a shell to 100vh. On iOS Safari and
+   Chrome Android, 100vh is the viewport with browser chrome RETRACTED, so
+   a 100vh app shell is taller than the visible area on load and the bottom
+   of the UI — which is where the primary action lives on mobile — sits
+   under the address bar until the user scrolls.
+
+   These rules re-point Tailwind's screen utilities at dvh globally. Hand
+   written `height: 100vh` in scoped component CSS is migrated per component;
+   this covers the utility-class half at zero risk.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@supports (height: 100dvh) {
+  .h-screen     { height: 100dvh; }
+  .min-h-screen { min-height: 100dvh; }
+  .max-h-screen { max-height: 100dvh; }
+}
+
+/* Opt-in helpers for scoped component CSS being migrated off 100vh. */
+.ent-vh     { height: var(--ent-vh); }
+.ent-min-vh { min-height: var(--ent-vh); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   3. TOUCH DENSITY
+   Re-values the enterprise control tokens for coarse pointers. Because
+   every migrated component already sizes its controls from --ent-control-h
+   and its rows from --ent-row-h, this one block raises the whole app to a
+   44px touch floor without editing those components.
+
+   Gated on `pointer: coarse` rather than width so a touchscreen laptop and
+   a landscape tablet get comfortable targets while keeping the dense
+   desktop layout, and so a narrow desktop browser window does NOT get
+   phone-sized controls (which would waste a planner's screen).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (pointer: coarse) {
+  :root {
+    --ent-control-h:    var(--ent-touch-min);      /* 34 → 44 */
+    --ent-control-h-sm: var(--ent-touch-min);      /* 28 → 44, see below */
+    --ent-control-px:   14px;
+    --ent-row-h:        var(--ent-touch-primary);  /* 36 → 48 */
+    --ent-row-h-sm:     var(--ent-touch-min);      /* 30 → 44 */
+  }
+
+  /* --ent-control-h-sm was 40px here in the first cut of this file, on the
+     theory that a "small" control could sit just under the floor. It cannot:
+     44px is a minimum, not an average, and the browser check caught five
+     40px buttons on the login screen because of it. There is no small
+     control on a touch screen; there is only a control. */
+
+  /* THE FLOOR IS A FLOOR, SO IT USES !important.
+     This is the one place in the codebase that does. The reasoning:
+     a component that hardcodes `height: 32px` on a button is making a
+     density decision for a mouse, and on a touch screen that decision is
+     simply wrong — it is not a preference to be respected. A 0-specificity
+     `:where()` rule loses to every scoped `.btn[data-v-x]` selector in the
+     app, which is precisely how those five 40px buttons slipped through.
+
+     Only min-height is forced. Width, padding and font are left alone, so a
+     narrow icon button stays narrow and only grows in the axis that makes it
+     reliably hittable. Layout impact is limited to rows that were shorter
+     than 44px, which is the set we are deliberately changing. */
+  button,
+  [role='button'],
+  summary,
+  [role='tab'],
+  [role='menuitem'],
+  [role='switch'] {
+    min-height: var(--ent-touch-min) !important;
+  }
+
+  /* Standalone links — navigation, back links, actions. NOT links inside
+     prose: WCAG 2.5.8 exempts inline text links, and forcing 44px on them
+     would blow open the leading of every paragraph. The :not() chain is that
+     exemption, expressed structurally. */
+  a[href]:not(p a, li a, span a, label a, td a, dd a) {
+    align-items: center;
+    min-height: var(--ent-touch-min);
+  }
+
+  /* `display` is set separately, at ZERO specificity, and the distinction
+     matters.
+     `min-height` above is a floor and is meant to win — that is the whole
+     argument of this block. `display` is not a floor, it is a default, and
+     at the specificity of `a[href]:not(…)` — (0,1,1) — it beat every
+     single-class rule in the app. The visible symptom: any link a component
+     hides with a class (`.hero-scroll-cue { display: none }` in a
+     max-width media query, for one) was forced back to `inline-flex` on
+     every touch device, so elements deliberately removed on phones
+     reappeared there and nowhere else.
+     Wrapped in :where() this contributes nothing, so it still lays out a
+     bare link for the `align-items` above while losing to any component
+     that has an opinion. */
+  :where(a[href]:not(p a, li a, span a, label a, td a, dd a)) {
+    display: inline-flex;
+  }
+
+  /* Checkboxes and radios are replaced elements sized by their own width and
+     height, so the min-height rule above does not reach them. 24px is the
+     control itself — WCAG 2.5.8 Target Size (Minimum) stated outright, and
+     about as large as a checkbox can be drawn before it stops reading as one. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  /* The control is not the target. A checkbox's real target is the control
+     PLUS its associated <label>, because clicking the label toggles it — so
+     the row that holds both is what has to clear 44px, and forcing the box
+     itself to 44px would just draw a comically large checkbox.
+
+     :has() selects that row without needing a class on it, which matters
+     because these rows are spelled differently in every form in the app
+     (.login-remember, .cp-check, plain divs). Labels NOT next to a control
+     are untouched, so stacked label-above-input forms keep their spacing. */
+  :has(> input[type='checkbox']),
+  :has(> input[type='radio']) {
+    min-height: var(--ent-touch-min);
+  }
+
+  /* …and the label inside that row is the half of the target that is actually
+     clickable, so it is the half that has to be tall. Giving the row a
+     min-height alone leaves a 44px row containing a 20px label and a 24px
+     box, with dead space above and below that looks like a target and is not.
+     inline-flex because min-height does nothing to an inline box. */
+  :has(> input[type='checkbox']) > label,
+  :has(> input[type='radio']) > label {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--ent-touch-min);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4. FORM CONTROLS ON MOBILE
+   iOS Safari zooms the viewport when a focused input's computed font-size
+   is below 16px, then does not zoom back out. The enterprise base size is
+   14px, which is correct on a workstation and a trap on a phone.
+
+   Raising only the control text (not the whole type scale) keeps the
+   information density of labels, table cells and meta intact while making
+   every field safe to focus.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  /* !important for the same reason as the touch floor above: this is not a
+     typographic preference that a component may reasonably override, it is a
+     hard platform constraint. A component that sets 15px on its inputs was
+     tuning density for a desktop form and had no way to know it was also
+     deciding that iOS would zoom the page and never zoom back. The browser
+     check caught exactly that on the login screen, where
+     `.login-input { font-size: 0.9375rem }` outranked the plain rule this
+     replaces.
+
+     Only the control text is forced. Labels, helper text, table cells and
+     everything else keep the mobile type scale below, so information density
+     is unaffected. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   5. RESPONSIVE TYPE SCALE
+   Phase 8: not a shrink of the desktop scale. The scale is re-pitched.
+
+   Reading distance on a phone is ~30cm against ~60cm at a desk, so smaller
+   physical type is legible; but a phone is used one-handed, in the field,
+   often in sunlight, so the SMALL end of the scale must come UP while the
+   LARGE end comes DOWN (a 22px page title on a 375px screen wraps to three
+   lines and stops reading as a title).
+
+   Net effect: the scale compresses toward the middle. Hierarchy survives
+   because ≥1.13 ratio is kept between adjacent steps.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  :root {
+    --ent-fs-micro: 0.75rem;    /* 11 → 12  never below 12 on a phone */
+    --ent-fs-xs:    0.8125rem;  /* 12 → 13 */
+    --ent-fs-sm:    0.875rem;   /* 13 → 14 */
+    --ent-fs-base:  0.9375rem;  /* 14 → 15  body comes up */
+    --ent-fs-md:    1rem;       /* 15 → 16 */
+    --ent-fs-lg:    1.0625rem;  /* 17 → 17  section titles hold */
+    --ent-fs-xl:    1.1875rem;  /* 22 → 19  page titles come down */
+    --ent-fs-num:   1.5rem;     /* 26 → 24 */
+
+    /* Shorter measure needs more leading to stay comfortable. */
+    --ent-lh: 1.5;
+
+    /* Outer spacing tightens; inner rhythm is untouched so components keep
+       their internal proportions. */
+    --ent-s7: 24px;   /* 32 → 24 */
+    --ent-s8: 32px;   /* 40 → 32 */
+  }
+}
+
+/* Prose measure. Phase 8: cap paragraph width regardless of viewport. */
+.ent-prose { max-width: 68ch; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   6. RESPONSIVE LAYOUT UTILITIES
+   A small named vocabulary so components stop inventing one-off grids.
+   Every one is mobile-first: the base declaration is the phone layout, the
+   media query adds columns.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Content grid that cannot produce a cramped column. Pass the desired
+   minimum track width; below it the grid drops to one column by itself, so
+   this needs no media query and cannot break at an untested width. */
+.ent-autogrid {
+  display: grid;
+  gap: var(--ent-s4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ent-col-min, 17rem)), 1fr));
+}
+.ent-autogrid-sm { --ent-col-min: 11rem; }
+.ent-autogrid-lg { --ent-col-min: 24rem; }
+
+/* Compact numeric tiles: KPIs, counts, SLA meters. Two-up on a phone is
+   correct here — the values are short, and stacking eight of them buries
+   the content that follows. */
+.ent-tilegrid {
+  display: grid;
+  gap: var(--ent-s3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 768px) {
+  .ent-tilegrid { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+}
+
+/* Form rows. Phase 10: single column on mobile, paired on tablet and up. */
+.ent-field-row {
+  display: grid;
+  gap: var(--ent-s3);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 768px) {
+  .ent-field-row   { grid-template-columns: 1fr 1fr; }
+  .ent-field-row-3 { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Content + context split (case body beside related information). Stacks on
+   anything below desktop, because a 300px context column beside a 400px
+   body is worse than either one at full width. */
+.ent-split {
+  display: grid;
+  gap: var(--ent-s5);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1024px) {
+  .ent-split         { grid-template-columns: minmax(0, 1fr) var(--ent-aside-w, 20rem); }
+  .ent-split-reverse { grid-template-columns: var(--ent-aside-w, 20rem) minmax(0, 1fr); }
+}
+
+/* Horizontal scroller for content that legitimately exceeds the viewport:
+   a wide register table, a filter chip row, a stepper. Momentum scrolling
+   and a visible thumb, so it reads as scrollable rather than truncated. */
+.ent-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.ent-scroll-x::-webkit-scrollbar { height: 6px; }
+.ent-scroll-x::-webkit-scrollbar-thumb {
+  background: var(--ent-line-strong);
+  border-radius: var(--ent-r-pill);
+}
+.ent-scroll-x > table { min-width: max-content; }
+
+/* Chip / tab row that scrolls rather than wrapping to three lines. */
+.ent-chiprow {
+  display: flex;
+  gap: var(--ent-s2);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.ent-chiprow::-webkit-scrollbar { display: none; }
+.ent-chiprow > * { flex: 0 0 auto; scroll-snap-align: start; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   7. VISIBILITY HELPERS
+   Used sparingly, and never to delete functionality: Phase 9's rule is that
+   hidden content stays reachable another way. These exist so a component can
+   present the SAME action through a different affordance per device (a
+   desktop toolbar button and a mobile sheet row), not so mobile users lose
+   the action.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ent-mobile-only  { display: none; }
+.ent-tablet-up    { display: none; }
+.ent-desktop-only { display: none; }
+
+@media (max-width: 767px) {
+  .ent-mobile-only { display: revert; }
+  .ent-mobile-hide { display: none !important; }
+}
+@media (min-width: 768px) {
+  .ent-tablet-up { display: revert; }
+}
+@media (min-width: 1024px) {
+  .ent-desktop-only { display: revert; }
+}
+
+/* Available to assistive technology, invisible on screen. */
+.ent-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip link. Visible only when focused, so keyboard users can jump past the
+   navigation that a mouse user simply scrolls past. */
+.ent-skip-link {
+  position: absolute;
+  top: calc(var(--ent-safe-top) + var(--ent-s2));
+  left: var(--ent-s2);
+  z-index: var(--ent-z-toast);
+  padding: var(--ent-s2) var(--ent-s4);
+  background: var(--ent-surface);
+  color: var(--ent-accent);
+  border: 1px solid var(--ent-accent);
+  border-radius: var(--ent-r);
+  font-family: var(--ent-font);
+  font-size: var(--ent-fs-sm);
+  font-weight: var(--ent-fw-semibold);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.ent-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   8. MOBILE CHROME SPACING
+   Any scroll container sitting behind the bottom navigation adds this so its
+   last row is not permanently covered. Applied by the shell, not by every
+   screen.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ent-bottomnav-gap {
+  padding-bottom: calc(var(--ent-bottomnav-h) + var(--ent-safe-bottom) + var(--ent-s3));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   9. MOTION
+   Emil Kowalski's frequency gate applied at the system level: this is a
+   productivity tool whose users open the same drawer a hundred times a day,
+   so surface transitions are fast (180–240ms) and there is no choreography.
+   The curves below are the only ones any overlay uses.
+
+   Reduced motion is already collapsed to ~0ms globally in main.css; the rule
+   here additionally removes the TRANSFORM, because a sheet that slides 100%
+   of the viewport in 0.01ms is a single-frame jump — which is exactly the
+   vestibular trigger the preference exists to prevent. Fading in place is
+   the safe equivalent.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ent-ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ent-ease-sheet:     cubic-bezier(0.32, 0.72, 0, 1);
+  --ent-dur-sheet:      240ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ent-sheet-enter-from,
+  .ent-sheet-leave-to,
+  .ent-drawer-enter-from,
+  .ent-drawer-leave-to {
+    transform: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   10. PRINT
+   Planning officers print permits, committee reports and register extracts.
+   Chrome is noise on paper.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  .ent-mobile-only,
+  .ent-bottomnav,
+  .ent-nav-drawer,
+  .ent-scrim,
+  .ent-skip-link {
+    display: none !important;
+  }
+  :where(body) { background: #fff; }
+}

@@ -1,0 +1,472 @@
+// src/routes/parcels.js
+// Parcel/stand spatial lookup for the planner intake map picker.
+// Resolves an arbitrary lng/lat into a jurisdiction + stand bundle.
+
+const { requireRole } = require('../middleware/jwtAuth')
+
+const VUNGU_AUTHORITY = 'Vungu Rural District Council'
+
+// Roles allowed to use the site inspector (/parcels/nearby). It returns
+// register ownership details (PII), so it mirrors the Property File gate
+// in the frontend router.
+const STAFF_ROLES = ['planner', 'planning_clerk', 'eo', 'gis_officer',
+  'env_officer', 'building_inspector', 'surveyor', 'admin']
+
+// The canonical import (scripts/setup-spatial.mjs + UpdateGeometrySRID) stores
+// EPSG:4326, but databases imported earlier still carry the legacy 900914 ≡
+// CRS84 SRID on the OSM layers (Vungu_spatial333 does). Queries against those
+// layers therefore bbox-filter with `&&` (no SRID check, GiST-indexed) and
+// relabel with ST_SetSRID(geom, 4326) for exact tests — never a bare
+// ST_DWithin(geom, <4326 point>).
+const OSM_SRID = 4326
+
+// SRID-safe point-in-polygon: force the point to the geom's own SRID rather
+// than transform (the tables mix 4326 and the custom 900914 ≡ CRS84, both
+// lng/lat degrees, and 900914 is not transform-safe).
+const CONTAINS = (geomExpr) =>
+  `ST_Contains(${geomExpr}, ST_SetSRID(ST_MakePoint($1, $2), ST_SRID(${geomExpr})))`
+
+// One-shot schema probe: does development_applications carry a parcel_id
+// linkage column? (Legacy dev databases did; canonical migration 042 does
+// not.) Cached for the process lifetime.
+let _daParcelLink = null
+async function daHasParcelLink(pg) {
+  if (_daParcelLink === null) {
+    const r = await pg.query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'development_applications'
+          AND column_name = 'parcel_id'`,
+    )
+    _daParcelLink = r.rowCount > 0
+  }
+  return _daParcelLink
+}
+
+async function jurisdictionResolver(pg, lng, lat) {
+  const inj = await pg.query(
+    `SELECT ${CONTAINS('geom')} AS v FROM gweru_rural_planning_boundary LIMIT 1`,
+    [lng, lat],
+  )
+  const dist = await pg.query(
+    `SELECT name_en FROM districts
+     WHERE level = 2 AND ${CONTAINS('geom')} LIMIT 1`,
+    [lng, lat],
+  )
+  const auth = await pg.query(
+    `SELECT DISTINCT authority_name AS name, telephone, email, address
+     FROM local_authorities WHERE authority_name = $1 LIMIT 1`,
+    [VUNGU_AUTHORITY],
+  )
+  return {
+    in_jurisdiction: Boolean(inj.rows[0] && inj.rows[0].v),
+    district: dist.rows[0] ? dist.rows[0].name_en : null,
+    authority: auth.rows[0] || null,
+  }
+}
+
+async function parcelResolver(pg, lng, lat) {
+  const r = await pg.query(
+    `SELECT fid,
+            COALESCE(NULLIF(name, ''), name_cfu, 'Parcel ' || fid) AS stand_number,
+            province,
+            area_ha,
+            ST_X(ST_Centroid(ST_Transform(geom, 4326))) AS lng,
+            ST_Y(ST_Centroid(ST_Transform(geom, 4326))) AS lat
+     FROM vungu_parcels
+     WHERE geom IS NOT NULL AND ${CONTAINS('geom')}
+     LIMIT 1`,
+    [lng, lat],
+  )
+  if (!r.rows[0]) return null
+  const p = r.rows[0]
+  return {
+    fid: p.fid,
+    source: 'vungu_parcels',
+    stand_number: p.stand_number,
+    province: p.province,
+    area_ha: p.area_ha === null ? null : Number(p.area_ha),
+    centroid: [Number(p.lng), Number(p.lat)],
+  }
+}
+
+/** Authoritative council stand register (sale status lives here, not on cadastre). */
+async function registerStandResolver(pg, lng, lat) {
+  try {
+    const r = await pg.query(
+      `SELECT id, stand_number, ward, zone_type, status, area_sqm, price_usd,
+              ST_X(ST_Centroid(geom)) AS lng,
+              ST_Y(ST_Centroid(geom)) AS lat
+         FROM stands
+        WHERE geom IS NOT NULL
+          AND ST_Intersects(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326))
+        ORDER BY ST_Area(geom) ASC
+        LIMIT 1`,
+      [lng, lat],
+    )
+    if (!r.rows[0]) return null
+    const p = r.rows[0]
+    const status = p.status || null
+    return {
+      id: p.id,
+      source: 'stands_register',
+      stand_number: p.stand_number,
+      ward: p.ward,
+      zone_type: p.zone_type,
+      status,
+      sold: status === 'allocated',
+      available: status === 'available',
+      area_sqm: p.area_sqm == null ? null : Number(p.area_sqm),
+      price_usd: p.price_usd == null ? null : Number(p.price_usd),
+      area_ha: p.area_sqm == null ? null : Number(p.area_sqm) / 10000,
+      centroid: [Number(p.lng), Number(p.lat)],
+    }
+  } catch (err) {
+    // Thin DBs without stands.geom should still resolve cadastre parcels.
+    return null
+  }
+}
+
+async function wardResolver(pg, lng, lat) {
+  const r = await pg.query(
+    `SELECT name_en FROM wards
+     WHERE level = 3 AND ${CONTAINS('geom')} LIMIT 1`,
+    [lng, lat],
+  )
+  return r.rows[0] ? r.rows[0].name_en : null
+}
+
+function buildDescription(stand, district) {
+  const area = stand.area_ha != null ? ` — ${stand.area_ha} ha` : ''
+  const place = district ? `, ${district}` : ''
+  return `Parcel ${stand.stand_number}${place}${area}`
+}
+
+/**
+ * Compose the intake bundle for a point. Pass anything with a `.query`
+ * method (a pg Pool or fastify.pg).
+ * @returns {{in_jurisdiction:boolean, district:string|null,
+ *   authority:object|null, stand:object|null}}
+ */
+async function resolveLocation(pg, lng, lat) {
+  // The ward is answered for every point, parcel or not: "which ward am I in"
+  // is the first thing a resident asks, and bare land still has a ward.
+  const [j, ward] = await Promise.all([
+    jurisdictionResolver(pg, lng, lat),
+    wardResolver(pg, lng, lat),
+  ])
+  // Stands register is authoritative for sold/available — resolve even when
+  // the click falls outside the current jurisdiction polygon (demo stands and
+  // boundary-edge cases). Cadastre parcels stay jurisdiction-gated.
+  let stand = await registerStandResolver(pg, lng, lat)
+  if (!stand && j.in_jurisdiction) {
+    stand = await parcelResolver(pg, lng, lat)
+  }
+  if (stand) {
+    stand.district = j.district
+    if (!stand.ward) stand.ward = ward
+    stand.description = stand.source === 'stands_register'
+      ? `Stand ${stand.stand_number}${stand.status ? ` — ${stand.status}` : ''}`
+      : buildDescription(stand, j.district)
+  }
+  return { ...j, ward, stand }
+}
+
+/**
+ * Register ownership for a stand, from the Property File land register
+ * (spatial_planning.property / parcel_owner, migration 084). The register is
+ * keyed by stand_number text — same identifier parcelResolver emits.
+ */
+async function ownersForStand(pg, standNumber) {
+  const r = await pg.query(
+    `SELECT po.name, po.role, po.company, po.phone, po.email
+     FROM spatial_planning.property pr
+     JOIN spatial_planning.parcel_owner po ON po.property_id = pr.id
+     WHERE UPPER(pr.stand_number) = UPPER($1)
+     ORDER BY po.role, po.name`,
+    [standNumber],
+  )
+  return r.rows
+}
+
+/**
+ * Everything within radiusM metres of a point: named roads, POIs, building
+ * count, neighbouring parcels and development applications on those parcels.
+ * Degree prefilter (uses the 074 GiST indexes) + exact geography distance.
+ */
+async function nearbyResolver(pg, lng, lat, radiusM) {
+  // 1° latitude ≈ 111 km; 1.1 margin covers longitude shrink at Vungu's
+  // latitude (~-19.5°, cos ≈ 0.94). Exact metre filter applied after.
+  const deg = (radiusM / 111000) * 1.1
+
+  // The OSM layers may be stored as SRID 900914 (a CRS84 alias, identical
+  // coordinates) or 4326, depending on how the database was imported. A bare
+  // ST_DWithin(geom, <4326 point>) raises "mixed SRID" on the former. `&&`
+  // compares bboxes without an SRID check and still uses the GiST index, so it
+  // pre-filters; the exact test relabels the column to 4326 (lossless).
+  const roadsQ = pg.query(
+    `WITH pt AS (SELECT ST_SetSRID(ST_MakePoint($1,$2), ${OSM_SRID}) AS g,
+                        ST_SetSRID(ST_MakePoint($1,$2), 4326)::geography AS gg)
+     SELECT name, fclass, MIN(d)::int AS dist_m
+     FROM (SELECT COALESCE(NULLIF(r.name,''), r.fclass) AS name, r.fclass,
+                  ST_Distance(ST_SetSRID(r.geom,4326)::geography, pt.gg) AS d
+           FROM roads r, pt
+           WHERE r.geom && ST_Expand(pt.g, $3)) s
+     WHERE d <= $4
+     GROUP BY name, fclass
+     ORDER BY dist_m
+     LIMIT 10`,
+    [lng, lat, deg, radiusM],
+  )
+
+  const poisQ = pg.query(
+    `WITH pt AS (SELECT ST_SetSRID(ST_MakePoint($1,$2), ${OSM_SRID}) AS g,
+                        ST_SetSRID(ST_MakePoint($1,$2), 4326)::geography AS gg)
+     SELECT COALESCE(NULLIF(p.name,''), p.fclass) AS name, p.fclass,
+            ST_Distance(ST_SetSRID(p.geom,4326)::geography, pt.gg)::int AS dist_m
+     FROM pois_points p, pt
+     WHERE p.geom && ST_Expand(pt.g, $3)
+       AND ST_Distance(ST_SetSRID(p.geom,4326)::geography, pt.gg) <= $4
+     ORDER BY dist_m
+     LIMIT 10`,
+    [lng, lat, deg, radiusM],
+  )
+
+  const buildingsQ = pg.query(
+    `WITH pt AS (SELECT ST_SetSRID(ST_MakePoint($1,$2), ${OSM_SRID}) AS g)
+     SELECT count(*)::int AS n FROM buildings b, pt
+     WHERE b.geom && ST_Expand(pt.g, $3)
+       AND ST_DWithin(ST_SetSRID(b.geom,4326)::geography, pt.g::geography, $4)`,
+    [lng, lat, deg, radiusM],
+  )
+
+  const parcelsQ = pg.query(
+    `WITH pt AS (SELECT ST_SetSRID(ST_MakePoint($1,$2), 4326) AS g)
+     SELECT fid,
+            COALESCE(NULLIF(name,''), name_cfu, 'Parcel ' || fid) AS stand_number,
+            status, area_ha,
+            ST_Distance(geom::geography, pt.g::geography)::int AS dist_m
+     FROM vungu_parcels, pt
+     WHERE geom IS NOT NULL AND ST_DWithin(geom, pt.g, $3)
+     ORDER BY dist_m
+     LIMIT 10`,
+    [lng, lat, deg],
+  )
+
+  // Applications locate through their parcel (boundary_geometry is not yet
+  // populated by any intake path — join again when it is). The canonical
+  // migration-042 table has no parcel_id column (only the legacy dev
+  // database did) — probe once and return no applications rather than
+  // failing the whole nearby panel on a fresh install.
+  const appsQ = (await daHasParcelLink(pg))
+    ? pg.query(
+        `SELECT da.application_number, da.status, da.application_type,
+                da.date_submitted::date AS date_submitted,
+                COALESCE(NULLIF(p.name,''), p.name_cfu, 'Parcel ' || p.fid) AS stand_number
+         FROM development_applications da
+         JOIN vungu_parcels p ON p.fid = da.parcel_id
+         WHERE p.geom IS NOT NULL
+           AND ST_DWithin(p.geom, ST_SetSRID(ST_MakePoint($1,$2), 4326), $3)
+         ORDER BY da.date_submitted DESC NULLS LAST
+         LIMIT 10`,
+        [lng, lat, deg],
+      )
+    : Promise.resolve({ rows: [] })
+
+  const [roads, pois, buildings, parcels, apps] =
+    await Promise.all([roadsQ, poisQ, buildingsQ, parcelsQ, appsQ])
+  return {
+    roads: roads.rows,
+    pois: pois.rows,
+    buildings: buildings.rows[0].n,
+    parcels: parcels.rows.map(r => ({
+      ...r, area_ha: r.area_ha === null ? null : Number(r.area_ha),
+    })),
+    applications: apps.rows,
+  }
+}
+
+/**
+ * Name → parcel lookup for deep links (/gis-map?stand=…) and search.
+ * Exact (case-insensitive) matches sort first, then smallest parcels — a
+ * subdivided farm beats the giant parent when both contain the query.
+ * Searches cadastre parcels and the stands register (sale status on stands).
+ */
+async function findParcels(pg, q) {
+  const r = await pg.query(
+    `WITH hits AS (
+       SELECT 'parcel'::text AS source,
+              fid::text AS id,
+              COALESCE(NULLIF(name,''), name_cfu, 'Parcel ' || fid) AS stand_number,
+              status::text AS status,
+              NULLIF(area_ha, '')::numeric AS area_ha,
+              district::text AS district,
+              ST_X(ST_Centroid(geom)) AS lng, ST_Y(ST_Centroid(geom)) AS lat,
+              ST_XMin(geom) AS minx, ST_YMin(geom) AS miny,
+              ST_XMax(geom) AS maxx, ST_YMax(geom) AS maxy,
+              (LOWER(name) = LOWER($2) OR LOWER(name_cfu) = LOWER($2)) AS exact
+         FROM vungu_parcels
+        WHERE geom IS NOT NULL AND (name ILIKE $1 OR name_cfu ILIKE $1)
+       UNION ALL
+       SELECT 'stand'::text,
+              id::text,
+              stand_number::text,
+              status::text,
+              ROUND((area_sqm / 10000.0)::numeric, 4),
+              ward::text,
+              ST_X(ST_Centroid(geom)), ST_Y(ST_Centroid(geom)),
+              ST_XMin(geom), ST_YMin(geom), ST_XMax(geom), ST_YMax(geom),
+              (LOWER(stand_number) = LOWER($2)) AS exact
+         FROM stands
+        WHERE geom IS NOT NULL AND stand_number ILIKE $1
+     )
+     SELECT * FROM hits
+     ORDER BY exact DESC, area_ha ASC NULLS LAST
+     LIMIT 8`,
+    [`%${q}%`, q],
+  )
+  return r.rows.map(p => ({
+    fid: p.id,
+    source: p.source,
+    stand_number: p.stand_number,
+    status: p.status,
+    sold: p.source === 'stand' && p.status === 'allocated',
+    district: p.district,
+    area_ha: p.area_ha === null ? null : Number(p.area_ha),
+    centroid: [Number(p.lng), Number(p.lat)],
+    bbox: [Number(p.minx), Number(p.miny), Number(p.maxx), Number(p.maxy)],
+  }))
+}
+
+/**
+ * Area-weighted land-use distribution across the cadastre, from
+ * vungu_parcels.status (the land-use class carried by the GPKG import).
+ * Feeds the planner map's View Analytics panel.
+ */
+async function landuseStats(pg) {
+  const r = await pg.query(
+    `WITH t AS (
+       SELECT COALESCE(NULLIF(status, ''), 'Unclassified') AS land_use,
+              NULLIF(area_ha::text, '')::numeric AS ha
+       FROM vungu_parcels
+       WHERE NULLIF(area_ha::text, '') IS NOT NULL
+     )
+     SELECT land_use,
+            COUNT(*)::int AS parcels,
+            ROUND(SUM(ha), 1) AS area_ha,
+            ROUND(100 * SUM(ha) / NULLIF(SUM(SUM(ha)) OVER (), 0), 1) AS pct
+     FROM t
+     GROUP BY 1
+     ORDER BY SUM(ha) DESC`)
+  return r.rows.map(x => ({
+    land_use: x.land_use,
+    parcels: x.parcels,
+    area_ha: Number(x.area_ha),
+    pct: Number(x.pct),
+  }))
+}
+
+function parseLngLat(query) {
+  const lng = Number(query?.lng)
+  const lat = Number(query?.lat)
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)
+      || lng < -180 || lng > 180 || lat < -90 || lat > 90) return null
+  return { lng, lat }
+}
+
+/**
+ * Fastify plugin. Register with prefix '/api'; routes live under /api/parcels.
+ * @param {import('fastify').FastifyInstance} fastify
+ */
+async function parcelsRoutes(fastify) {
+  fastify.get('/parcels/locate', async (request, reply) => {
+    const pt = parseLngLat(request.query)
+    if (!pt) {
+      return reply.code(400).send({
+        success: false, error: 'bad_request',
+        message: 'lng and lat query params are required and must be valid coordinates',
+      })
+    }
+    try {
+      const data = await resolveLocation(fastify.pg, pt.lng, pt.lat)
+      return { success: true, data }
+    } catch (err) {
+      request.log.error({ err }, 'parcel locate failed')
+      return reply.code(500).send({
+        success: false, error: 'internal', message: 'Failed to locate parcel',
+      })
+    }
+  })
+
+  // Name → parcel lookup (public: same attributes the public tiles expose).
+  fastify.get('/parcels/find', async (request, reply) => {
+    const q = String(request.query?.q || '').trim()
+    if (!q) {
+      return reply.code(400).send({
+        success: false, error: 'bad_request', message: 'q query param is required',
+      })
+    }
+    try {
+      return { success: true, data: await findParcels(fastify.pg, q) }
+    } catch (err) {
+      request.log.error({ err }, 'parcel find failed')
+      return reply.code(500).send({
+        success: false, error: 'internal', message: 'Failed to search parcels',
+      })
+    }
+  })
+
+  // Land-use distribution (public: aggregate of what the public tiles show).
+  fastify.get('/parcels/landuse-stats', async (request, reply) => {
+    try {
+      return { success: true, data: await landuseStats(fastify.pg) }
+    } catch (err) {
+      request.log.error({ err }, 'landuse stats failed')
+      return reply.code(500).send({
+        success: false, error: 'internal', message: 'Failed to compute land-use stats',
+      })
+    }
+  })
+
+  // Site inspector: identify + buffer in one call. Staff-only — the response
+  // includes land-register ownership, which citizens must not see.
+  fastify.get('/parcels/nearby',
+    { preHandler: requireRole(fastify, STAFF_ROLES) },
+    async (request, reply) => {
+      const pt = parseLngLat(request.query)
+      if (!pt) {
+        return reply.code(400).send({
+          success: false, error: 'bad_request',
+          message: 'lng and lat query params are required and must be valid coordinates',
+        })
+      }
+      const radius = Math.min(2000, Math.max(50, Number(request.query?.radius) || 500))
+      try {
+        const [site, nearby] = await Promise.all([
+          resolveLocation(fastify.pg, pt.lng, pt.lat),
+          nearbyResolver(fastify.pg, pt.lng, pt.lat, radius),
+        ])
+        if (site.stand) {
+          site.stand.owners = await ownersForStand(fastify.pg, site.stand.stand_number)
+        }
+        return { success: true, data: { site, radius_m: radius, ...nearby } }
+      } catch (err) {
+        request.log.error({ err }, 'parcel nearby failed')
+        return reply.code(500).send({
+          success: false, error: 'internal', message: 'Failed to query surroundings',
+        })
+      }
+    })
+}
+
+module.exports = {
+  parcelsRoutes,
+  resolveLocation,
+  jurisdictionResolver,
+  parcelResolver,
+  wardResolver,
+  nearbyResolver,
+  ownersForStand,
+  findParcels,
+  landuseStats,
+}

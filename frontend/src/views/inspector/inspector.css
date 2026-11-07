@@ -1,0 +1,228 @@
+/*
+  Building Inspector console — page primitives.
+
+  Every inspector section used to restyle the same page head, picker, card,
+  field and pill in its own scoped block, most of them with hardcoded slate and
+  amber hexes and 0.6rem type. These are the shared versions, on the --ent-*
+  SSOT only. Imported once by InspectorWorkspaceView; all classes are `ins-`
+  prefixed so nothing leaks into other roles.
+*/
+
+.ins-page {
+  display: flex; flex-direction: column; gap: var(--ent-s4);
+  padding: var(--ent-s5) var(--ent-s6) var(--ent-s7);
+  min-height: 100%;
+}
+
+/* ── Page head ──────────────────────────────────────────────────────── */
+.ins-head { display: flex; align-items: flex-end; gap: var(--ent-s3); flex-wrap: wrap; }
+.ins-head-text { flex: 1; min-width: 14rem; }
+.ins-eyebrow {
+  display: block; margin-bottom: 2px;
+  font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ent-text-3);
+}
+.ins-title {
+  margin: 0; font-size: var(--ent-fs-xl); font-weight: var(--ent-fw-bold);
+  line-height: var(--ent-lh-tight); letter-spacing: -0.015em; color: var(--ent-text);
+}
+.ins-lede { margin: var(--ent-s1) 0 0; font-size: var(--ent-fs-sm); color: var(--ent-text-2); max-width: 70ch; line-height: var(--ent-lh); }
+.ins-actions { display: flex; align-items: center; gap: var(--ent-s2); flex-wrap: wrap; }
+
+/* ── Surfaces ───────────────────────────────────────────────────────── */
+.ins-card {
+  background: var(--ent-surface); border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r-md); box-shadow: var(--ent-e1);
+  min-width: 0;
+}
+.ins-card-head {
+  display: flex; align-items: center; gap: var(--ent-s2); flex-wrap: wrap;
+  padding: var(--ent-s3) var(--ent-s4); border-bottom: 1px solid var(--ent-line);
+}
+.ins-card-head h3 {
+  flex: 1; margin: 0; display: flex; align-items: center; gap: var(--ent-s2);
+  font-size: var(--ent-fs-md); font-weight: var(--ent-fw-semibold); color: var(--ent-text);
+}
+.ins-card-head .ins-count { color: var(--ent-text-3); font-weight: var(--ent-fw-medium); font-variant-numeric: tabular-nums; }
+.ins-card-body { padding: var(--ent-s4); }
+.ins-card-foot {
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--ent-s2); flex-wrap: wrap;
+  padding: var(--ent-s3) var(--ent-s4); border-top: 1px solid var(--ent-line); background: var(--ent-surface-2);
+  border-radius: 0 0 var(--ent-r-md) var(--ent-r-md);
+}
+
+/* Picker on the left, working surface on the right. Stacks under 1024px. */
+.ins-split { display: grid; grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr); gap: var(--ent-s4); align-items: start; }
+.ins-split > .ins-sticky { position: sticky; top: var(--ent-s4); }
+
+.ins-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--ent-s3); }
+
+/* ── Definition grid ────────────────────────────────────────────────── */
+.ins-dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--ent-s3) var(--ent-s4); margin: 0; }
+.ins-dl > div { min-width: 0; }
+.ins-dl dt { font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-semibold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ent-text-3); }
+.ins-dl dd { margin: 2px 0 0; font-size: var(--ent-fs-sm); color: var(--ent-text); overflow-wrap: anywhere; }
+.ins-mono { font-family: var(--ent-font-mono); font-size: 0.95em; }
+
+/* ── Forms ──────────────────────────────────────────────────────────── */
+.ins-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--ent-s3) var(--ent-s4); }
+.ins-field { display: flex; flex-direction: column; gap: var(--ent-s1); min-width: 0; }
+.ins-field.full { grid-column: 1 / -1; }
+.ins-label { font-size: var(--ent-fs-xs); font-weight: var(--ent-fw-semibold); color: var(--ent-text-2); }
+.ins-hint { font-size: var(--ent-fs-xs); color: var(--ent-text-3); line-height: var(--ent-lh); margin: 0; }
+.ins-input {
+  width: 100%; min-height: var(--ent-control-h); padding: var(--ent-s2) var(--ent-s3);
+  font-family: var(--ent-font); font-size: var(--ent-fs-base); color: var(--ent-text);
+  background: var(--ent-surface); border: 1px solid var(--ent-line-strong); border-radius: var(--ent-r);
+  transition: border-color var(--ent-dur) var(--ent-ease), box-shadow var(--ent-dur) var(--ent-ease);
+}
+textarea.ins-input { resize: vertical; line-height: var(--ent-lh); }
+.ins-input:hover { border-color: var(--ent-text-3); }
+.ins-input:focus { outline: none; border-color: var(--ent-accent); box-shadow: var(--ent-focus-ring); }
+.ins-input:disabled { background: var(--ent-surface-sunken); color: var(--ent-text-3); cursor: not-allowed; }
+
+.ins-search {
+  display: flex; align-items: center; gap: var(--ent-s2);
+  min-height: var(--ent-control-h); padding: 0 var(--ent-s3);
+  background: var(--ent-surface); border: 1px solid var(--ent-line-strong); border-radius: var(--ent-r);
+  color: var(--ent-text-3);
+}
+.ins-search:focus-within { border-color: var(--ent-accent); box-shadow: var(--ent-focus-ring); }
+.ins-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-family: var(--ent-font); font-size: var(--ent-fs-base); color: var(--ent-text); }
+
+/* Segmented control — one choice from a short, fixed set. Pill radius is the
+   token set's allowance for segmented controls. */
+.ins-seg {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--ent-surface-sunken); border-radius: var(--ent-r-pill);
+}
+.ins-seg button {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--ent-s1);
+  min-height: 30px; padding: 0 var(--ent-s3);
+  font-family: var(--ent-font); font-size: var(--ent-fs-sm); font-weight: var(--ent-fw-medium);
+  color: var(--ent-text-2); background: transparent; border: 0; border-radius: var(--ent-r-pill); cursor: pointer;
+  transition: background-color var(--ent-dur) var(--ent-ease), color var(--ent-dur) var(--ent-ease), box-shadow var(--ent-dur) var(--ent-ease);
+}
+.ins-seg button:hover { color: var(--ent-text); }
+.ins-seg button:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); }
+.ins-seg button[aria-pressed='true'], .ins-seg button[aria-checked='true'], .ins-seg button[aria-selected='true'] {
+  background: var(--ent-surface); color: var(--ent-text); box-shadow: var(--ent-e1); font-weight: var(--ent-fw-semibold);
+}
+.ins-seg button.t-positive[aria-checked='true'] { color: var(--ent-success); background: var(--ent-success-soft); }
+.ins-seg button.t-negative[aria-checked='true'] { color: var(--ent-danger); background: var(--ent-danger-soft); }
+.ins-seg button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Chip filters — multiple short options that wrap. */
+.ins-chips { display: flex; flex-wrap: wrap; gap: var(--ent-s1); }
+.ins-chip {
+  min-height: 28px; padding: 0 var(--ent-s3);
+  font-family: var(--ent-font); font-size: var(--ent-fs-xs); font-weight: var(--ent-fw-medium);
+  color: var(--ent-text-2); background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: var(--ent-r-pill);
+  cursor: pointer; transition: all var(--ent-dur) var(--ent-ease);
+}
+.ins-chip:hover { border-color: var(--ent-line-strong); color: var(--ent-text); }
+.ins-chip:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); }
+.ins-chip[aria-pressed='true'] { background: var(--ent-accent-soft); border-color: var(--ent-accent-line); color: var(--ent-accent); font-weight: var(--ent-fw-semibold); }
+.ins-chip .ins-chip-n { margin-left: var(--ent-s1); font-variant-numeric: tabular-nums; opacity: 0.8; }
+
+/* Check rows — a large tappable row per statutory condition. */
+.ins-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--ent-s2); }
+.ins-check {
+  display: flex; align-items: flex-start; gap: var(--ent-s3);
+  padding: var(--ent-s3) var(--ent-s4); border: 1px solid var(--ent-line); border-radius: var(--ent-r-md);
+  background: var(--ent-surface); cursor: pointer;
+  transition: border-color var(--ent-dur) var(--ent-ease), background-color var(--ent-dur) var(--ent-ease);
+}
+.ins-check:hover { border-color: var(--ent-line-strong); }
+.ins-check:focus-within { box-shadow: var(--ent-focus-ring); }
+.ins-check.on { border-color: var(--ent-tone-positive-line); background: var(--ent-success-soft); }
+.ins-check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--ent-accent); flex-shrink: 0; }
+.ins-check strong { display: block; font-size: var(--ent-fs-base); font-weight: var(--ent-fw-semibold); color: var(--ent-text); }
+.ins-check small { display: block; margin-top: 2px; font-size: var(--ent-fs-xs); color: var(--ent-text-2); line-height: var(--ent-lh); }
+
+/* ── Banners ────────────────────────────────────────────────────────── */
+.ins-banner {
+  display: flex; align-items: flex-start; gap: var(--ent-s3);
+  padding: var(--ent-s3) var(--ent-s4); border: 1px solid var(--ent-tone-neutral-line);
+  border-radius: var(--ent-r-md); background: var(--ent-tone-neutral-bg);
+  font-size: var(--ent-fs-sm); color: var(--ent-text); line-height: var(--ent-lh);
+}
+.ins-banner > svg { flex-shrink: 0; margin-top: 2px; }
+/* The text column. A one-line banner is written as <p class="ins-banner"> with
+   a <span>; a two-line one as <div class="ins-banner"> with a <div> and a <p>,
+   because a <p> cannot contain a <p>. Both spellings get the same column. */
+.ins-banner > div, .ins-banner > span { flex: 1; min-width: 0; }
+.ins-banner strong { font-weight: var(--ent-fw-semibold); }
+.ins-banner p { margin: 2px 0 0; color: var(--ent-text-2); }
+.ins-banner.t-info     { background: var(--ent-tone-info-bg);     border-color: var(--ent-tone-info-line); }
+.ins-banner.t-info > svg { color: var(--ent-accent); }
+.ins-banner.t-warning  { background: var(--ent-tone-warning-bg);  border-color: var(--ent-tone-warning-line); }
+.ins-banner.t-warning > svg { color: var(--ent-warning); }
+.ins-banner.t-negative { background: var(--ent-tone-negative-bg); border-color: var(--ent-tone-negative-line); }
+.ins-banner.t-negative > svg { color: var(--ent-danger); }
+.ins-banner.t-positive { background: var(--ent-tone-positive-bg); border-color: var(--ent-tone-positive-line); }
+.ins-banner.t-positive > svg { color: var(--ent-success); }
+
+/* ── Lists ──────────────────────────────────────────────────────────── */
+.ins-rows { list-style: none; margin: 0; padding: 0; }
+.ins-row {
+  display: flex; align-items: center; gap: var(--ent-s3);
+  padding: var(--ent-s3) var(--ent-s4); border-top: 1px solid var(--ent-line);
+}
+.ins-row:first-child { border-top: 0; }
+.ins-row-main { flex: 1; min-width: 0; }
+.ins-row-title { display: block; font-size: var(--ent-fs-base); font-weight: var(--ent-fw-semibold); color: var(--ent-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ins-row-meta { display: block; margin-top: 2px; font-size: var(--ent-fs-xs); color: var(--ent-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Progress bar — neutral track, semantic fill.
+   The fill is a full-width bar scaled on the compositor: callers pass the
+   fraction as --fill (0–1), never an animated width, so a progress update
+   cannot thrash layout on a phone mid-inspection. */
+.ins-bar { position: relative; height: 6px; border-radius: var(--ent-r-pill); background: var(--ent-surface-sunken); overflow: hidden; }
+.ins-bar > span {
+  position: absolute; inset: 0; transform-origin: left center;
+  transform: scaleX(var(--fill, 0));
+  background: var(--ent-accent); border-radius: inherit;
+  transition: transform var(--ent-dur-lg) var(--ent-ease);
+}
+.ins-bar.t-positive > span { background: var(--ent-success); }
+
+/* ── Loading ────────────────────────────────────────────────────────── */
+.ins-skel {
+  display: block; height: 14px; border-radius: var(--ent-r-sm);
+  background: linear-gradient(90deg, var(--ent-surface-2) 0%, var(--ent-surface-sunken) 50%, var(--ent-surface-2) 100%);
+  background-size: 200% 100%; animation: ins-shimmer 1.3s linear infinite;
+}
+@keyframes ins-shimmer { to { background-position: -200% 0; } }
+.ins-spin { animation: ins-rotate 0.8s linear infinite; }
+@keyframes ins-rotate { to { transform: rotate(360deg); } }
+
+.ins-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: var(--ent-control-h); height: var(--ent-control-h);
+  color: var(--ent-text-2); background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: var(--ent-r);
+  cursor: pointer; transition: background-color var(--ent-dur) var(--ent-ease), color var(--ent-dur) var(--ent-ease);
+}
+.ins-iconbtn:hover { background: var(--ent-surface-2); color: var(--ent-text); }
+.ins-iconbtn:focus-visible { outline: none; box-shadow: var(--ent-focus-ring); }
+.ins-iconbtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+@media (max-width: 1023px) {
+  .ins-split { grid-template-columns: minmax(0, 1fr); }
+  .ins-split > .ins-sticky { position: static; }
+}
+@media (max-width: 767px) {
+  .ins-page { padding: var(--ent-s4) var(--ent-s3) var(--ent-s7); gap: var(--ent-s3); }
+  .ins-title { font-size: var(--ent-fs-lg); }
+  .ins-card-body { padding: var(--ent-s3); }
+  .ins-seg { display: flex; }
+  .ins-seg button { flex: 1; min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ins-skel, .ins-spin { animation: none; }
+  .ins-bar > span { transition: none; }
+}
+@media print {
+  .ins-actions, .ins-iconbtn { display: none !important; }
+  .ins-card { box-shadow: none; }
+}

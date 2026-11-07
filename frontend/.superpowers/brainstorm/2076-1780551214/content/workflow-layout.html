@@ -1,0 +1,85 @@
+<h2>How should the 5-step statutory workflow be navigated?</h2>
+<p class="subtitle">Same 5 steps (Intake → Due Diligence → Committee Report → Permit → Notices) — different way to move through them. Click the one that fits how an officer works a case. The 90-day clock stays visible in all three.</p>
+
+<style>
+  .wf-wire { background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:10px; font-size:11px; color:#475569; }
+  .wf-clock { background:#0f172a; color:#fff; border-radius:4px; padding:4px 8px; font-size:10px; display:flex; justify-content:space-between; margin-bottom:8px; }
+  .wf-dot { width:18px; height:18px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; }
+  .d-done { background:#16a34a; color:#fff; }
+  .d-active { background:#1d4ed8; color:#fff; }
+  .d-lock { background:#e2e8f0; color:#94a3b8; }
+  .wf-pane { background:#f8fafc; border:1px dashed #cbd5e1; border-radius:4px; padding:8px; color:#94a3b8; text-align:center; }
+  .wf-btn { background:#1d4ed8; color:#fff; border-radius:4px; padding:3px 8px; font-size:10px; display:inline-block; }
+  .wf-btn.ghost { background:#fff; border:1px solid #cbd5e1; color:#475569; }
+  .wf-row { display:flex; gap:6px; align-items:center; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="wizard" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf-wire">
+        <div class="wf-clock"><span>⏱ 67 days left</span><span>Step 2 of 5</span></div>
+        <div class="wf-row" style="justify-content:space-between; margin-bottom:8px;">
+          <span class="wf-dot d-done">✓</span><span style="flex:1;height:2px;background:#16a34a"></span>
+          <span class="wf-dot d-active">2</span><span style="flex:1;height:2px;background:#e2e8f0"></span>
+          <span class="wf-dot d-lock">3</span><span style="flex:1;height:2px;background:#e2e8f0"></span>
+          <span class="wf-dot d-lock">4</span><span style="flex:1;height:2px;background:#e2e8f0"></span>
+          <span class="wf-dot d-lock">5</span>
+        </div>
+        <div class="wf-pane" style="padding:18px 8px; margin-bottom:8px;">Due Diligence — the one active step,<br/>full width, nothing else competing</div>
+        <div class="wf-row" style="justify-content:space-between;">
+          <span class="wf-btn ghost">← Back</span><span class="wf-btn">Continue →</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Guided wizard</h3>
+      <p>One step at a time, full focus. A progress rail up top, Back / Continue at the bottom. The app always drives you to the next action. Best for officers who want to be led through it.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="stepper" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf-wire">
+        <div class="wf-clock"><span>⏱ 67 days left</span><span>40% complete</span></div>
+        <div class="wf-row" style="align-items:stretch; gap:8px;">
+          <div style="width:38%; display:flex; flex-direction:column; gap:5px;">
+            <div class="wf-row"><span class="wf-dot d-done">✓</span> Intake</div>
+            <div class="wf-row" style="color:#1d4ed8;font-weight:700;"><span class="wf-dot d-active">2</span> Due Diligence</div>
+            <div class="wf-row" style="color:#94a3b8;"><span class="wf-dot d-lock">3</span> Report</div>
+            <div class="wf-row" style="color:#94a3b8;"><span class="wf-dot d-lock">4</span> Permit</div>
+            <div class="wf-row" style="color:#94a3b8;"><span class="wf-dot d-lock">5</span> Notices</div>
+          </div>
+          <div class="wf-pane" style="flex:1; padding:24px 8px;">Active step content<br/>(click any unlocked step)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Timeline stepper</h3>
+      <p>A vertical rail of all 5 steps with live status (done / active / locked) on the left; the active step's work on the right. See the whole journey at a glance, jump to any unlocked step. Closest to the current tabs but clearer.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="scroll" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf-wire">
+        <div class="wf-clock"><span>⏱ 67 days left · 2 of 5 done</span><span>sticky ▲</span></div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div class="wf-row" style="justify-content:space-between;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:4px 6px;"><span><span class="wf-dot d-done">✓</span> 1 · Intake</span><span>▾</span></div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:6px;">
+            <div class="wf-row" style="justify-content:space-between;color:#1d4ed8;font-weight:700;"><span><span class="wf-dot d-active">2</span> Due Diligence</span><span>▴</span></div>
+            <div class="wf-pane" style="margin-top:5px;">expanded inline — work here</div>
+          </div>
+          <div class="wf-row" style="justify-content:space-between;color:#94a3b8;border:1px solid #e2e8f0;border-radius:4px;padding:4px 6px;"><span><span class="wf-dot d-lock">3</span> Report</span><span>🔒</span></div>
+          <div class="wf-row" style="justify-content:space-between;color:#94a3b8;border:1px solid #e2e8f0;border-radius:4px;padding:4px 6px;"><span><span class="wf-dot d-lock">4</span> Permit</span><span>🔒</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Single-scroll checklist</h3>
+      <p>All 5 steps stacked as collapsible cards in one page; a sticky header carries the clock + progress. Expand the one you're working on; completed ones collapse to a summary. Everything in one scroll, no navigation.</p>
+    </div>
+  </div>
+
+</div>

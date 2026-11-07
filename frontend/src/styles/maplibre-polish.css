@@ -1,0 +1,118 @@
+/*
+ * MapLibre UI polish — layered on top of maplibre-gl.css to bring the
+ * navigation controls, scale bar, attribution and popups in line with
+ * the rest of the Vungu portal's visual language.
+ *
+ * All selectors target stable .maplibregl-* class names from the
+ * upstream stylesheet. Custom popup styling activates when the popup
+ * is created with `{ className: 'vungu-popup' }`.
+ */
+
+/* ── Navigation controls (zoom +/-, compass) ────────────────────── */
+.maplibregl-ctrl-group {
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  overflow: hidden;
+  background: #ffffff !important;
+}
+.maplibregl-ctrl-group > button {
+  width: 32px !important;
+  height: 32px !important;
+  background-color: #ffffff !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06) !important;
+  transition: background-color 0.12s ease;
+}
+.maplibregl-ctrl-group > button:last-child {
+  border-bottom: none !important;
+}
+.maplibregl-ctrl-group > button:hover {
+  background-color: #f1f5f9 !important;
+}
+.maplibregl-ctrl-group > button:focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: -2px;
+}
+
+/* ── Scale control ───────────────────────────────────────────────── */
+.maplibregl-ctrl-scale {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  border-top: none !important;
+  color: #0f172a !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 2px 6px !important;
+  border-radius: 0 0 4px 4px !important;
+}
+
+/* ── Attribution ─────────────────────────────────────────────────── */
+.maplibregl-ctrl-attrib {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-radius: 6px 0 0 0 !important;
+  font-size: 10px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: #475569 !important;
+}
+
+/* ── Default popup (close button, anchor, content) ──────────────── */
+.maplibregl-popup-content {
+  border-radius: 10px !important;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  padding: 12px 14px !important;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+.maplibregl-popup-close-button {
+  font-size: 18px !important;
+  color: #94a3b8 !important;
+  padding: 4px 8px !important;
+  background: transparent !important;
+  border: none !important;
+  line-height: 1 !important;
+}
+.maplibregl-popup-close-button:hover {
+  color: #0f172a !important;
+  background: rgba(15, 23, 42, 0.04) !important;
+  border-radius: 6px;
+}
+.maplibregl-popup-tip {
+  border-top-color: #ffffff !important;
+}
+
+/* ── Vungu admin-feature popup (drill-down details) ─────────────── */
+.vungu-popup .maplibregl-popup-content {
+  min-width: 180px;
+  padding: 14px 16px !important;
+}
+.vungu-popup .vungu-popup-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.vungu-popup .vungu-popup-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.01em;
+}
+.vungu-popup .vungu-popup-meta {
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.5;
+}
+.vungu-popup .vungu-popup-meta strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+/* ── Canvas cursor for picking ───────────────────────────────────── */
+.maplibregl-canvas-container.maplibregl-interactive,
+.maplibregl-canvas:focus {
+  outline: none;
+}

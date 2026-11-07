@@ -1,0 +1,41 @@
+# QGIS Server — the one-command production/dev path for green-dot WMS mode.
+#
+#   docker compose -f docker-compose.qgis.yml up -d
+#
+# Serves WMS/WFS/WMTS on :8080 from the council project in ./qgis-projects,
+# which is the same folder the backend's project watcher observes: saving
+# vungu-project.qgs from QGIS Desktop clears the backend style caches AND
+# (because the container is named vungu-qgis-server, the exact name
+# qgisProjectWatcher.js restarts) reloads the server when layers are added.
+#
+# The backend reaches it via QGIS_SERVER_URL=http://localhost:8080 (compose
+# on the same host) or http://vungu-qgis-server (sibling container on a
+# shared network). Browsers never reach it directly — only through the
+# backend's /api/ogc proxy.
+#
+# The project's PostGIS layers connect with the DATABASE_URL credentials
+# stored inside the .qgs; in production point both the backend and this
+# container at the same managed Postgres.
+
+services:
+  qgis-server:
+    image: camptocamp/qgis-server:3.34
+    container_name: vungu-qgis-server
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      QGIS_PROJECT_FILE: /etc/qgisserver/vungu-project.qgs
+      QGIS_SERVER_LOG_LEVEL: "1"
+      QGIS_SERVER_PARALLEL_RENDERING: "true"
+      # Trust the layer definitions in the project file (skip slow datasource
+      # validation on startup — the portal is the same DB anyway).
+      QGIS_SERVER_TRUST_LAYER_METADATA: "true"
+    volumes:
+      - ./qgis-projects:/etc/qgisserver:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf 'http://localhost/?SERVICE=WMS&REQUEST=GetCapabilities' -o /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

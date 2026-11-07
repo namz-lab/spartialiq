@@ -1,0 +1,10 @@
+dist/
+coverage/
+public/vendor/
+
+# Quarantined dependency trees from a failed install. ESLint skips
+# node_modules/ by default but not these, and it followed one into a
+# @babel/preset-modules package.json that extends a config which is not
+# installed — which aborted the whole lint run rather than reporting on our
+# own source. Already gitignored; this keeps the linter out too.
+node_modules.corrupt*/

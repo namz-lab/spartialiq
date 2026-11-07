@@ -1,0 +1,15 @@
+**/node_modules
+**/.git
+**/.env
+**/.env.*
+**/dist
+**/uploads
+**/logs
+**/*.dump
+**/coverage
+frontend/src-tauri
+frontend/INSTALLERS
+frontend/.agents
+frontend/.claude
+backend/backups
+**/.cursor

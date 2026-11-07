@@ -1,0 +1,75 @@
+<h2>How does the officer know "what's next" and advance a step?</h2>
+<p class="subtitle">This is the right-hand work area for the active step. Same rail on the left in both. The question is how strongly the app guides completion and moving on. Click your preference.</p>
+
+<style>
+  .a-frame { background:#fff; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden; font-size:11px; color:#475569; }
+  .a-clock { background:#0f172a; color:#fff; padding:4px 8px; font-size:10px; display:flex; justify-content:space-between; }
+  .a-body { display:flex; min-height:150px; }
+  .a-rail { width:34%; border-right:1px solid #e2e8f0; padding:7px; display:flex; flex-direction:column; gap:5px; background:#f8fafc; }
+  .a-canvas { flex:1; padding:8px; display:flex; flex-direction:column; }
+  .a-dot { width:15px;height:15px;min-width:15px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700; }
+  .ad-done{background:#16a34a;color:#fff} .ad-active{background:#1d4ed8;color:#fff} .ad-lock{background:#e2e8f0;color:#94a3b8}
+  .a-rstep{display:flex;gap:5px;align-items:center;font-size:10px}
+  .a-h{font-weight:700;color:#0f172a;font-size:12px}
+  .a-pane{flex:1;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:4px;padding:10px;text-align:center;color:#94a3b8;margin:6px 0}
+  .a-banner{background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:5px 7px;color:#1e40af;font-size:10px;display:flex;gap:5px;align-items:center}
+  .a-bar{border-top:1px solid #e2e8f0;padding-top:6px;display:flex;justify-content:space-between;align-items:center}
+  .a-cta{background:#1d4ed8;color:#fff;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700}
+  .a-cta.off{background:#cbd5e1;color:#fff}
+  .a-out{font-size:9px;color:#92400e}
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="quiet" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="a-frame">
+        <div class="a-clock"><span>⏱ 67 days left</span><span>40%</span></div>
+        <div class="a-body">
+          <div class="a-rail">
+            <div class="a-rstep"><span class="a-dot ad-done">✓</span> Intake</div>
+            <div class="a-rstep" style="color:#1d4ed8;font-weight:700"><span class="a-dot ad-active">2</span> Due Diligence</div>
+            <div class="a-rstep" style="color:#94a3b8"><span class="a-dot ad-lock">3</span> Report</div>
+            <div class="a-rstep" style="color:#94a3b8"><span class="a-dot ad-lock">4</span> Permit</div>
+          </div>
+          <div class="a-canvas">
+            <div class="a-h">Due Diligence</div>
+            <div class="a-pane">the step's work<br/>(checks, referrals…)</div>
+            <div class="a-bar"><span></span><span class="a-cta off">Complete →</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Quiet</h3>
+      <p>The rail carries all the guidance. The canvas just has the work and a single "Complete →" button at the bottom (greyed until requirements are met). Minimal, trusts the officer.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="guided" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="a-frame">
+        <div class="a-clock"><span>⏱ 67 days left</span><span>40%</span></div>
+        <div class="a-body">
+          <div class="a-rail">
+            <div class="a-rstep"><span class="a-dot ad-done">✓</span> Intake</div>
+            <div class="a-rstep" style="color:#1d4ed8;font-weight:700"><span class="a-dot ad-active">2</span> Due Diligence</div>
+            <div class="a-rstep" style="color:#94a3b8"><span class="a-dot ad-lock">3</span> Report</div>
+            <div class="a-rstep" style="color:#94a3b8"><span class="a-dot ad-lock">4</span> Permit</div>
+          </div>
+          <div class="a-canvas">
+            <div class="a-h">Due Diligence</div>
+            <div class="a-banner">➜ Next: 3 compatibility checks + title-deed verification</div>
+            <div class="a-pane">the step's work</div>
+            <div class="a-bar"><span class="a-out">2 items outstanding</span><span class="a-cta off">Complete & continue to Report →</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Guided  ★ recommended</h3>
+      <p>A live "Next:" banner at the top of the canvas tells the officer exactly what's outstanding; the advance button names the next step ("Complete &amp; continue to Report") and shows "2 items outstanding" until it's ready. The app actively shepherds the case toward the deadline.</p>
+    </div>
+  </div>
+
+</div>
