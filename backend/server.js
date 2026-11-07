@@ -841,7 +841,7 @@ async function build() {
       root: publicDir,
       prefix: '/',
       decorateReply: false,
-      index: false,
+      index: 'index.html',
     })
   }
 
