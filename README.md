@@ -1,6 +1,6 @@
-# SpartialIQ
+# LAMIS
 
-Vungu Rural District Council planning, finance, and spatial register.
+Land administration system for Vungu Rural District Council: planning, finance, and the spatial register.
 
 ```
 backend/     API (Fastify) and PostGIS migrations
