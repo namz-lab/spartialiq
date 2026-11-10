@@ -1,0 +1,350 @@
+{
+  "ranAt": "2026-10-20T08:14:16.766Z",
+  "base": "http://127.0.0.1:3000",
+  "passed": 48,
+  "failed": 0,
+  "byModule": {
+    "M1-Auth": {
+      "passed": 4,
+      "failed": 0
+    },
+    "M2-Citizen": {
+      "passed": 2,
+      "failed": 0
+    },
+    "M3-Planner-DC": {
+      "passed": 5,
+      "failed": 0
+    },
+    "M4-GIS-Ops": {
+      "passed": 6,
+      "failed": 0
+    },
+    "M5-Inspect": {
+      "passed": 3,
+      "failed": 0
+    },
+    "M7-CrossModule": {
+      "passed": 2,
+      "failed": 0
+    },
+    "M8-Clerk": {
+      "passed": 3,
+      "failed": 0
+    },
+    "M9-EHO": {
+      "passed": 4,
+      "failed": 0
+    },
+    "M10-Surveyor": {
+      "passed": 2,
+      "failed": 0
+    },
+    "M11-Admin": {
+      "passed": 3,
+      "failed": 0
+    },
+    "M12-AllRoles": {
+      "passed": 10,
+      "failed": 0
+    },
+    "M13-CitizenDesk": {
+      "passed": 2,
+      "failed": 0
+    },
+    "M14-Payments-Docs": {
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "results": [
+    {
+      "module": "M1-Auth",
+      "name": "health",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M1-Auth",
+      "name": "ready+postgis",
+      "ok": true,
+      "detail": "{\"database\":true,\"postgis\":true,\"council_ops\":true}"
+    },
+    {
+      "module": "M1-Auth",
+      "name": "bad captcha rejected",
+      "ok": true,
+      "detail": "HTTP 400 captcha_failed"
+    },
+    {
+      "module": "M1-Auth",
+      "name": "demo planner login",
+      "ok": true,
+      "detail": "planner"
+    },
+    {
+      "module": "M2-Citizen",
+      "name": "citizen register+captcha",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M2-Citizen",
+      "name": "building complaint intake",
+      "ok": true,
+      "detail": "BC-2026-0007"
+    },
+    {
+      "module": "M3-Planner-DC",
+      "name": "permit register list",
+      "ok": true,
+      "detail": "count=5"
+    },
+    {
+      "module": "M3-Planner-DC",
+      "name": "EO gate blocks planner approve",
+      "ok": true,
+      "detail": "403 eo_decision_required"
+    },
+    {
+      "module": "M3-Planner-DC",
+      "name": "statutory plans API",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M3-Planner-DC",
+      "name": "GIS site-context",
+      "ok": true,
+      "detail": "areaHa=17.61"
+    },
+    {
+      "module": "M3-Planner-DC",
+      "name": "site screening PDF",
+      "ok": true,
+      "detail": "bytes=3960"
+    },
+    {
+      "module": "M4-GIS-Ops",
+      "name": "MVT catalogue",
+      "ok": true,
+      "detail": "layers=32"
+    },
+    {
+      "module": "M4-GIS-Ops",
+      "name": "master themes",
+      "ok": true,
+      "detail": "themes=28"
+    },
+    {
+      "module": "M4-GIS-Ops",
+      "name": "ops summary",
+      "ok": true,
+      "detail": "{\"roads\":0,\"wash\":8,\"livestock\":0,\"assets\":0}"
+    },
+    {
+      "module": "M4-GIS-Ops",
+      "name": "WASH create",
+      "ok": true,
+      "detail": "97aabd30-5a6f-4dc8-9e4c-af659bae7da8"
+    },
+    {
+      "module": "M4-GIS-Ops",
+      "name": "council map PDF",
+      "ok": true,
+      "detail": "bytes=3437"
+    },
+    {
+      "module": "M4-GIS-Ops",
+      "name": "GeoJSON import dry-run",
+      "ok": true,
+      "detail": "{\"dry_run\":true,\"would_insert\":1,\"errors\":[]}"
+    },
+    {
+      "module": "M5-Inspect",
+      "name": "inspector login",
+      "ok": true,
+      "detail": "building_inspector"
+    },
+    {
+      "module": "M5-Inspect",
+      "name": "inspection stages",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M5-Inspect",
+      "name": "EO login",
+      "ok": true,
+      "detail": "eo"
+    },
+    {
+      "module": "M7-CrossModule",
+      "name": "ready + themes + site-context share PostGIS",
+      "ok": true,
+      "detail": "themes=28 parcel=true"
+    },
+    {
+      "module": "M7-CrossModule",
+      "name": "multi-role auth matrix",
+      "ok": true,
+      "detail": "planner,gis_officer,eo"
+    },
+    {
+      "module": "M8-Clerk",
+      "name": "clerk login",
+      "ok": true,
+      "detail": "planning_clerk"
+    },
+    {
+      "module": "M8-Clerk",
+      "name": "permit/development register",
+      "ok": true,
+      "detail": "HTTP 200 count=5"
+    },
+    {
+      "module": "M8-Clerk",
+      "name": "clerk-specific routes",
+      "ok": true,
+      "detail": "no /api/clerk/* yet — login + permit register covered"
+    },
+    {
+      "module": "M9-EHO",
+      "name": "envoffice login",
+      "ok": true,
+      "detail": "env_officer"
+    },
+    {
+      "module": "M9-EHO",
+      "name": "eho summary",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M9-EHO",
+      "name": "eho notices",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M9-EHO",
+      "name": "eho inspections",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M10-Surveyor",
+      "name": "surveyor login",
+      "ok": true,
+      "detail": "surveyor"
+    },
+    {
+      "module": "M10-Surveyor",
+      "name": "surveyor task/list",
+      "ok": true,
+      "detail": "/api/surveyor/jobs"
+    },
+    {
+      "module": "M11-Admin",
+      "name": "admin login",
+      "ok": true,
+      "detail": "admin"
+    },
+    {
+      "module": "M11-Admin",
+      "name": "ready probe",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "module": "M11-Admin",
+      "name": "admin/staff endpoint",
+      "ok": true,
+      "detail": "/api/admin/users → HTTP 200"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.admin",
+      "ok": true,
+      "detail": "role=admin expect≈admin"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.planner",
+      "ok": true,
+      "detail": "role=planner expect≈planner"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.eo",
+      "ok": true,
+      "detail": "role=eo expect≈eo"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.envoffice",
+      "ok": true,
+      "detail": "role=env_officer expect≈env_officer"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.inspector",
+      "ok": true,
+      "detail": "role=building_inspector expect≈building_inspector"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.clerk",
+      "ok": true,
+      "detail": "role=planning_clerk expect≈planning_clerk"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.surveyor",
+      "ok": true,
+      "detail": "role=surveyor expect≈surveyor"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.gis",
+      "ok": true,
+      "detail": "role=gis_officer expect≈gis_officer"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "login demo.viewer",
+      "ok": true,
+      "detail": "role=viewer expect≈viewer"
+    },
+    {
+      "module": "M12-AllRoles",
+      "name": "roles matrix (9 demos)",
+      "ok": true,
+      "detail": "demo.admin=admin, demo.planner=planner, demo.eo=eo, demo.envoffice=env_officer, demo.inspector=building_inspector, demo.clerk=planning_clerk, demo.surveyor=surveyor, demo.gis=gis_officer, demo.viewer=viewer"
+    },
+    {
+      "module": "M13-CitizenDesk",
+      "name": "POST service-desk ticket",
+      "ok": true,
+      "detail": "HTTP 201 id=2d948356-ae6d-467b-9536-94c4263b72fc"
+    },
+    {
+      "module": "M13-CitizenDesk",
+      "name": "map-search ward",
+      "ok": true,
+      "detail": "HTTP 200 type=? count=?"
+    },
+    {
+      "module": "M14-Payments-Docs",
+      "name": "documents read",
+      "ok": true,
+      "detail": "/api/documents/mine → HTTP 200"
+    },
+    {
+      "module": "M14-Payments-Docs",
+      "name": "payments list",
+      "ok": true,
+      "detail": "HTTP 200"
+    }
+  ]
+}

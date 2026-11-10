@@ -1,0 +1,47 @@
+﻿styles sample
+1 Normal MIDLANDS STATE UNIVERSITY [(True, 18.0, None, 'MIDLANDS STATE UNIVERSITY')]
+2 Normal FACULTY OF BUSINESS SCIENCES [(True, 13.0, None, 'FACULTY OF BUSINESS SCIENCES')]
+3 Normal DEPARTMENT OF INFORMATION SYSTEMS AND MARKETING SCIENCES [(True, 12.0, None, 'DEPARTMENT OF INFORMATION SYSTEMS AND MA')]
+4 Normal INFO342 WORK RELATED LEARNING REPORT [(True, 16.0, None, 'INFO342 WORK RELATED LEARNING REPORT')]
+5 Normal Software Product Development, Applied Research and Innovation Management at the Midlands S [(True, 13.0, None, 'Software Product Development, Applied Re')]
+6 Normal A report submitted in partial fulfilment of the requirements of the Bachelor of Commerce H [(None, None, None, 'A report submitted in partial fulfilment')]
+8 Heading 1 Declaration [(None, None, None, 'Declaration')]
+9 Normal This report is an original account of work undertaken during Work Related Learning at the  [(None, None, None, 'This report is an original account of wo')]
+10 Normal Student signature: ______________________________ [(None, None, None, 'Student signature: _____________________')]
+11 Normal Date: ____________________ [(None, None, None, 'Date: ____________________')]
+12 Heading 1 Acknowledgements [(None, None, None, 'Acknowledgements')]
+13 Normal The student wishes to express appreciation for the cooperation of the management and staff [(None, None, None, 'The student wishes to express appreciati')]
+14 Heading 1 Abstract [(None, None, None, 'Abstract')]
+15 Normal This report details the Work Related Learning conducted at the Midlands State University I [(None, None, None, 'This report details the Work Related Lea')]
+16 Heading 1 List of Acronyms [(None, None, None, 'List of Acronyms')]
+17 Heading 1 Table of Contents [(None, None, None, 'Table of Contents')]
+18 Normal Chapter 1 Introduction	1 [(None, None, None, 'Chapter 1 Introduction'), (None, None, None, '\t')]
+19 Normal 1.1 Introduction	1 [(None, None, None, '1.1 Introduction'), (None, None, None, '\t')]
+20 Normal 1.2 Background and history of the organisation	1 [(None, None, None, '1.2 Background and history of the organi'), (None, None, None, '\t')]
+21 Normal 1.3 Organisational structure and corporate culture	2 [(None, None, None, '1.3 Organisational structure and corpora'), (None, None, None, '\t')]
+22 Normal 1.4 Departments and their functions	3 [(None, None, None, '1.4 Departments and their functions'), (None, None, None, '\t')]
+23 Normal Chapter 2 Nature of the Industry	5 [(None, None, None, 'Chapter 2 Nature of the Industry'), (None, None, None, '\t')]
+24 Normal 2.1 Nature of the innovation and technology development industry	5 [(None, None, None, '2.1 Nature of the innovation and technol'), (None, None, None, '\t')]
+25 Normal 2.2 Industry requirements and implications for innovation work	5 [(None, None, None, '2.2 Industry requirements and implicatio'), (None, None, None, '\t')]
+26 Normal 2.3 Products services markets and stakeholders	6 [(None, None, None, '2.3 Products services markets and stakeh'), (None, None, None, '\t')]
+27 Normal 2.4 Company and society connection	7 [(None, None, None, '2.4 Company and society connection'), (None, None, None, '\t')]
+28 Normal Chapter 3 Expectations Assignments and Degree Relevance	9 [(None, None, None, 'Chapter 3 Expectations Assignments and D'), (None, None, None, '\t')]
+29 Normal 3.1 Expectations compared with workplace reality	9 [(None, None, None, '3.1 Expectations compared with workplace'), (None, None, None, '\t')]
+30 Normal 3.2 WRL assignments and relevance to the degree programme	10 [(None, None, None, '3.2 WRL assignments and relevance to the'), (None, None, None, '\t')]
+31 Normal 3.3 Applied research and data analysis	11 [(None, None, None, '3.3 Applied research and data analysis'), (None, None, None, '\t')]
+32 Normal 3.4 Software, AI and innovation-management systems	12 [(None, None, None, '3.4 Software, AI and innovation-manageme'), (None, None, None, '\t')]
+33 Normal 3.5 Competition projects, pitching and exhibitions	13 [(None, None, None, '3.5 Competition projects, pitching and e'), (None, None, None, '\t')]
+34 Normal 3.6 E-ChroniBook healthcare platform	15 [(None, None, None, '3.6 E-ChroniBook healthcare platform'), (None, None, None, '\t')]
+35 Normal Chapter 4 Personal and Professional Development	18 [(None, None, None, 'Chapter 4 Personal and Professional Deve'), (None, None, None, '\t')]
+36 Normal 4.1 Key skills developed	18 [(None, None, None, '4.1 Key skills developed'), (None, None, None, '\t')]
+37 Normal 4.2 Technical growth	18 [(None, None, None, '4.2 Technical growth'), (None, None, None, '\t')]
+38 Normal 4.3 Communication teamwork and service	19 [(None, None, None, '4.3 Communication teamwork and service'), (None, None, None, '\t')]
+39 Normal 4.4 Personal development	19 [(None, None, None, '4.4 Personal development'), (None, None, None, '\t')]
+---TABLE STYLES---
+rows 9 cols 2
+0 0 1F4E78 Student detail
+0 1 1F4E78 Information
+1 0 None Student name
+1 1 None Musawenkosi Bongani Junior Ngulube
+2 0 EAF2F8 Registration number
+2 1 EAF2F8 R242983A

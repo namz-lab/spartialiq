@@ -1,0 +1,58 @@
+require('dotenv').config()
+const Fastify = require('fastify')
+const fastifyPostgres = require('@fastify/postgres')
+const fastifyCookie = require('@fastify/cookie')
+const { paymentRoutes } = require('../../src/routes/payments')
+const { authRoutes } = require('../../src/routes/auth')
+const { developmentManagementRoutes } = require('../../src/routes/development-management')
+const { inspectorGisRoutes } = require('../../src/routes/inspector-gis')
+const { inspectorRoutingRoutes } = require('../../src/routes/inspector-routing')
+const { environmentalHealthRoutes } = require('../../src/routes/environmental-health')
+const { appealRoutes } = require('../../src/routes/appeals')
+const { surveyorRoutes } = require('../../src/routes/surveyor')
+
+async function buildAppForTest() {
+  const app = Fastify({ logger: false })
+  await app.register(fastifyPostgres, { connectionString: process.env.APP_DATABASE_URL || process.env.DATABASE_URL })
+  // The same connection context as server.js, in whatever TENANCY_MODE says (default strict): run these suites with
+  // TENANCY_MODE=strict to prove the write paths too.
+  const dbContext = require('../../src/lib/dbContext')
+  dbContext.install(app)
+  app.addHook('onRequest', (_req, _reply, done) => dbContext.runWithRequest(done))
+  await app.register(fastifyCookie, { secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET })
+  // Same registration as server.js: upload routes (permit documents, stage
+  // photos) need request.isMultipart()/request.parts().
+  await app.register(require('@fastify/multipart'), {
+    limits: { fileSize: 50 * 1024 * 1024 },
+  })
+
+  // Webhook callbacks arrive as application/x-www-form-urlencoded.
+  // Fastify has no built-in parser for this content-type, so we add one
+  // here. The raw string is also stored as request.rawBody so the Paynow
+  // signature verifier can reconstruct field order.
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (req, body, done) => {
+      req.rawBody = body
+      try {
+        done(null, Object.fromEntries(new URLSearchParams(body)))
+      } catch (err) {
+        done(err)
+      }
+    },
+  )
+  await app.register(async (scope) => {
+    await authRoutes(scope)
+    await paymentRoutes(scope)
+    await developmentManagementRoutes(scope)
+    await inspectorGisRoutes(scope)
+    await inspectorRoutingRoutes(scope)
+    await environmentalHealthRoutes(scope)
+    await appealRoutes(scope)
+    await surveyorRoutes(scope)
+  }, { prefix: '/api' })
+  await app.ready()
+  return app
+}
+module.exports = { buildAppForTest }

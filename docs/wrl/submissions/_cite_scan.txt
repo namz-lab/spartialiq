@@ -1,0 +1,19 @@
+﻿python : Traceback (most recent call last):
+At C:\Users\munya\AppData\Local\Temp\ps-script-f4c20df6-c698-4d92-bd0d-01268b0b4c7a.ps1:162 char:1
++ python -c "
++ ~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "<string>", line 21, in <module>
+    cites=re.findall(r'.{0,40}\([^)]*20\d\d[^)]*\)'|r'.{0,30}\[\d+\]', text)
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+TypeError: unsupported operand type(s) for |: 'str' and 'str'
+==== Munyaradzi_Namailinga_WRL_Level32_Report2_R243100H.docx paras 144 tables 5 chars 31038
+  Ngulube 1
+  Musawenkosi 0
+  Musa 0
+  (20 8
+  [1] 1
+  et al 0
+  Namailinga, 2026 1

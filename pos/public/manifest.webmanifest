@@ -1,0 +1,12 @@
+{
+  "name": "Tillbook",
+  "short_name": "Tillbook",
+  "description": "POS, stock, quotations, receipts and financial books.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b3d3a",
+  "theme_color": "#0b3d3a",
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

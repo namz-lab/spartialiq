@@ -1,0 +1,26 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "SpartialIQ",
+  "build": {
+    "beforeBuildCommand": "npm.cmd run build:fast"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "SpartialIQ",
+        "width": 1280,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
+    "resources": [
+      "resources/hosted-server.txt"
+    ]
+  }
+}

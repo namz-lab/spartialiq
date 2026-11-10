@@ -1,0 +1,75 @@
+﻿==== Munyaradzi_Namailinga_WRL_Level32_Report2_R243100H.docx
+Ngulube mentions:
+  workplace, then translate them into schema and API changes (Ngulube, 2026).
+Author-year style:
+  (Government of Zimbabwe, 2021a)
+  (Namailinga, 2026)
+  (Billett, 2011)
+  (PostGIS Development Group, 2024)
+  (OWASP Foundation, 2021)
+  (Government of Zimbabwe, 2021a; Government of Zimbabwe, n.d.)
+  (Codd, 1970; Date, 2015)
+  (OWASP Foundation, 2021; Government of Zimbabwe, 2021b)
+  (PostGIS Development Group, 2024)
+  (Ngulube, 2026)
+  (Date, 2015; PostGIS Development Group, 2024)
+  (Billett, 2011)
+  (PostGIS Development Group, 2024)
+  (OWASP Foundation, 2021)
+Number cites: ['[1]', '[2]', '[3]', '[4]', '[5]', '[6]', '[7]', '[8]', '[9]', '[10]', '[11]']
+REF section tail:
+6. References
+
+1. PREAMBLE
+This report is the second in the Work-Related Learning series and builds on the Level 3.1 Report (Report 1), which introduced the host organisation and provided an overview of the industrial attachment (Midlands State University, n.d.). Report 1 presented the Midlands State University Research and Innovation Hub as the day-to-day placement organisation and described the Vungu Rural District Council GIS engagement as the live client project. It outlined Education 5.0 expectations, the role of the Hub in hosting student innovators, and the project team structure under Dr Paradzayi, with backend responsibilities assigned to the author and frontend responsibilities assigned to Theophelos Madzinga.
+The first report also examined the technical context of the Vungu system: a web-based municipal planning information system intended to support ward maps, stand identification, development permit workflows and related council registers. It summarised early work on security remediation of the prototype, provisioning of PostgreSQL with PostGIS, initial REST API development, Docker-based local stacks, the March site visit to Vungu planning offices, and the April demonstration to council officers. Research and documentation outputs from the first phase, including Handbook study, schema refinement and normalisation notes, were recorded as foundations for later implementation (Government of Zimbabwe, 2021a).
+In addition, Report 1 discussed the industry setting in which rural district councils operate, the importance of spatial data integrity, and the link between statutory planning procedures and database design. Several challenges were noted at that stage, including unfamiliar PostGIS concepts, the density of statutory language in the Development Management (Control) Handbook, and the need to keep documentation aligned with working code.
+Building on that foundation, this Level 3.2 report provides a reflective evaluation of the full attachment experience through to November 2026. It compares initial expectations with workplace reality, maps assignments to the Computer Science degree programme, examines personal and professional growth, discusses conflict between personal learning goals and organisational priorities, and sets out re-entry plans and recommendations. Technical detail is retained where it explains learning; the emphasis of Report 2 is evaluation rather than a second full systems specification.
+For completeness, the later attachment m
+
+==== Munyaradzi_Namailinga_WRL_Preliminary_Report_R243100H_v8.docx
+Ngulube mentions:
+  w matches events recorded by fellow Hub student Musawenkosi Ngulube. My role at each event is stated so it is clear I stayed on the GIS system.
+  Ngulube, M.B.J. (2026). INFO342 Work Related Learning Report (Hub event record used for
+Author-year style:
+Number cites: []
+REF section tail:
+References
+
+LIST OF ABBREVIATIONS
+
+
+CHAPTER 1: INTRODUCTION
+1.1  Background
+Work Related Learning places Computer Science students in real workplaces. My placement was at the MSU Research and Innovation Hub. The Hub hosts many student projects at once. Some students work on health systems, AI tools, robotics or competition products. My assigned project was the GIS planning system for Vungu Rural District Council.
+1.2  Purpose
+The purpose was to meet the WRL requirement, to learn real backend and database work on a live GIS system, and to take part in normal Hub service during expos, pitching weeks and workshops without losing focus on the Vungu product.
+1.3  Objectives
+1.  Build and harden the Vungu GIS backend and database under Hub supervision.
+2.  Turn Handbook and council register needs into working GIS tables and APIs.
+3.  Test the system before demos and keep use-case notes honest.
+4.  Support shared Hub events while keeping product work on GIS only.
+5.  Record every independent week in the logbook from February to October 2026.
+
+CHAPTER 2: DESCRIPTION OF THE WRL ORGANISATION
+2.1  Midlands State University and the Hub
+Midlands State University is in Gweru. The Research and Innovation Hub sits under the university's innovation work. Students are placed on projects with supervisors. The Hub also runs pitching briefings, IP reminders, monthly readiness reporting, workshops and public expos. That shared calendar is why different students mention the same events even when their products differ.
+2.2  Vungu RDC GIS project
+Vungu Rural District Council needs digital support for wards, stands, permits and registers. The system uses PostgreSQL with PostGIS, a Fastify API and a Vue map portal. In the repositories it is called SpartialIQ. I owned backend and database work. Theophelos owned screens and map UI. Dr Paradzayi was project manager.
+
+
+CHAPTER 3: WORK PLAN AND WEEKLY COVERAGE
+The logbook covers thirty-four independent Monday to Friday weeks from 23 February 2026 to 16 October 2026, plus a catch-up entry on 18 October. There are no month summary blocks in place of weeks. Public holidays are marked inside the week (Good Friday, Easter Monday, Workers Day, Africa Day, Heroes Day and Defence Forces Day).
+
+
+CHAPTER 4: WORK ACCOMPLISHED
+4.1  GIS system work
+GIS product work included security fixes on the old prototype, PostGIS and API setup, ward and application routes, stand identify with allottee names, Handbook-driven table design, Development Control Matr
+
+==== Munyaradzi_Namailinga_Logbook_v7.docx
+Ngulube mentions:
+Author-year style:
+Number cites: []
+REF section tail:
+no refs
+

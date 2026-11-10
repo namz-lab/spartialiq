@@ -1,0 +1,67 @@
+﻿P 19
+This Work-Related Learning (WRL) Report 2 presents an evaluation of the industrial attachment undertaken by Munyaradzi Namailinga (R243100H) at the Midlands State University Research and Innovation Hub, working on the Vungu Rural District Council Geographic Information System (GIS) project, also known in the development repositories as VUNGIS. The report follows the Level 3.2 Student Report 2 guidelines issued by the Department of Computer Science, Faculty of Science and Technology (Midlands State University, n.d.).
+---
+P 55
+This report is the second in the Work-Related Learning series and builds on the Level 3.1 Report (Report 1), which introduced the host organisation and provided an overview of the industrial attachment (Midlands State University, n.d.). Report 1 presented the Midlands State University Research and Innovation Hub as the day-to-day placement organisation and described the Vungu Rural District Council GIS engagement as the live client project. It outlined Education 5.0 expectations, the role of the Hub in hosting student innovators, and the project team structure under Dr Paradzayi, with backend responsibilities assigned to the author and frontend responsibilities assigned to Theophelos Madzinga.
+---
+P 56
+The first report also examined the technical context of the Vungu system: a web-based municipal planning information system intended to support ward maps, stand identification, development permit workflows and related council registers. It summarised early work on security remediation of the prototype, provisioning of PostgreSQL with PostGIS, initial REST API development, Docker-based local stacks, the March site visit to Vungu planning offices, and the April demonstration to council officers. Research and documentation outputs from the first phase, including Handbook study, schema refinement and normalisation notes, were recorded as foundations for later implementation (Government of Zimbabwe, 2021a).
+---
+P 59
+For completeness, the later attachment months that fell after Report 1 should be summarised briefly here. From June 2026 onward the team closed gaps that officers had named after the April demonstration: tenancy-aware staff login repairs, stand identify with allottee names, a deploy-readiness gate, statutory register APIs and screens, citizen rates-clearance lodging, Acua sub-plot mapping, property-owner import preparation, database restore tooling, and a Windows installer for local Hub demonstrations. Those deliverables are evaluated in the sections that follow rather than re-specified table by table as in Report 1 (Namailinga, 2026).
+---
+P 65
+The reality at the MSU Research and Innovation Hub was broader and more demanding. The Hub hosts several student tracks at the same time. Peers worked on health platforms, research assistants, competition products and robotics, and they shared pitching weeks, expo deadlines and monthly readiness reporting .My product ownership remained the Vungu GIS system, but my week often included Hub service: printer faults, workshop room setup, pitching afternoon support, and exhibition logistics. Engineering therefore extended beyond programming into requirements honesty, deployment checks, security, restore drills and public demonstration (Billett, 2011).
+---
+P 66
+My exposure to spatial databases exceeded my expectations. Before the placement, PostGIS, spatial reference identifiers and map vector tiles were largely theoretical. In practice I designed and repaired stand identify behaviour, parcel locate queries, MVT layer grants and later an Acua stand_subunit layer for plots of about three hundred square metres. These tasks showed that a municipal GIS fails quietly when grants, geometry or tenancy columns drift (PostGIS Development Group, 2024).
+---
+P 67
+Security work also differed from my early expectations. I had assumed login was already acceptable. The prototype stored passwords unsafely and kept database secrets in source files. Remediation using bcrypt, environment configuration and input validation consumed early weeks, but it was necessary before trustworthy council demonstrations (OWASP Foundation, 2021). Later, enabling strict tenancy without matching user columns broke staff login entirely. That incident taught me that security features and schema must ship together.
+---
+P 68
+Client contact exceeded what I imagined for a student attachment. The Vungu site visit and the formal April demonstration placed real officers in front of the system. Their requests for sold versus free stands and digital registers became the backbone of the June to October hardening phase, including statutory registers under the Rural District Councils Act framework (Government of Zimbabwe, 2021a; Government of Zimbabwe, n.d.).
+---
+P 75
+Software security modules provided the base for the prototype audit, password hashing, secret handling, production demo-login blocking, and awareness of logging and access control on statutory registers (OWASP Foundation, 2021; Government of Zimbabwe, 2021b). Web systems and internet programming concepts underpinned Fastify route design, JSON validation, JWT authentication and clear API contracts with the frontend developer.
+---
+P 84
+In backend development I became comfortable designing and repairing Fastify routes, shaping JSON responses for the map portal, and keeping API contracts stable for Theophelos. In database work I practised PostGIS geometry storage, GiST-related thinking for spatial lookup, migration discipline, grants to application roles, and child-table design for Acua sub-units so parent stands were not overloaded (PostGIS Development Group, 2024).
+---
+P 88
+Requirements and stakeholder analysis skills grew during the Vungu site visit and later feedback loops. Observing ward-based paper handling changed how we prioritised identify behaviour and registers. Similar to peers who met external stakeholders in other Hub tracks, I learnt to write requirements in the language of the workplace, then translate them into schema and API changes (Ngulube, 2026).
+---
+P 89
+Research and comparative analysis skills were practised in the SQL versus NoSQL note for GIS workloads and in document verification reading for identity and title deed uploads linked to applications. Those exercises were not separate from the product; they justified why PostgreSQL with PostGIS remained the core store for authoritative spatial and statutory records (Date, 2015; PostGIS Development Group, 2024).
+---
+P 97
+During the attachment I met several situations where personal learning goals did not fully match organisational priorities. Managing those differences was part of professional development (Billett, 2011).
+---
+P 114
+Firstly, the curriculum should increase structured exposure to spatial databases and open geospatial standards for students who may enter GIS or smart-government projects. Even a short practical unit on PostGIS would reduce the cold start many students face (PostGIS Development Group, 2024).
+---
+P 115
+Secondly, software security teaching should continue to emphasise password storage, secret management and dependency hygiene using hands-on labs that resemble broken prototypes, because those defects appear in real attachments (OWASP Foundation, 2021).
+---
+20 The placement period covered in this reflective report is 23 February 2026 to  October 2026. The first report (Level 3.1) introduced the host organisation, the 
+21 The main product work was backend and database engineering for a municipal planning information system: security remediation, PostgreSQL with PostGIS, Fastify a
+22 Keywords: Work-Related Learning; Level 3.2 Report; MSU Research and Innovation Hub; Vungu RDC; GIS; SpartialIQ; PostGIS; professional development; Zimbabwe.
+24 ACKNOWLEDGEMENTS
+25 I would like to express my sincere appreciation to everyone who supported me during my Work-Related Learning at the Midlands State University Research and Innov
+26 My special thanks go to my industrial supervisor, Dr Paradzayi, Project Manager for the Vungu Rural District Council GIS project, for his guidance, high standar
+27 I am also grateful to Rafiq and Maam Tanya, the project research assistants, for setting clear research briefs and for thorough feedback on schema, normalisatio
+28 Appreciation is extended to Hub staff and fellow Hub students who shared workshop, pitching and expo weeks, and to the Department of Computer Science at Midland
+30 DEDICATION
+31 This report is dedicated to my family, whose support, encouragement and belief have been a constant source of strength throughout my academic and professional j
+32 Special dedication is also extended to Dr Paradzayi, Rafiq, Theophelos Madzinga and the MSU Research and Innovation Hub team for mentorship and for the opportun
+34 TABLE OF CONTENTS
+35 Abstract
+36 Acknowledgements
+37 Dedication
+38 Table of Contents
+39 1. Preamble
+40 2. Expectations vs Reality
+41 2.1 Expectations vs Reality
+42 2.2 WRL assignments and relevance to degree programme
+43 3. Personal and professional development
+44 3.1 Key skills developed

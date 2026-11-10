@@ -1,0 +1,168 @@
+﻿============================================================ THEOPHELOS LOGBOOK
+MEDIA []
+inline_shapes 0
+tables 6
+-- table 0 7x2
+ r 0 fills [None, None]
+   Name || Theophelos Madzinga
+ r 1 fills [None, None]
+   Reg Number || R24221B
+ r 2 fills [None, None]
+   Programme || Bachelor of Science (Honours) in Computer Science
+ r 3 fills [None, None]
+   Level || 3.1
+ r 4 fills [None, None]
+   Attachment Organisation || Midlands State University (Research and Innovation) / Faculty of Built Environme
+-- table 1 2x3
+ r 0 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   DATE || DESCRIPTION OF WORK DONE || STUDENT'S COMMENTS
+ r 1 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   WEEK 1 / Mon 23 Feb / Fri 27 Feb 2026 || Day 1 (Mon 23 Feb) - Project Orientation and Onboarding / Attended the formal pr || The project brief described a large and complex system, but breaking it into use
+-- table 2 5x3
+ r 0 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   DATE || DESCRIPTION OF WORK DONE || STUDENT'S COMMENTS
+ r 1 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   WEEK 1 / Mon 02 Mar / Fri 06 Mar 2026 || Day 1 (Mon 02 Mar) - GeoJSON Specification Study / Studied the GeoJSON specifica || Reading the GeoJSON spec before writing any Leaflet code was the right approach.
+ r 2 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   WEEK 2 / Mon 09 Mar / Fri 13 Mar 2026 || Day 1 (Mon 09 Mar) - Ward Boundary Layer Integration / Connected the ward bounda || The ward boundary rendering worked on the first attempt once the GeoJSON format 
+ r 3 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   WEEK 3 / Mon 16 Mar / Fri 20 Mar 2026 || Day 1 (Mon 16 Mar) - Development Control Module UI / Built the development contr || Building route guards in a vanilla JavaScript application required more careful 
+ r 4 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   WEEK 4 / Mon 23 Mar / Fri 27 Mar 2026 || Day 1 (Mon 23 Mar) - Redesigned Planning Officer Dashboard / Redesigned the plan || The ward summary card redesign was a direct result of the site visit. The same d
+-- table 3 3x3
+ r 0 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   DATE || DESCRIPTION OF WORK DONE || STUDENT'S COMMENTS
+ r 1 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   WEEK 1 / Mon 30 Mar / Fri 03 Apr 2026 || Day 1 (Mon 30 Mar) - VM Deployment Exercise / Participated in the team deploymen || The GeoJSON parsing bug was a straightforward mistake with a significant impact:
+ r 2 fills ['FFFFFF', 'FFFFFF', 'FFFFFF']
+   WEEK 2 / Mon 06 Apr / Fri 10 Apr 2026 || Day 1 (Mon 06 Apr) - Frontend Integration Test Scenarios / Wrote a structured se || The zoom-level highlight bug was found by following the test scenario checklist 
+PARAS:
+1 MIDLANDS STATE UNIVERSITY
+2 FACULTY OF INFORMATION SCIENCE AND TECHNOLOGY
+3 DEPARTMENT OF COMPUTER SCIENCE
+4 INDUSTRIAL ATTACHMENT LOGBOOK
+5 MONTH: FEBRUARY 2026
+6 Supervisor's Comments
+7 ............................................................................................................................................
+8 Supervisor's Signature
+9 ............................................................................................................................................
+10 Date
+11 ............................................................................................................................................
+12 MONTH: MARCH 2026
+13 Supervisor's Comments
+14 ............................................................................................................................................
+15 Supervisor's Signature
+16 ............................................................................................................................................
+17 Date
+18 ............................................................................................................................................
+19 MONTH: APRIL 2026
+20 Supervisor's Comments
+21 ............................................................................................................................................
+22 Supervisor's Signature
+23 ............................................................................................................................................
+24 Date
+25 ............................................................................................................................................
+============================================================ THEOPHELOS REPORT
+MEDIA []
+inline_shapes 0
+tables 3
+-- table 0 8x2
+ r 0 fills [None, None]
+   Student Name || Theophelos Madzinga
+ r 1 fills [None, None]
+   Student ID || R24221B
+ r 2 fills [None, None]
+   Programme || Bachelor of Science Honours Degree in Computer Science
+ r 3 fills [None, None]
+   Level || 3.1
+ r 4 fills [None, None]
+   Organisation || MSU Research and Innovation Hub / Vungu RDC GIS Project
+-- table 1 33x2
+ r 0 fills [None, None]
+   Abbreviation || Meaning
+ r 1 fills [None, None]
+   API || Application Programming Interface
+ r 2 fills [None, None]
+   COO || Certificate of Occupation
+ r 3 fills [None, None]
+   CSS || Cascading Style Sheets
+ r 4 fills [None, None]
+   DCM || Development Control Matrix
+-- table 2 11x3
+ r 0 fills [None, None, None]
+   Phase || Period || Activities
+ r 1 fills [None, None, None]
+   1 - Orientation and Code Review || Week 1 (Feb) || Project briefing, prototype frontend review, Leaflet.js and GeoJSON research, en
+ r 2 fills [None, None, None]
+   2 - Architecture and Map Component || Weeks 1-2 (Mar) || GeoJSON spec study, UI wireframes for five roles, frontend project structure, ba
+ r 3 fills [None, None, None]
+   3 - Core UI Development || Weeks 2-3 (Mar) || Ward boundary layer, application form, authentication forms, planning officer da
+ r 4 fills [None, None, None]
+   4 - Dashboard Redesign and Admin Panel || Week 4 (Mar) || Ward-summary dashboard redesign, API centralisation, zone overlay, admin panel, 
+PARAS:
+1 MIDLANDS STATE UNIVERSITY
+2 FACULTY OF INFORMATION SCIENCE AND TECHNOLOGY
+3 DEPARTMENT OF COMPUTER SCIENCE
+4 WRL PRELIMINARY REPORT
+5 Work-Related Learning Placement at
+6 MSU RESEARCH AND INNOVATION HUB / VUNGU RURAL DISTRICT COUNCIL GIS PROJECT
+7 GIS-Based Municipal Planning Information System for Vungu RDC
+8 Submitted in partial fulfilment of the requirements of the
+9 Bachelor of Science Honours Degree in Computer Science
+10 Midlands State University
+11 ABSTRACT
+12 This preliminary work-related learning (WRL) report documents the activities carried out by Theophelos Madzinga (Student ID: R24221B), a Lev
+13 The project involves the development of a web-based system to support land-use planning, development permit applications, spatial inspection
+14 The first phase of the placement, covering February to mid-April, involved project orientation, prototype frontend code review, GeoJSON spec
+15 Keywords: Work-Related Learning, Computer Science, GIS, Frontend Development, Leaflet.js, Vungu RDC, Municipal Planning, UI Design, Wirefram
+16 ACKNOWLEDGEMENTS
+17 The completion of this placement and the preparation of this report would not have been possible without the guidance and support of a numbe
+18 Sincere thanks go to Dr Paradzayi, Project Manager for the Vungu RDC GIS project, for clear supervision, consistent direction, and high prof
+19 Appreciation is extended to Rafiq, the project research assistant, for setting structured and meaningful research deliverables that gave the
+20 Thanks also go to the planning officers at Vungu Rural District Council for their engagement during the site visit in March and the system d
+21 Finally, gratitude is owed to the Department of Computer Science at Midlands State University for the academic foundation in web technologie
+22 TABLE OF CONTENTS
+23 Abstract
+24 Acknowledgements
+25 Table of Contents
+============================================================ LANDEL LOGBOOK
+MEDIA []
+inline_shapes 0
+tables 1
+-- table 0 20x3
+ r 0 fills ['D9D9D9', 'D9D9D9', 'D9D9D9']
+   WEEK / DATES || DESCRIPTION OF WORK DONE || STUDENT COMMENTS
+ r 1 fills [None, None, None]
+   Week 1 / (12/01/2026 - 18/01/2026) || Attended the official project induction and orientation session at the MSU Resea || The first week gave me a solid starting point. Understanding the safety protocol
+ r 2 fills [None, None, None]
+   Week 2 / (19/01/2026 - 25/01/2026) || Carried out a detailed literature review on the chemical conversion of scrap iro || The literature review helped me connect what I have learned in lectures to what 
+ r 3 fills [None, None, None]
+   Week 3 / (26/01/2026 - 01/02/2026) || Participated in a technical visit to assess external facilities and benchmark ag || The technical visit opened my eyes to how an actual production facility is struc
+ r 4 fills [None, None, None]
+   Week 4 / (02/02/2026 - 08/02/2026) || Attended the Value Creation Challenge (VCC) meeting at the MSU Innovation Hub. T || Signing the JVA was a significant moment. It made the collaboration official and
+PARAS:
+1 MIDLANDS STATE UNIVERSITY
+2 FACULTY OF SCIENCE AND TECHNOLOGY
+3 DEPARTMENT OF CHEMICAL TECHNOLOGY
+4 WORK-RELATED LEARNING LOG BOOK
+5 Student Name     :   Landel Lunga
+6 Student ID          :   R242094G
+7 Programme        :   Bachelor of Science Honours Degree in Chemical Technology
+8 Level                  :   3.1
+9 Organisation     :   MSU Research and Innovation Hub, Midlands State University
+10 Supervisor         :   Mr William Dzangare
+11 WRL Period        :   01 January 2026 to 30 June 2026
+12 Report Date      :   May 2026
+13 COMPANY INFORMATION
+14 Name of Company     :   MSU Research and Innovation Hub
+15 Address                      :   Midlands State University, Senga Road, Gweru, Zimbabwe
+16 Phone                          :   +263 542 260359
+17 Email                           :   info@mco.msu.ac.zw
+18 Contact Person 1   :   Innovation Manager  (+263 773 671162)
+19 Contact Person 2   :   Innovation Lead, Physical Sciences  (+263 773 271065)
+20 WRL Period             :   01 January 2026 to 30 June 2026
+21 Company Representative Name: ...............................................
+22 Signature: ..................................................................................
+23 RECORD OF WORK DONE
+24 Supervisor's Comments: The student demonstrated consistent engagement with laboratory work, research activities, and professional developmen
+25 Supervisor's Signature: ........................................     Date: ...............................

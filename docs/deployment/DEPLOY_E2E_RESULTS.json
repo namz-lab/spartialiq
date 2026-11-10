@@ -1,0 +1,268 @@
+{
+  "at": "2026-10-18T18:10:49.516Z",
+  "base": "http://127.0.0.1:3000",
+  "pass": 37,
+  "fail": 0,
+  "skip": 0,
+  "results": [
+    {
+      "id": "HEALTH",
+      "ok": true,
+      "kind": "required",
+      "detail": "{\"status\":\"ok\",\"timestamp\":\"2026-10-18T18:10:42.891Z\",\"service\":\"spartialiq-backend\",\"version\":\"2.0.0\"}",
+      "ms": 192
+    },
+    {
+      "id": "AUTH_admin",
+      "ok": true,
+      "kind": "required",
+      "detail": "role=admin",
+      "ms": 595
+    },
+    {
+      "id": "AUTH_planner",
+      "ok": true,
+      "kind": "required",
+      "detail": "role=planner",
+      "ms": 906
+    },
+    {
+      "id": "AUTH_eo",
+      "ok": true,
+      "kind": "required",
+      "detail": "role=eo",
+      "ms": 1364
+    },
+    {
+      "id": "AUTH_surveyor",
+      "ok": true,
+      "kind": "required",
+      "detail": "role=surveyor",
+      "ms": 1938
+    },
+    {
+      "id": "AUTH_building_inspector",
+      "ok": true,
+      "kind": "required",
+      "detail": "role=building_inspector",
+      "ms": 2468
+    },
+    {
+      "id": "AUTH_planning_clerk",
+      "ok": true,
+      "kind": "required",
+      "detail": "role=planning_clerk",
+      "ms": 2969
+    },
+    {
+      "id": "AUTH_gis_officer",
+      "ok": true,
+      "kind": "required",
+      "detail": "role=gis_officer",
+      "ms": 3459
+    },
+    {
+      "id": "C3_identify_available",
+      "ok": true,
+      "kind": "required",
+      "detail": "HDR-105 sold=false status=reserved",
+      "ms": 3640
+    },
+    {
+      "id": "C3_identify_sold",
+      "ok": true,
+      "kind": "required",
+      "detail": "HDR-004 allottee=Tendai Moyo",
+      "ms": 3668
+    },
+    {
+      "id": "C1_stands_geojson",
+      "ok": true,
+      "kind": "required",
+      "detail": "features=6",
+      "ms": 3681
+    },
+    {
+      "id": "C3_parcels_locate",
+      "ok": true,
+      "kind": "required",
+      "detail": "HDR-105",
+      "ms": 3792
+    },
+    {
+      "id": "G1_parcels_find",
+      "ok": true,
+      "kind": "required",
+      "detail": "hits=1",
+      "ms": 3822
+    },
+    {
+      "id": "C2_plan_lookup",
+      "ok": true,
+      "kind": "required",
+      "detail": "count=8",
+      "ms": 3845
+    },
+    {
+      "id": "G1_property_owners",
+      "ok": true,
+      "kind": "required",
+      "detail": "\"Tendai Moyo\"",
+      "ms": 3900
+    },
+    {
+      "id": "G1_nearby_owners",
+      "ok": true,
+      "kind": "required",
+      "detail": "owners=1",
+      "ms": 4336
+    },
+    {
+      "id": "G10_reserve",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4456
+    },
+    {
+      "id": "P2_land_use_groups",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4520
+    },
+    {
+      "id": "P1_permit_applications",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4684
+    },
+    {
+      "id": "P1_dev_control_apps",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4742
+    },
+    {
+      "id": "P1_clerk_queue",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4772
+    },
+    {
+      "id": "F1_building_complaints",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4829
+    },
+    {
+      "id": "G9_tile_layers",
+      "ok": true,
+      "kind": "required",
+      "detail": "entries=32",
+      "ms": 4840
+    },
+    {
+      "id": "A1_admin_users",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4859
+    },
+    {
+      "id": "C8_public_notices",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 4875
+    },
+    {
+      "id": "ACUA_subunits_geojson",
+      "ok": true,
+      "kind": "required",
+      "detail": "features=59",
+      "ms": 4910
+    },
+    {
+      "id": "X4_sg_submission",
+      "ok": true,
+      "kind": "required",
+      "detail": "id=c85f0fa2-a7b7-4bf3-91a8-cc1a6ea8ffe4",
+      "ms": 4944
+    },
+    {
+      "id": "X7_deeds_notice",
+      "ok": true,
+      "kind": "required",
+      "detail": "id=ac308e49-f213-41a6-963d-b7276a2df212",
+      "ms": 4989
+    },
+    {
+      "id": "A5_bylaw_register",
+      "ok": true,
+      "kind": "required",
+      "detail": "rows=2",
+      "ms": 5035
+    },
+    {
+      "id": "A5_bylaw_create",
+      "ok": true,
+      "kind": "required",
+      "detail": "id=a5417320-7ffc-47e8-9c7a-11ff6ab09350",
+      "ms": 5069
+    },
+    {
+      "id": "P10_annual_district_plan",
+      "ok": true,
+      "kind": "required",
+      "detail": "year=2090",
+      "ms": 5102
+    },
+    {
+      "id": "G11_compulsory_acquisition",
+      "ok": true,
+      "kind": "required",
+      "detail": "id=8b510303-f1b8-453e-87a4-889ea82c4541",
+      "ms": 5136
+    },
+    {
+      "id": "F7_expense_recovery",
+      "ok": true,
+      "kind": "required",
+      "detail": "id=6a71a820-e1c4-41cf-ad68-b5df7181e2fb",
+      "ms": 5269
+    },
+    {
+      "id": "C15_section109_request",
+      "ok": true,
+      "kind": "required",
+      "detail": "id=c1969ed1-82ab-4744-982d-21838b38ff17",
+      "ms": 6003
+    },
+    {
+      "id": "C15_section109_issue",
+      "ok": true,
+      "kind": "required",
+      "detail": "cert=VRDC-S109-2026-349490",
+      "ms": 6169
+    },
+    {
+      "id": "C4_register",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200 Account created",
+      "ms": 6629
+    },
+    {
+      "id": "F8_eho_complaints",
+      "ok": true,
+      "kind": "required",
+      "detail": "status=200",
+      "ms": 6783
+    }
+  ]
+}

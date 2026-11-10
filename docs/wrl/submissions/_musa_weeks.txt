@@ -1,0 +1,149 @@
+﻿==== TABLE 5 ====
+0 Area || Expections before placement || Realities of the workplace || Lessons learned
+---
+1 Daily work || There would be one project with defined activities. || Several projects, research and competition deadlines occurred simultaneously. || It is important to be able to prioritize and control the scope of the project.
+---
+2 Software || The biggest issue would be coding. || Requirements definition, deployment, security, and documentation required equal amount of time. || Engineering goes beyond programming.
+---
+3 Health care || A more efficient electronic medical records system would be well received. || Doctors mentioned data security, paper records, workflow, pharmacy and QuickBooks. || It is easier to integrate with the existing systems rather than replace them.
+---
+4 Artificial Intelligence || Running clinical model would be simple, like downloading it. || One 16 GB virtual machine without a GPU had to operate simultaneously with the database and app service. || The AI development requires taking hardware limitations into account from the very beginning.
+---
+5 Security || Standard login would be sufficient. || Various stakeholders were concerned with the patient data security, and initially proposed solution was replaced. || Using known solutions and being ready to justify the chosen methods is better than coming up with new approaches.
+---
+6 Research || Fieldwork would just be an additional task. || Enumerator recruitment, training for KoboToolbox, data cleaning and reporting took significant amount of effort. || Data quality is determined by the collection.
+---
+7 Competitions || Working demonstration would be enough to win. || Judges asked about the market, evidence base, intellectual property and limitations. || Pitching is also part of the product.
+---
+8 Intellectual property || Not really relevant yet. || IP rules from the university apply, and every project should have its own decision made. || 
+---
+==== TABLE 6 ====
+0 Assignment || Completed work || University learning involved || Relevance to practical context
+---
+1 E-ChroniBook platform || Developed and implemented web, mobile, and back-end services that include offline support, monitoring, security controls, and an AI layer. || Software engineering; database systems; systems analysis; information security || Merged requirements, architecture, security, and testing into one single product.
+---
+2 Hospital engagement || Conducted an engagement at Midlands Private Hospital where I met two stakeholders, noted their requirements, and planned return visits. || Systems analysis and design; professional practice || Conceived a prototype and developed requirements for a real hospital.
+---
+3 Raven Research Assistant || Developed an AI-driven research assistant that includes Clerk authentication, folder management, retrieval-augmented generation, token management, and a production domain. || Software engineering; data science; web development || Merged AI, subscription model, and deployment.
+---
+4 InnovateFlow || Developed an innovation lifecycle platform that features AI assessments, role-based and object level security, messaging, and dashboards. || Information systems; database systems; software engineering || Applying systems thinking to the Hub's processes.
+---
+5 ASM research fieldwork || Worked as an enumerator and data analyst for a funded mining research, assisted researchers with KoboToolbox and contributed to report writing. || Research methods; statistics; data analysis || Engaged in collecting, cleaning and reporting of field data.
+---
+6 Second research project || Analyzed data for a second Zimbabwe research project conducted through the Hub. || Statistics; data analysis; Python programming || Applied analysis skills in more than one project.
+---
+7 Fiscora and HaulCred || Created an SME financial passport and insurance risk concept and made a presentation during the InsurTech hackathon. || Data science; information systems; entrepreneurship || Application of operation data to financial risk.
+---
+8 TrueLoad || Created a blockchain battery passport concept based on EU Regulation 2023/1542 and started on a prototype. || Information systems; databases; emerging technologies || Correlated a technical design to a regulatory requirement.
+---
+9 TourLink || Created a tourism system using Java Spring Boot, Python and PostgreSQL for the Tourism Scholastica competition. || Software engineering; databases || Application of skills in a constrained and new programming stack.
+---
+10 Self-driving car || Created a Raspberry Pi self-driving car that had motor control, obstacle avoidance, parking and camera colour detection capabilities. || Programming; computer architecture; algorithms || Combined sensor, computer vision and control logic skills.
+---
+11 Pitching and reporting || Participated in the ZITF Pitching Challenge and MSU Expo, prepared pitch decks, a progress review for Hub management and monthly readiness reports. || Professional communication; project management || Exercised professional communication skills.
+---
+12 Scientific Python learning || Learned to use pandas, NumPy and Matplotlib and completed the freeCodeCamp Scientific Python course. || Programming; statistics; data analysis || Improved data analysis skills for research projects.
+---
+13 EventLink || Contribution to an MSU group presentation on an event-oriented system concept. || Systems analysis and design; group project work || Group work in an academic context.
+---
+==== TABLE 7 ====
+0 Event || Project or area || Result
+---
+1 ZITF Pitching Challenge || Innovation project pitched through the Hub || Participated
+---
+2 Tourism Scholastica (MSU Midlands Province and provincial stages) || TourLink || 3rd place
+---
+3 Bulawayo Robotics Challenge || Raspberry Pi self-driving car || 3rd place
+---
+4 MSU Expo, Gweru || Innovation projects || Exhibitor
+---
+5 MSU SRC InsurTech Hackathon, hosted by Cell Insurance || Fiscora (developed from HaulCred) || First runner-up
+---
+==== TABLE 8 ====
+0 Skill || Evidence from placement || Development achieved
+---
+1 Full-stack and mobile development || E-ChroniBook web and mobile applications, Raven and InnovateFlow. || Moved from feature-by-feature development to coherent services and common state.
+---
+2 Backend and API development || FastAPI services behind a gateway with REST and GraphQL interfaces. || Learned how to split up services by responsibility and document routes.
+---
+3 AI and retrieval || MedGemma and local models and retrieval augmented generation in three products. || Learned how to evaluate a model by capability, cost, privacy, and hardware.
+---
+4 Data analysis and research methods || Collected, cleaned, and analyzed field data using KoboToolbox, pandas, NumPy, and Matplotlib. || Learned that analysis is dependent on good questionnaire design and data collection.
+---
+5 Security engineering || Used encryption, role-based access, object-level security, auditing, and authentication. || Improved the ad-hoc security controls I was originally using and learned how to explain them.
+---
+6 Requirements and stakeholder analysis || Meet with hospital stakeholders and documented workflow and integration concerns. || Learned how to listen and change my design in response.
+---
+7 Embedded systems and computer vision || E-ChroniCar project building and tuning the Raspberry Pi car with sensors, motors, and color detection. || Learned patience when it came to hardware bugs.
+---
+8 Pitching and presentation || ZITF, InsurTech Hackathon, MSU Expo. || Learned how to succinctly identify problems and clearly answer tough questions.
+---
+9 Documentation and intellectual property || Keeping logbook entries, preparing technical documentation, and documenting E-ChroniBook intellectual property. || Learned that undocumented work is hard to defend or pass on.
+---
+10 Time management || Maintained several projects, fieldwork, competition participation and reporting. || Learned to rank work by deadlines and consequences and cut out less important tasks.
+---
+==== TABLE 13 ====
+0 Period || Main completed activities
+---
+1 January and beginning of the placement || Started working at the Innovation Hub on 10 January 2026; was introduced to the processes of the Hub, including innovation pitching and IP policy; initiated logbook writing; software development, prototyping and research activities.
+---
+2 Beginning to middle of the placement || Commenced the work on the innovation tracks: E-ChroniBook, Raven, TourLink, HaulCred, TrueLoad and the robotics car; entered competitions.
+---
+3 Middle of the placement || Entered AI, retrieval augmented generation and local models; developed the mobile app; conducted research fieldwork and data analysis; created blockchain prototype and InnovateFlow lifecycle platform; released the E-ChroniBook v1.0.0 in July 2026; prepared applications for competitions and programmes such as Cimas Healthathon 3.0.
+---
+4 Later part of the placement to September || Conducted an engagement with Midlands Private Hospital and participated in the stakeholder meeting; conducted research on hospital workflow, security and interoperability needs; researched wearables; created presentations including 22 slide progress report for Hub managers and monthly readiness report; optimized Fiscora and pitched at the InsurTech hackathon; showcased at the MSU Expo; moved Raven towards production on raven.co.zw.
+---
+==== TABLE 14 ====
+0 Case || Observed symptom
+---
+1 Robot colour detection || Only red was detected and not green.
+---
+2 Robot steering || Turning of about 90 degrees was inappropriate for the task.
+---
+3 Custom authentication || Stakeholders wanted to know how the patient data will be protected, and the initial solution was poor.
+---
+4 Clinical AI on one VM || The single 16 GB machine without GPU was supposed to handle database, services and AI.
+---
+5 Hospital workflow issues || Reception, accounting, pharmacy stock and QuickBooks were not considered in the original solution.
+---
+6 Connectivity || Patient vitals could not be sent without a signal.
+---
+7 Wearable selection || Devices had to support Android, iOS and Bluetooth Low Energy and be affordable locally.
+---
+==== TABLE 15 ====
+0 Case || Observed symptom || Checks and response || Learning
+---
+1 Robot colour detection || Red was detected but green was not. || Investigated colour handling as part of vehicle tuning, with attention to colour ranges and lighting. || Test every colour under venue-like conditions.
+---
+2 Robot steering || Turning of about 90 degrees did not suit the required movement. || Changed turning to about 60 degrees and retested the manoeuvres. || Tune behaviour against the task, not the default.
+---
+3 Custom authentication || Stakeholders asked how patient data would be protected, and the original approach was weak. || Replaced it with Argon2 or bcrypt hashing, JSON Web Tokens and environment-based secrets. || Use established controls and be able to explain them.
+---
+4 Clinical AI on one VM || One 16 GB machine with no dedicated GPU had to host the database, services and AI. || Explored CPU inference, small quantised models and a possible external GPU. || Plan AI around the hardware budget.
+---
+5 Hospital workflow gaps || Reception, accounting, pharmacy stock and QuickBooks were outside the original design. || Recorded requirements and planned follow-up observation and integration work. || Integrate with existing systems instead of replacing them.
+---
+6 Connectivity || Patient vitals could not be sent without a signal. || Added local SQLite storage with synchronisation when the connection returns. || Assume connectivity will sometimes fail.
+---
+7 Wearable selection || Devices needed Android, iOS and Bluetooth Low Energy support at a local price. || Compared affordable watches against the required measurements. || Validate accuracy before relying on readings.
+---
+8 Raven production release || The application had to be reachable on a Zimbabwean domain. || Configured raven.co.zw through WebZim, set DNS and deployed on Netlify. || Separate domain, DNS and application faults when diagnosing.
+---
+9 Case || Observed symptom || Checks and response || Learning
+---
+10 Robot colour detection || Red was detected but green was not. || Investigated colour handling as part of vehicle tuning, with attention to colour ranges and lighting. || Test every colour under venue-like conditions.
+---
+11 Robot steering || Turning of about 90 degrees did not suit the required movement. || Changed turning to about 60 degrees and retested the manoeuvres. || Tune behaviour against the task, not the default.
+---
+12 Custom authentication || Stakeholders asked how patient data would be protected, and the original approach was weak. || Replaced it with Argon2 or bcrypt hashing, JSON Web Tokens and environment-based secrets. || Use established controls and be able to explain them.
+---
+13 Clinical AI on one VM || One 16 GB machine with no dedicated GPU had to host the database, services and AI. || Explored CPU inference, small quantised models and a possible external GPU. || Plan AI around the hardware budget.
+---
+14 Hospital workflow gaps || Reception, accounting, pharmacy stock and QuickBooks were outside the original design. || Recorded requirements and planned follow-up observation and integration work. || Integrate with existing systems instead of replacing them.
+---
+15 Connectivity || Patient vitals could not be sent without a signal. || Added local SQLite storage with synchronisation when the connection returns. || Assume connectivity will sometimes fail.
+---
+16 Wearable selection || Devices needed Android, iOS and Bluetooth Low Energy support at a local price. || Compared affordable watches against the required measurements. || Validate accuracy before relying on readings.
+---
+17 Raven production release || The application had to be reachable on a Zimbabwean domain. || Configured raven.co.zw through WebZim, set DNS and deployed on Netlify. || Separate domain, DNS and application faults when diagnosing.
+---

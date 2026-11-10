@@ -1,0 +1,556 @@
+{
+  "at": "2026-10-22T00:47:43.630Z",
+  "pass": 91,
+  "soft_fail": 0,
+  "hard_fail": 0,
+  "hits": [
+    {
+      "role": "admin",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=employees"
+    },
+    {
+      "role": "admin",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=employees"
+    },
+    {
+      "role": "admin",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "admin",
+      "action": "click:Overview",
+      "ok": true,
+      "detail": "http://localhost:5174/admin"
+    },
+    {
+      "role": "admin",
+      "action": "click:Employee accounts",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=employees"
+    },
+    {
+      "role": "admin",
+      "action": "click:Invitations",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=invitations"
+    },
+    {
+      "role": "admin",
+      "action": "click:Roles & permissions",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=roles"
+    },
+    {
+      "role": "admin",
+      "action": "click:Org structure",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=org"
+    },
+    {
+      "role": "admin",
+      "action": "click:Audit trail",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=audit"
+    },
+    {
+      "role": "admin",
+      "action": "click:Active sessions",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=sessions"
+    },
+    {
+      "role": "admin",
+      "action": "click:Sign-in security",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=signin"
+    },
+    {
+      "role": "admin",
+      "action": "click:System health",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=health"
+    },
+    {
+      "role": "admin",
+      "action": "click:Email & jobs",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=jobs"
+    },
+    {
+      "role": "admin",
+      "action": "click:Backups",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=backups"
+    },
+    {
+      "role": "admin",
+      "action": "click:Portal usage",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=usage"
+    },
+    {
+      "role": "admin",
+      "action": "click:Announcements",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=announcements"
+    },
+    {
+      "role": "admin",
+      "action": "click:System settings",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=settings"
+    },
+    {
+      "role": "admin",
+      "action": "click:Integrations",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=integrations"
+    },
+    {
+      "role": "admin",
+      "action": "click:Console preferences",
+      "ok": true,
+      "detail": "http://localhost:5174/admin?section=preferences"
+    },
+    {
+      "role": "admin",
+      "action": "crawl_summary",
+      "ok": true,
+      "detail": "clicked=16 of 16 nav"
+    },
+    {
+      "role": "planner",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/planner"
+    },
+    {
+      "role": "planner",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/planner"
+    },
+    {
+      "role": "planner",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "planner",
+      "action": "crawl_summary",
+      "ok": true,
+      "detail": "clicked=0 of 0 nav"
+    },
+    {
+      "role": "eo",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/eo-planner-portal"
+    },
+    {
+      "role": "eo",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/eo-planner-portal"
+    },
+    {
+      "role": "eo",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "eo",
+      "action": "crawl_summary",
+      "ok": true,
+      "detail": "clicked=0 of 0 nav"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Dashboard",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Find a file",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=search"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Application receipt",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=receipt"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Development matrix",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=matrix"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Document verification",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=verification"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Public inspection",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=public_inspection"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Statutory deadlines",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=deadlines"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Acknowledgements",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=acknowledgements"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Public notices",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=notices"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Refusal letters",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=refusals"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Development Register",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=register"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Correspondence",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=correspondence"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Fees & cashbook",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=fees"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:File movement",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=movements"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Permit dispatch",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=dispatch"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Enforcement records",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=enforcement"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Appeals",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=appeals"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "click:Console preferences",
+      "ok": true,
+      "detail": "http://localhost:5174/planning-clerk-portal?section=preferences"
+    },
+    {
+      "role": "planning_clerk",
+      "action": "crawl_summary",
+      "ok": true,
+      "detail": "clicked=18 of 18 nav"
+    },
+    {
+      "role": "building_inspector",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/inspector-workspace"
+    },
+    {
+      "role": "building_inspector",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/inspector-workspace"
+    },
+    {
+      "role": "building_inspector",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "building_inspector",
+      "action": "crawl_summary",
+      "ok": true,
+      "detail": "clicked=0 of 0 nav"
+    },
+    {
+      "role": "gis_officer",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/gis-officer-portal"
+    },
+    {
+      "role": "gis_officer",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/gis-officer-portal"
+    },
+    {
+      "role": "gis_officer",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "gis_officer",
+      "action": "crawl_summary",
+      "ok": true,
+      "soft": true,
+      "detail": "no nav items found (shell may be map-first)"
+    },
+    {
+      "role": "surveyor",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/surveyor"
+    },
+    {
+      "role": "surveyor",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/surveyor"
+    },
+    {
+      "role": "surveyor",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "surveyor",
+      "action": "crawl_summary",
+      "ok": true,
+      "soft": true,
+      "detail": "no nav items found (shell may be map-first)"
+    },
+    {
+      "role": "viewer",
+      "action": "login",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen"
+    },
+    {
+      "role": "viewer",
+      "action": "land_home",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen"
+    },
+    {
+      "role": "viewer",
+      "action": "home_render",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Home",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=dashboard"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Reception / services",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=services"
+    },
+    {
+      "role": "viewer",
+      "action": "click:New application",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=new"
+    },
+    {
+      "role": "viewer",
+      "action": "click:My applications",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=applications"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Map",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=map"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Documents",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=documents"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Public notices",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=notices"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Payments",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=payments"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Inspections",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=inspections"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Certificates",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=certificates"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Rates clearance",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=rates_clearance"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Appeals",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=appeals"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Report building",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=complaints"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Service requests",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=service_desk"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Profile",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=profile"
+    },
+    {
+      "role": "viewer",
+      "action": "click:Reference",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=reference"
+    },
+    {
+      "role": "viewer",
+      "action": "crawl_summary",
+      "ok": true,
+      "detail": "clicked=16 of 16 nav"
+    },
+    {
+      "role": "eo",
+      "action": "open_statutory_registers",
+      "ok": true,
+      "detail": "http://localhost:5174/statutory-registers"
+    },
+    {
+      "role": "eo",
+      "action": "tab_bylaws",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "eo",
+      "action": "tab_plans",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "eo",
+      "action": "tab_acquisitions",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "eo",
+      "action": "tab_clearances",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "eo",
+      "action": "tab_expenses",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "role": "eo",
+      "action": "create_bylaw_ui",
+      "ok": true,
+      "detail": "list=3"
+    },
+    {
+      "role": "viewer",
+      "action": "open_rates_clearance",
+      "ok": true,
+      "detail": "http://localhost:5174/citizen?section=rates_clearance"
+    },
+    {
+      "role": "viewer",
+      "action": "lodge_rates_clearance",
+      "ok": true,
+      "detail": "Request lodged. The planning clerk will review charges and issue the certificate when paid up."
+    }
+  ]
+}

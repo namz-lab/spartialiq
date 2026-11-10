@@ -1,0 +1,331 @@
+﻿python : Traceback (most recent call last):
+At C:\Users\munya\AppData\Local\Temp\ps-script-f7feba78-4756-41ca-8859-9c5c8478c4be.ps1:162 char:1
++ python -c "
++ ~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "<string>", line 12, in <module>
+    print(f'[{ri},{ci}]', txt[:500].replace('\\n',' / '))
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2011' in position 442: character maps to <undefined>
+\n==== TABLE 0 ====
+[0,0] Name
+---
+[0,1] NEIL N. CHOENI
+---
+[1,0] Supervisor Name
+---
+[1,1] Malvern Masiye
+---
+[2,0] Reg Number
+---
+[2,1] R241503J
+---
+[3,0] Program
+---
+[3,1] Computer Science
+---
+[4,0] Level
+---
+[4,1] 3.1
+---
+[5,0] Company Name
+---
+[5,1] Institute of Chartered Accountants of 
+Zimbabwe
+---
+[6,0] Address
+---
+[6,1] 2 Bath Rd, Integrity House, Belgravia
+---
+\n==== TABLE 1 ====
+[0,0] DATE
+---
+[0,1] DESCRIPTION OF WORK DONE
+---
+[0,2] Applied/Learnt Skills
+---
+[1,0] Week 1 
+26/01/26-
+30/01/26
+---
+[1,1] Introduction to the IT team and other staff members.  
+ 
+Attended an orientation session about ICAZ including mission, values, 
+history and organisational structure 
+ 
+I conducted an IT induction, PR and Marketing Induction and the Registry department Induction. 
+ 
+Completed necessary paperwork and documentation for internship onboarding. 
+ 
+Met with my supervisor, Malvern Masiye to discuss expectations, goals and internship structure. 
+ 
+Introduced to the Proxmox servers and backups. 
+ 
+Assiste
+---
+[1,2] I learnt how organisational IT departments operate and how different systems integrate. 
+  
+I gained an understanding of server infrastructure, backup strategies and the importance of proper data management. I also developed basic Linux server administration skills. 
+ 
+I learnt about virtualisation, where organisational servers are virtually installed and managed using virtual machines rather than physical hardware. This improved my understanding of efficient resource utilisation, server scalabi
+---
+\n==== TABLE 2 ====
+[0,1] Linux useful commands in the server.
+---
+[1,0] DATE
+---
+[1,1] DESCRIPTION OF WORK DONE
+---
+[1,2] Applied/Learnt Skills
+---
+[2,0] Week 2 
+02/02/26-
+06/02/26
+---
+[2,1] Technical 	Induction 	and 	Finance 
+Induction. 
+ 
+Website review and Edits on IMIS system 
+  
+Freshdesk Tickets where the tickets are the IT support queries from members in different countries. 
+ 
+Creating Of winter school event on 
+IMIS System  
+ 
+VOIP configurations for the new 
+graduate trainee 
+ 
+Adding the new trainee on AZURE and the Active directory t 
+ 
+Printer drivers installed for a user�s system and resolved printer-related issues 
+ 
+Liquid network case issue where GPON was red and th
+---
+[2,2] I learnt how enterprise systems such as iMIS support organisational operations.  
+ 
+I improved my understanding of identity management using Azure and Active Directory, VoIP configuration and basic network troubleshooting. 
+ 
+The Active Directory is the central control system of a windows-based network. Its use is to manage users, computers and also security policy engagement. 
+ 
+Hand-on experience with IT support and troubleshooting 
+(printers and drivers)
+---
+\n==== TABLE 3 ====
+[0,1] Read and analysed ICT committee meeting minutes to familiarize myself with ongoing projects and priorities. 
+ 
+Conducted research on ICAZ (Institute of Chartered Accountants of Zimbabwe) system processes from EExaminations, IT asset management, networking and databases, system analysis, server management, technologies and recommendations, website and mobile app development.
+---
+[1,0] DATE
+---
+[1,1] DESCRIPTION OF WORK DONE
+---
+[1,2] Applied/Learnt Skills
+---
+[2,0] Week 3 
+09/02/26-
+13/03/26
+---
+[2,1] Freshdesk tickets for different members and stakeholders 
+ 
+Making queries using the intelligent query architect. 
+ 
+ICT assets register marking. 
+ 
+VoIP server configurations. 
+ 
+Understood the relevance of Power over Ethernet (PoE) 
+ 
+Installation of ESET endpoint system to users. 
+
+Started research on creating a Moodle 
+LMS 
+ 
+Uploading of live newspapers on sites. 
+ 
+Knowbe4 security awareness campaign for employees and simulation of phishing email to test user knowledge 
+ 
+Freshdesk resolut
+---
+[2,2] I learnt the importance of cybersecurity awareness, endpoint protection and user education. 
+ 
+I also gained knowledge of network architecture used at ICAZ (Institute of Chartered Accountants of Zimbabwe concepts such as PoE, asset management and security policies designed to protect users and organisational systems. 
+
+I learnt how to identify phishing emails and malicious links. 
+
+The KnowBe4 security at 
+ICAZ offers different courses and was taught how to make password secure and how to proper
+---
+\n==== TABLE 4 ====
+[0,1] .
+---
+[1,0] DATE
+---
+[1,1] DESCRIPTION OF WORK DONE
+---
+[1,2] Applied/Learnt Skills
+---
+[2,0] Week 4  
+16/02/26-
+20/02/26
+---
+[2,1] Freshdesk, IT, supports resolution of issues from members in the ticketing system. 
+ 
+ Uploading newspapers on the website. 
+ 
+Assisting in creating the Moodle learning management system.
+---
+[2,2] I learnt how learning platforms are deployed and managed. I also gained practical experience in database administration, data backup and restoration.  
+ 
+	Through 	configuring 
+Coretalk, I gained practical
+---
+\n==== TABLE 5 ====
+[0,1] Adding courses and competency frameworks for ICAZ Students 
+ 
+Introduction to WordPress for the 
+Vimbiso website and working on them. 
+ 
+Uploading of content to the portal. 
+ 
+Configuring Coretalk is the bulk text messaging app used for birthdays and important text messages. 
+ 
+Managing databases using the SQL Server Management Studio for the Coretalk desktop application. 
+ 
+Database backups and restoration processes. 
+ 
+	While 	supporting 	the 	SAICA 
+SecureClient examination portal, an issue w
+---
+[0,2] experience in integrating a desktop communication system with a SQL database for storing contacts, message logs and delivery reports. 
+This enhanced my understanding of database-driven applications and my understanding of communication systems in a professional environment. 
+ 
+Through managing the Coretalk database in SQL Server Management Studio, I gained practical experience in performing database backups and understanding the importance of data integrity and recovery in communication systems.
+---
+[2,0] DATE
+---
+[2,1] DESCRIPTION OF WORK DONE
+---
+[2,2] Applied/Learnt Skills
+---
+[3,0] Week 5 
+23/02/26-
+27/02/26
+---
+[3,1] Using IMIS system to deploy results on emails for the APC exams. 
+ 
+Creating queries for retrieving members from business objects. 
+ 
+Continued handling Freshdesk tickets, basic network checks and user support. 
+ 
+Configuring the wireless printer for other staff members. 
+ 
+Freshdesk internal stakeholder meeting in the boardroom whereby different stakeholders and staff were taught to efficiently handle tickets from members and how to close resolved tickets. 
+ 
+Reset expired passwords and managed
+---
+[3,2] I learnt how examination systems handle sensitive information and the importance of access control and confidentiality policies when managing member data. 
+ 
+Learnt safe handling of shared resources such as printers for different users. 
+ 
+I assisted in facilitating a managing partner meeting by connecting attendees from different parts of the world using Clever Share and Microsoft Teams. This improved my understanding of virtual collaboration tools and how technology supports effective communic
+---
+\n==== TABLE 6 ====
+[0,1] I assisted in installing and restoring backup files on the Belina Payroll servers to ensure system continuity and data recovery.
+---
+[0,2] Packet capturing and traffic analysis 
+ 
+I applied skills in server support, data backup and 
+restoration
+---
+[1,0] DATE
+---
+[1,1] DESCRIPTION OF WORK DONE
+---
+[1,2] Applied/Learnt Skills
+---
+[2,0] Week 6 
+02/03/26-
+06/03/26
+---
+[2,1] Assisted with routine IT support tasks, system monitoring and documentation. 
+ 
+ 
+Meetings were held to introduce ICAZ staff to the Edge Online framework, a system acquired by ICAZ but originally developed and managed by CAA. The sessions focused on system understanding and knowledge transfer. 
+ 
+Created video responses for frequently repeated Freshdesk queries to provide clear and consistent solutions. 
+ 
+Presented to students on how to register for the APT examination using the ICAZ portal.
+---
+[2,2] I learnt how enterprise systems are transitioned between organizations and the importance of training and knowledge transfer when adopting a new system. 
+ 
+I learnt how creating reusable video solutions improves efficiency and user support in IT service management. 
+ 
+I learnt how to demonstrate online systems, guide users through registration processes and communicate technical information clearly to students. I improved my technical knowledge of the ICAZ portal while also developing key soft s
+---
+\n==== TABLE 7 ====
+[0,1] Assisted in hosting a demonstration of the newly developed ICAZ requisition and payment system where users were guided on how to create requisitions, follow approval processes and complete payments using the system. 
+ 
+I assisted with maintaining and updating the organisation�s website code for upcoming events. This included editing existing event pages, updating event details where required, and implementing/updating JavaScript countdown timers to display accurate time remaining to event start 
+---
+[0,2] confidence, public speaking and user engagement. 
+ 
+I learnt how digital requisition and payment systems are used to streamline organizational processes. The demonstration improved my understanding of system workflows and enhanced my communication and user-support skills through assisting users during the session. 
+ 
+Gained experience in IT procurement and writing requestions.  
+ 
+I applied and strengthened skills in web development and website maintenance particularly working with HTML/CSS and 
+---
+[1,0] DATE
+---
+[1,1] DESCRIPTION OF WORK DONE
+---
+[1,2] Applied/Learnt Skills
+---
+[2,0] Week 7 
+09/03/26-
+13/03/26
+---
+[2,1] A presentation was conducted during a staff meeting on data protection. Since my supervisor is the Data Protection Officer (DPO), I assisted by preparing the presentation slides and practical examples explaining how the Cyber
+---
+[2,2] I gained a better understanding of data protection principles and how national legislation applies within an institutional environment. Preparing the slides and examples
+---
+\n==== TABLE 8 ====
+[0,1] and Data Protection Act of Zimbabwe applies to ICAZ and its operations. 
+ 
+Continued handling Freshdesk tickets, basic network checks and user support. 
+ 
+Supported system users, monitored servers and assisted with hardware maintenance. 
+ 
+I was assigned the task of setting up and managing the PA system for a workplace braai event. This involved preparing the audio equipment, ensuring proper sound distribution and supporting smooth communication during the event. 
+ 
+I assisted in the creation an
+---
+[0,2] improved my knowledge of cybersecurity, compliance requirements and improved my soft skills, particularly communication, research and presentation skills. 
+ 
+I learnt how PA systems are set up and managed for events. The experience improved my technical skills in handling audio equipment and enhanced my soft skills particularly teamwork, responsibility and communication during live events. 
+ 
+User credentials management and account troubleshooting. 
+ 
+Improved skills in Microsoft Teams administr
+---
+\n==== TABLE 9 ====
+[0,1] fixed IP address which is required for seamless communication and integration with the CoreTalk system.
+---
+[0,2] of fixed IP addresses for communication systems.
+---
+[1,0] DATE
+---
+[1,1] DESCRIPTION OF WORK DONE
+---
+[1,2] Applied/Learnt Skills
+---
+[2,0] Week 8 
+16/03/26-
+20/03/26
+---
+[2,1] 

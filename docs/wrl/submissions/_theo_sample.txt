@@ -1,0 +1,21 @@
+﻿WORK:
+Day 1 (Mon 23 Feb) - Project Orientation and Onboarding
+Attended the formal project orientation with supervisor Dr Paradzayi. Received the full project brief for the GIS-based Municipal Planning Information System commissioned by Vungu Rural District Council. The system is required to support nineteen wards and a five-tier user hierarchy covering public access, applicants, planning officers, senior planners, and administrators. Reviewed the project brief and made notes on the scope of the frontend responsibilities: the public map interface, the application submission portal, the planning officer dashboard, the senior planner overview, and the administrator panel.
+
+Day 2 (Tue 24 Feb) - Prototype Frontend Review
+Reviewed the existing prototype frontend codebase. Identified several structural problems: no consistent component structure, API base URLs hardcoded directly in each JavaScript file rather than in a single configuration, no error handling for failed API calls, and the Leaflet map initialisation was duplicated in multiple files. Documented the findings and presented them to the supervisor alongside Munyaradzi's backend findings from the same review.
+
+Day 3 (Wed 25 Feb) - Leaflet.js and GIS Standards Research
+Studied the Leaflet.js documentation to understand how the interactive map library works: tile layer loading, GeoJSON layer rendering, popup handling, and map controls. Researched how WMS (Web Map Service) tile layers are consumed in Leaflet using L.tileLayer.wms(), which is how the QGIS Server map tiles will be integrated. Understood the difference between raster tiles served by WMS and vector features served as GeoJSON, and how Leaflet handles each.
+
+Day 4 (Thu 26 Feb) - Technology Stack Research
+Researched the frontend technology decisions. Vanilla JavaScript was confirmed as the approach for this project, avoiding framework overhead for a system that needs to run reliably on low-bandwidth connections. Reviewed CSS grid and flexbox layout strategies for the responsive dashboard interfaces. Installed the development environment: VS Code with ESLint and Prettier, Node.js for running local tooling, and Git.
+
+Day 5 (Fri 27 Feb) - Remote SSH Configuration and Team Meeting
+Configured VS Code Remote-SSH to connect to the project development server, enabling file edits to take effect on the server directly without a separate upload step. Team meeting with Dr Paradzayi and Munyaradzi: roles confirmed (Theophelos handles frontend, Munyaradzi handles backend), Git branching strategy agreed (feature branches for development, main branch for reviewed code only), VM credentials expected in the first week of March.
+COMMENTS:
+The project brief described a large and complex system, but breaking it into user roles made the scope manageable: each role has a defined set of screens, and those screens have a clear relationship to the data flows described in the brief. Starting from the user role structure rather than the feature list made it easier to plan the frontend work.
+
+The prototype frontend had the same kind of structural problems the backend did. Hardcoded URLs are a maintenance problem in any codebase, but in a frontend application they become critical when the server address or port changes during deployment. A single configuration file that all other files reference is the correct approach.
+
+Leaflet.js was new to me. The distinction between tile layers (raster images from a tile server) and GeoJSON layers (vector features rendered by the browser) was important to grasp early, because the application uses both and they behave very differently in terms of performance and interactivity.

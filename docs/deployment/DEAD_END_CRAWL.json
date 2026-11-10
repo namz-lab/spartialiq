@@ -1,0 +1,288 @@
+{
+  "at": "2026-10-22T01:04:19.553Z",
+  "count": 47,
+  "fails": [
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=dashboard",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=workflow",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=register",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=property",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=referrals",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=participation",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=inspections",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=committee",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=appeals",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=enforcement",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=plans",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=forward",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=layouts",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=matrix",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=reports",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.planner@vungu.test",
+      "page": "/planner?pane=console&section=reference",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/catalogue"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=dashboard",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/deadlines?days=30"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=dashboard",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=search",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=receipt",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=verification",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=public_inspection",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/receipts?limit=40"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=public_inspection",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/inspections?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=public_inspection",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=matrix",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=deadlines",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/deadlines?days=30"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=deadlines",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=acknowledgements",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/acknowledgements?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=acknowledgements",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=notices",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/certificates?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=notices",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=refusals",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/refusals?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=refusals",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=register",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=correspondence",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/correspondence?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=correspondence",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=fees",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/receipts?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=fees",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=movements",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/movements?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=movements",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=dispatch",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/dispatches?limit=50&offset=0"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=dispatch",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/registers/dispatches?limit=500"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=dispatch",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=enforcement",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=appeals",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.clerk@vungu.test",
+      "page": "/planning-clerk-portal?section=preferences",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/planning-clerk/overview"
+    },
+    {
+      "role": "demo.admin@vungu.test",
+      "page": "/admin/users",
+      "kind": "api 500",
+      "detail": "http://localhost:5174/api/admin/overview"
+    }
+  ]
+}

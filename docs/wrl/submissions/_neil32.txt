@@ -1,0 +1,122 @@
+﻿neil paras 97 chars 34006
+0 LEVEL 3.2 REPORT
+1 BY
+2 NEIL N. CHOENI
+3 (R241503J)
+4 ABSTRACT
+5 This Work-Related Learning (WRL) Report 2 presents an evaluation of the industrial attachment undertaken in the Informat
+6 The report demonstrates how the activities carried out during the attachment relate to the Bachelor of Science Honours D
+7 The report also discusses the challenges encountered during the attachment, the balance between personal learning object
+8 ACKNOWLEDGEMENTS
+9 I would like to express my sincere appreciation to everyone who supported me during my Work-Related Learning at the Inst
+10 My special thanks go to my industrial supervisor and mentor Mr. Malvern Masiye for his guidance, patience, encouragement
+11 My appreciation also goes to Midlands State University, particularly the Department of Computer Science for organising t
+12 Finally, I would like to thank my family and friends for their continuous support, encouragement and motivation througho
+13 DEDICATION
+14 This report is dedicated to my family, whose unwavering support, encouragement and belief have been a constant source of
+15 Special dedication is also extended to Mr. Malvern Masiye and the ICAZ ICT team for their guidance, mentorship and willi
+16 PREAMBLE
+17 This report is the second in the Work-Related Learning (WRL) series and builds on the Level 3.1 Report, which introduced
+18 The first report presented the Institute of Chartered Accountants of Zimbabwe (ICAZ) as a professional accounting body e
+19 In addition, the first report examined the industry in which ICAZ operates and discussed the importance of governance, d
+20 Building on this foundation, this report provides a reflection on the industrial attachment experience. It compares the 
+21 2. EXPECTATIONS VS REALITY
+22 2.1 Expectations vs Reality
+23 At the commencement of my attachment, my expectations were largely shaped by my academic studies and a general understan
+24 My exposure to systems administration also exceeded my expectations. I worked with enterprise server environments, virtu
+25 One of the greatest differences between my expectations and the actual Work-related Learning experience was the level of
+26 I was also exposed to database administration and business process automation to a much greater extent than I had antici
+27 Another area that exceeded my expectations was participation in software development and digital transformation initiati
+28 In addition to my technical responsibilities, I created user guides and instructional videos providing training and supp
+29 Overall, the Work-related Learning significantly exceeded my initial expectations. It provided practical exposure to sys
+30 2.2 WRL Assignments and Relevance to Degree Programme
+31 The assignments undertaken during my industrial attachment closely aligned with the theoretical concepts covered in the 
+32 The database concepts learned in database systems modules were directly applicable to several of my responsibilities. I 
+33 Concepts from networking and data communications were also reinforced throughout the attachment. I participated in netwo
+34 Cybersecurity principles formed a significant part of my Work-related Learning experience. Modules related to computer s
+35 Knowledge gained from operating systems and systems administration courses was applied through the administration of Mic
+36 Software engineering and systems analysis concepts were reinforced through my involvement in various software developmen
+37 Web technologies studied during the degree programme were also applied in practice. I assisted in the administration and
+38 The Work-related Learning period also strengthened my understanding of professional, ethical and legal issues in computi
+39 Overall, the industrial Work-related Learning period demonstrated that the knowledge acquired through the first two year
+40 3. PERSONAL AND PROFESSIONAL DEVELOPMENT
+41 3.1 Key Skills Developed
+42 The industrial Work-related Learning period enabled me to develop a broad range of technical competencies through hands-
+43 In systems administration, I developed practical skills in Microsoft 365 administration, Active Directory and Microsoft 
+44 Through my involvement in infrastructure and server-related activities, I gained exposure to virtualisation technologies
+45 In database management, I became proficient in creating and modifying database queries using Intelligent Query Architect
+46 I also developed practical networking skills through troubleshooting network connectivity issues, configuring printers a
+47 Cybersecurity was one of the areas in which I experienced the greatest professional growth. I participated in cybersecur
+48 The Work-related Learning programme further strengthened my skills in learning management system administration. I worke
+49 In software development and digital transformation initiatives, I participated in testing and supporting systems such as
+50 I also gained experience in web technologies and content management through maintaining organisational websites, creatin
+51 Beyond technical skills, I developed competencies in ICT service management and governance using Freshdesk, asset regist
+52 Overall, the Work-related Learning period significantly improved my technical capabilities and professional confidence. 
+53 3.2 Personal Development
+54 Beyond technical skills, the Work-Related Learning period contributed significantly to my personal and professional grow
+55 One of the areas in which I experienced the greatest improvement was communication. Throughout the Work-Related Learning
+56 The Work-Related Learning period also improved my time-management and organisational skills. Balancing support requests,
+57 My problem-solving and analytical abilities developed significantly throughout the programme. I was frequently required 
+58 Attention to detail became increasingly important in many of the activities I performed. Tasks such as data cleaning, sy
+59 Most importantly, the experience reinforced the values of integrity, confidentiality and ethical responsibility. Working
+60 3.3 Handling Conflict Between Personal and Organisational Objectives
+61 During the Work-Related Learning period, I encountered several situations where my personal objectives did not always al
+62 One of the main challenges involved balancing my desire to explore new technologies with the organisation's need for sta
+63 Another challenge involved balancing my interest in complex technical tasks with the routine responsibilities that form 
+64 A further challenge related to balancing technical curiosity with the need to maintain confidentiality. Throughout the W
+65 There were also instances where I identified potential improvements to systems, processes, or technologies used within t
+66 Overall, managing these differences between personal objectives and organisational priorities taught me valuable lessons
+67 4. EVALUATION AND RECOMMENDATIONS
+68 4.1 Re-entry into the University
+69 As the Work-Related Learning period draws towards its conclusion, I have reflected on how the experience will influence 
+70 The Work-Related Learning period has also helped me identify areas of particular interest within the ICT field. Through 
+71 In addition, the professional habits developed during the Work-Related Learning period will be valuable when returning t
+72 I am also aware that returning to university presents its own challenges. After working in a structured and professional
+73 Furthermore, I intend to maintain the professional relationships and networks established during the Work-Related Learni
+74 4.2 Recommendations to the University
+75 Based on my experience during the Work-Related Learning period, I would like to make the following recommendations:
+76 Firstly, the university should increase practical exposure to enterprise technologies such as Microsoft 365, Active Dire
+77 Secondly, the cybersecurity component of the programme should be strengthened through more hands-on training in areas su
+78 Thirdly, greater emphasis should be placed on professional skills such as technical documentation, report writing, prese
+79 Finally, the university should continue updating the curriculum to align with current industry trends, including cloud c
+---TAIL---
+57 My problem-solving and analytical abilities developed significantly throughout the programme. I was frequently required 
+58 Attention to detail became increasingly important in many of the activities I performed. Tasks such as data cleaning, sy
+59 Most importantly, the experience reinforced the values of integrity, confidentiality and ethical responsibility. Working
+60 3.3 Handling Conflict Between Personal and Organisational Objectives
+61 During the Work-Related Learning period, I encountered several situations where my personal objectives did not always al
+62 One of the main challenges involved balancing my desire to explore new technologies with the organisation's need for sta
+63 Another challenge involved balancing my interest in complex technical tasks with the routine responsibilities that form 
+64 A further challenge related to balancing technical curiosity with the need to maintain confidentiality. Throughout the W
+65 There were also instances where I identified potential improvements to systems, processes, or technologies used within t
+66 Overall, managing these differences between personal objectives and organisational priorities taught me valuable lessons
+67 4. EVALUATION AND RECOMMENDATIONS
+68 4.1 Re-entry into the University
+69 As the Work-Related Learning period draws towards its conclusion, I have reflected on how the experience will influence 
+70 The Work-Related Learning period has also helped me identify areas of particular interest within the ICT field. Through 
+71 In addition, the professional habits developed during the Work-Related Learning period will be valuable when returning t
+72 I am also aware that returning to university presents its own challenges. After working in a structured and professional
+73 Furthermore, I intend to maintain the professional relationships and networks established during the Work-Related Learni
+74 4.2 Recommendations to the University
+75 Based on my experience during the Work-Related Learning period, I would like to make the following recommendations:
+76 Firstly, the university should increase practical exposure to enterprise technologies such as Microsoft 365, Active Dire
+77 Secondly, the cybersecurity component of the programme should be strengthened through more hands-on training in areas su
+78 Thirdly, greater emphasis should be placed on professional skills such as technical documentation, report writing, prese
+79 Finally, the university should continue updating the curriculum to align with current industry trends, including cloud c
+80 4.3 Recommendations to the Company
+81 Based on my experience during the Work-Related Learning period, I would like to offer the following recommendations to I
+82 Firstly, the Institute should continue investing in business process automation across its systems and departments. Duri
+83 Secondly, I recommend continued investment in staff and user training on the various systems used by the Institute. Regu
+84 Thirdly, as ICAZ continues to expand its digital platforms and online services it should maintain its focus on cybersecu
+85 Finally, I recommend continued support for Work-Related Learning students and graduate trainees through involvement in r
+86 Overall, ICAZ provides an excellent learning environment that combines technical exposure, professional development and 
+87 5. CONCLUSION
+88 The Work-Related Learning period at the Institute of Chartered Accountants of Zimbabwe was a valuable and rewarding expe
+89 The experience exceeded my initial expectations by exposing me to a wide range of enterprise technologies, business proc
+90 The Work-Related Learning period also provided valuable insight into the role of ICT in supporting organisational operat
+91 Overall, the Work-Related Learning period laid a strong foundation for my future career in Information and Communication
+92 6. REFERENCES
+93 [1]	Midlands State University, Faculty of Science and Technology, Department of Computer Science, Work Related Learning 
+94 [2]	Institute of Chartered Accountants of Zimbabwe (ICAZ), ICT Policies and Procedures Manual, Harare, Zimbabwe, 2021.
+95 [3]	Institute of Chartered Accountants of Zimbabwe (ICAZ), �About Us,� ICAZ Official Website, Harare, Zimbabwe. [Online]
+96 [4]	Government of Zimbabwe, Cyber and Data Protection Act [Chapter 11:12], Harare, Zimbabwe: Government Printer, 2021.

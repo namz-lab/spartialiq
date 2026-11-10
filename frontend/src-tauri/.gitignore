@@ -1,0 +1,9 @@
+/target/
+/resources/local-stack/
+/resources/node/
+/resources/postgres/
+# Updater private key — never commit. Public key (.pub) is safe to commit.
+/keys/*.key
+!/keys/*.key.pub
+!/keys/README.md
+
