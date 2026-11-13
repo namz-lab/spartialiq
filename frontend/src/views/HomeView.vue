@@ -391,7 +391,7 @@ const SERVICES = [
     action: 'Submit',
   },
   {
-    to: '/payments',
+    to: '/citizen?section=payments',
     icon: CreditCard,
     title: 'Pay council fees',
     desc: 'Settle rates, application fees and other council charges, and download the receipt.',

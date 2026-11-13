@@ -11,7 +11,7 @@
  * code: the check can never pass. ('user' was such a phantom — removed.)
  *
  * Council staff:  admin · planner · eo · env_officer · building_inspector ·
- *                 planning_clerk · finance_officer · surveyor · gis_officer
+ *                 planning_clerk · surveyor · gis_officer
  * Outside users:  viewer · registered · public
  *
  * `admin` is the council *IT* role (accounts + system configuration), not a
@@ -30,7 +30,6 @@ export type Role =
   | 'env_officer'
   | 'building_inspector'
   | 'planning_clerk'
-  | 'finance_officer'
   | 'surveyor'
   | 'gis_officer'
   // GIS Branch (backend migration 132; permission matrix in
@@ -43,6 +42,23 @@ export type Role =
   | 'gis_clerk'
   | 'dept_editor'
   | 'dept_viewer'
+  // Finance (backend migration 188). The permission each one carries is in
+  // finance.role_permission and is served to the client by GET /api/finance/me;
+  // the module's own store reads it rather than hardcoding a matrix here.
+  | 'finance_admin'
+  | 'finance_officer'
+  | 'budget_officer'
+  | 'dept_head'
+  | 'finance_committee'
+  | 'publisher'
+  | 'auditor'
+  // Finance (backend migration 207): the cash office, the book-keeper, revenue and the executive.
+  | 'accountant'
+  | 'cashier'
+  | 'revenue_officer'
+  | 'accounting_officer'
+  // Backend migration 208: the senior cashier who supervises the tills.
+  | 'cash_supervisor'
   | 'viewer'
   | 'registered'
   | 'public'
@@ -54,6 +70,21 @@ export type Role =
  * src/config/permissions.js.
  */
 export const CLIENT_ROLES: readonly Role[] = ['registered', 'viewer', 'public']
+
+/**
+ * The finance roles (backend migration 188).
+ *
+ * They are council staff, but not PLANNING staff: a finance officer has no business in a permit
+ * case file and does not appear in COUNCIL_STAFF in the router. What each of them may do inside
+ * the finance module is decided by the server's permission catalogue, not by this list — this is
+ * only "may they open the finance workspace at all".
+ */
+export const FINANCE_ROLES: readonly Role[] = [
+  'finance_admin', 'finance_officer', 'budget_officer', 'dept_head',
+  'finance_committee', 'publisher', 'auditor',
+  'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
+  'cash_supervisor',
+]
 
 export function isClientRole(role: string | null | undefined): boolean {
   return (CLIENT_ROLES as readonly string[]).includes(String(role ?? ''))

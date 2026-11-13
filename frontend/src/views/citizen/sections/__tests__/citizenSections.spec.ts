@@ -14,12 +14,17 @@ const permit = {
   created_at: '2026-09-01T00:00:00Z', received_at: '2026-09-02T00:00:00Z', updated_at: '2026-09-10T00:00:00Z',
 }
 
-const { applications, dmApi, getCaseSnapshot, getCouncil, listMine, showToast } = vi.hoisted(() => ({
+const { applications, apiGet, apiPost, dmApi, getCaseSnapshot, getCouncil, listMine, showToast } = vi.hoisted(() => ({
   applications: { value: [] as any[] },
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
   dmApi: {
     uploadPermitDocument: vi.fn(),
     listObjections: vi.fn(),
     getPublicNotice: vi.fn(),
+    // NoticesSection.refresh() reads this before anything else; leaving it
+    // unmocked made the mounted hook throw and no duty ever loaded.
+    listOpenPublicNotices: vi.fn(),
     createObjection: vi.fn(),
     listPermitDocuments: vi.fn(),
     getCertificate: vi.fn(),
@@ -42,6 +47,21 @@ vi.mock('@/composables/useCitizenCase', async (orig) => {
 })
 
 vi.mock('@/services/developmentManagementService', () => ({ dmApi }))
+
+// NoticesSection reads GET /title-notices/mine through the axios client directly. Left unmocked
+// it was a REAL request: happy-dom's document origin is http://localhost:3000, which is the
+// development backend's port, so the test talked to whatever server the developer had running.
+// That is also why this spec was intermittent — the section loads in two chained rounds, and
+// whether the second (each case's duties and objections) had run by the time the assertions
+// executed depended on how fast that live request failed. A mocked reply settles in a microtask,
+// which is what the test's flushes actually wait for.
+vi.mock('@/services/api', async (orig) => {
+  const real = await orig<typeof import('@/services/api')>()
+  return {
+    ...real,
+    default: { get: apiGet, post: apiPost, put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+  }
+})
 
 vi.mock('@/services/citizenPortalService', async (orig) => {
   const real = await orig<typeof import('@/services/citizenPortalService')>()
@@ -92,6 +112,10 @@ function chooseFile(input: any, name = 'response.pdf') {
 beforeEach(() => {
   vi.clearAllMocks()
   applications.value = [permit]
+  // The shape the axios client returns: `{ data: { data } }`. A section that reads an endpoint
+  // this spec is not about gets an empty list rather than a rejected promise.
+  apiGet.mockResolvedValue({ data: { data: [] } })
+  apiPost.mockResolvedValue({ data: { data: null } })
 })
 
 describe('ApplicationsSection case detail', () => {
@@ -130,6 +154,7 @@ describe('ApplicationsSection case detail', () => {
 
 describe('NoticesSection', () => {
   beforeEach(() => {
+    dmApi.listOpenPublicNotices.mockResolvedValue([])
     dmApi.listObjections.mockResolvedValue([
       { id: 'O1', objector_name: 'Neighbour', grounds: 'Blocks light', received_at: '2026-09-06T00:00:00Z', resolved_at: null, resolution: null },
     ])
@@ -143,7 +168,12 @@ describe('NoticesSection', () => {
   it('shows council-confirmed duties and uploads a written response instead of posting an objection', async () => {
     dmApi.uploadPermitDocument.mockResolvedValue({ id: 'D9' })
     const { w } = await mountWith(NoticesSection)
+    // The section refreshes in two chained rounds (open notices, then each
+    // case's duties and objections), and Vue re-renders a tick after the
+    // second lands. Flush past both before asserting on the confirmed duties.
+    await flushPromises()
     await w.find('.no-btn.primary').trigger('click')
+    await flushPromises()
     const text = w.text()
     expect(text).toContain('Confirmed by Council')
     expect(text).toContain('Chronicle p.14')

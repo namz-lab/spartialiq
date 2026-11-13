@@ -32,25 +32,9 @@ import './styles/public-pages.css'
 import './styles/auth.css'
 import { escapeHtml } from './utils/escapeHtml'
 
-function alreadyOnHostedServer(): boolean {
-  const host = window.location.hostname
-  return host.endsWith('trycloudflare.com') || host.endsWith('ngrok-free.app')
-}
-
 async function launch() {
   const host = document.querySelector('#app')
-  // The hosted page also runs inside the desktop window. Asking for the
-  // address again never mounts the council screens, so the window stays white.
-  if (host && isTauri() && !alreadyOnHostedServer()) {
-    try {
-      const hosted = await invoke<string | null>('hosted_web_url')
-      if (hosted && !alreadyOnHostedServer()) {
-        host.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;font:16px system-ui;color:#343a40">Opening the council server…</div>'
-        return
-      }
-    } catch (error) {
-      console.error('Hosted council address was not read:', error)
-    }
+  if (host && isTauri()) {
     host.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;font:16px system-ui;color:#343a40">Starting local PostGIS and council services…</div>'
     try {
       await invoke('start_local_stack')

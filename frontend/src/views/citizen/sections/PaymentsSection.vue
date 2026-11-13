@@ -7,8 +7,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCitizenCase } from '@/composables/useCitizenCase'
 import { citizenPortalService } from '@/services/citizenPortalService'
-import { paymentsService, type Payment, type PaymentStatus, type CouncilCharge } from '@/services/paymentsService'
-import PaymentMethodPicker from '@/components/PaymentMethodPicker.vue'
+import { paymentsService, type Payment, type PaymentStatus } from '@/services/paymentsService'
 import type { PermitApplication } from '@/services/developmentManagementService'
 import { AlertTriangle, Home, Info, ReceiptText, RefreshCw } from 'lucide-vue-next'
 
@@ -16,29 +15,15 @@ const router = useRouter()
 const cc = useCitizenCase()
 
 const payments = ref<Payment[]>([])
-const charges = ref<CouncilCharge[]>([])
-const paynowLive = ref(false)
 const loading = ref(false)
 const loadError = ref('')
 const applicationFee = ref<number | null>(null)
-const selected = ref<CouncilCharge | null>(null)
-const accountRef = ref('')
-const billAmount = ref('')
-const paying = ref(false)
-const payError = ref('')
 
 async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [mine, tariff, methods] = await Promise.all([
-      paymentsService.listMine(),
-      paymentsService.tariff(),
-      paymentsService.methods().catch(() => []),
-    ])
-    payments.value = mine
-    charges.value = tariff
-    paynowLive.value = methods.some(m => m.id === 'paynow' && m.live)
+    payments.value = await paymentsService.listMine()
   } catch {
     loadError.value = 'Could not load your payment history. Check your connection and try again.'
   } finally {
@@ -74,85 +59,12 @@ const STATUS: Record<PaymentStatus, { label: string; cls: string }> = {
   refunded:          { label: 'Refunded',      cls: 'pill-gray' },
 }
 const PURPOSE: Record<string, string> = {
-  application_fee: 'Development application',
-  inspection_fee: 'Stage inspection',
-  permit_fee: 'Development permit',
+  application_fee: 'Application fee',
+  inspection_fee: 'Inspection fee',
+  permit_fee: 'Permit fee',
   occupation_certificate: 'Occupation certificate',
-  land_rates: 'Land rates',
-  supplementary_charge: 'Supplementary charge',
-  rates_clearance: 'Rates clearance certificate',
-  shop_licence: 'Shop licence',
-  vendor_permit: 'Vendor permit',
-  refuse_charge: 'Refuse removal',
-  water_charge: 'Water',
-  sewer_charge: 'Sewerage',
-  cemetery_fee: 'Cemetery',
-  market_fee: 'Market stall',
-  stand_deposit: 'Stand deposit',
-  lease_rent: 'Lease rent',
-  plan_scrutiny: 'Plan scrutiny',
-  advertisement_fee: 'Advertisement permit',
-  wayleave_fee: 'Wayleave',
-  property_search: 'Property search',
-  hall_hire: 'Hall hire',
-  dog_licence: 'Dog licence',
-  appeal_fee: 'Appeal',
 }
-function purposeLabel(p: string) {
-  return charges.value.find(c => c.code === p)?.title ?? PURPOSE[p] ?? p.replace(/_/g, ' ')
-}
-
-const departments = computed(() => {
-  const order: string[] = []
-  for (const c of charges.value) if (!order.includes(c.department)) order.push(c.department)
-  return order.map(name => ({ name, items: charges.value.filter(c => c.department === name) }))
-})
-
-function choose(c: CouncilCharge) {
-  selected.value = c
-  accountRef.value = ''
-  billAmount.value = ''
-  payError.value = ''
-}
-function chargePrice(c: CouncilCharge | null): number | null {
-  if (!c) return null
-  if (c.pricedBy === 'tariff') return c.amountUsd
-  const n = Number(billAmount.value)
-  return Number.isFinite(n) && n >= 0.01 ? n : null
-}
-
-async function onPay(p: { wallet: 'ecocash' | 'onemoney' | 'innbucks'; phone: string; walletCcy: 'USD' | 'ZWG' }) {
-  const charge = selected.value
-  const price = chargePrice(charge)
-  if (!charge || price == null || paying.value) return
-  if (charge.pricedBy === 'bill' && accountRef.value.trim().length < 2) {
-    payError.value = 'Enter the stand or account number on the statement.'
-    return
-  }
-  paying.value = true
-  payError.value = ''
-  try {
-    const payment = await paymentsService.init({
-      purpose: charge.code,
-      relatedKind: 'council_charge',
-      relatedId: charge.code,
-      priceUsd: price,
-      walletCcy: p.walletCcy,
-      driver: paynowLive.value ? 'paynow' : 'manual',
-      metadata: {
-        phone: p.phone,
-        wallet: p.wallet,
-        accountRef: accountRef.value.trim() || undefined,
-      },
-    })
-    selected.value = null
-    router.push(`/payment/${payment.id}`)
-  } catch {
-    payError.value = 'Payment could not start. Check the details and try again.'
-  } finally {
-    paying.value = false
-  }
-}
+function purposeLabel(p: string) { return PURPOSE[p] ?? p.replace(/_/g, ' ') }
 function caseFor(pay: Payment) { return cc.applications.value.find(a => a.id === pay.relatedId) }
 function amount(pay: Payment) {
   return pay.walletCcy === 'ZWG'
@@ -170,7 +82,7 @@ function fmtDate(iso: string | null) {
     <header class="pay-header">
       <div>
         <h1>Payments &amp; fees</h1>
-        <p>Pay rates, licences, permits and the other charges a resident settles with the council.</p>
+        <p>Fees owed on your applications and every payment you have made to the council.</p>
       </div>
       <button type="button" class="pay-refresh" :disabled="loading" title="Refresh" aria-label="Refresh" @click="load">
         <RefreshCw :size="16" :class="{ spin: loading }" />
@@ -179,50 +91,6 @@ function fmtDate(iso: string | null) {
 
     <div class="pay-grid">
       <section class="pay-main">
-        <div class="cp-card">
-          <div class="cp-card-head between">
-            <h2>Council charges</h2>
-            <span>{{ charges.length }}</span>
-          </div>
-          <p class="pay-intro">Choose a charge. EcoCash, OneMoney and InnBucks go through Paynow. The amount on a fixed charge comes from the working tariff. Rates, water, refuse, sewer and lease rent use the amount on your statement.</p>
-          <div v-for="group in departments" :key="group.name" class="pay-dept">
-            <h3>{{ group.name }}</h3>
-            <div v-for="c in group.items" :key="c.code" class="pay-charge">
-              <div>
-                <p class="pay-row-title">{{ c.title }}</p>
-                <p class="pay-row-sub">{{ c.detail }}</p>
-              </div>
-              <div class="pay-pending-r">
-                <p class="pay-due">{{ c.pricedBy === 'tariff' && c.amountUsd != null ? `USD ${c.amountUsd.toFixed(2)}` : c.unitLabel }}</p>
-                <button type="button" class="pay-btn primary" @click="choose(c)">Pay</button>
-              </div>
-            </div>
-          </div>
-          <div v-if="selected" class="pay-checkout">
-            <h3>Pay {{ selected.title }}</h3>
-            <p class="pay-row-sub">{{ selected.detail }}</p>
-            <template v-if="selected.pricedBy === 'bill'">
-              <label class="pay-field">Stand or account number
-                <input v-model="accountRef" type="text" maxlength="64" placeholder="Account or stand number" />
-              </label>
-              <label class="pay-field">Amount on the statement (USD)
-                <input v-model="billAmount" type="number" min="0.01" step="0.01" placeholder="0.00" />
-              </label>
-            </template>
-            <PaymentMethodPicker
-              v-if="chargePrice(selected) != null"
-              :title="selected.title"
-              :price-usd="chargePrice(selected)!"
-              :council="{ name: 'Vungu Rural District Council' }"
-              :busy="paying"
-              @submit="onPay"
-              @cancel="selected = null"
-            />
-            <p v-else class="pay-row-sub">Enter the amount on the statement to continue.</p>
-            <p v-if="payError" class="pay-error" role="alert">{{ payError }}</p>
-          </div>
-        </div>
-
         <!-- Owed -->
         <div class="cp-card">
           <div class="cp-card-head between">
@@ -292,16 +160,16 @@ function fmtDate(iso: string | null) {
         <div class="cp-card">
           <div class="cp-card-head"><h2>Council fees</h2></div>
           <dl class="pay-fees">
-            <div v-for="c in charges.filter(x => x.pricedBy === 'tariff')" :key="c.code">
-              <dt>{{ c.title }}</dt>
-              <dd>{{ c.amountUsd != null ? `USD ${c.amountUsd.toFixed(2)}` : 'As billed' }}</dd>
+            <div>
+              <dt>Development application</dt>
+              <dd>{{ applicationFee != null ? `USD ${applicationFee.toFixed(2)}` : 'Confirmed at invoice' }}</dd>
             </div>
           </dl>
-          <p class="pay-fees-note">This is the working tariff in the system. Finance replaces a figure when Council adopts a new one. Account charges are the amount on the statement.</p>
+          <p class="pay-fees-note">Inspection, certificate and appeal fees are set by Council resolution and invoiced when they fall due. Ask the Planning Clerk for the current tariff.</p>
         </div>
         <div class="pay-secure">
           <h3>How payment works</h3>
-          <p>Pay by EcoCash, OneMoney or InnBucks. Paynow sends the prompt to your phone when the council Paynow account is connected. Until then, confirming the payment on the next screen issues the council receipt.</p>
+          <p>Pay by EcoCash, OneMoney or InnBucks through Paynow, in USD or ZWG at the day’s rate. Your wallet PIN is entered on your phone, never on this site.</p>
         </div>
       </aside>
     </div>
@@ -380,15 +248,6 @@ function fmtDate(iso: string | null) {
 .pay-secure { padding:1.1rem 1.25rem; border:1px solid var(--cp-border); border-radius:var(--cp-radius); background:var(--cp-surface); }
 .pay-secure h3 { margin:0 0 0.35rem; font-size:0.95rem; font-weight:600; color:var(--cp-text); }
 .pay-secure p  { margin:0; font-size:0.82rem; line-height:1.5; color:var(--cp-text-2); }
-
-.pay-intro { margin:0; padding:0.85rem 1rem; font-size:0.8rem; line-height:1.5; color:var(--cp-text-2); border-bottom:1px solid var(--cp-border); }
-.pay-dept { padding:0.4rem 0 0.2rem; }
-.pay-dept h3 { margin:0; padding:0.55rem 1rem 0.2rem; font-size:0.68rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--cp-muted); }
-.pay-charge { display:flex; justify-content:space-between; gap:1rem; padding:0.7rem 1rem; border-top:1px solid var(--cp-border); }
-.pay-checkout { padding:1rem; border-top:1px solid var(--cp-border); background:var(--cp-surface-2); }
-.pay-checkout h3 { margin:0 0 0.25rem; font-size:1rem; }
-.pay-field { display:flex; flex-direction:column; gap:0.25rem; margin:0.6rem 0; font-size:0.78rem; font-weight:600; color:var(--cp-text-2); }
-.pay-field input { font:inherit; font-weight:500; padding:0.5rem 0.65rem; border:1px solid var(--cp-border); border-radius:var(--cp-radius-sm); background:var(--cp-surface); color:var(--cp-text); }
 
 @media (max-width: 640px) {
   .pay-table thead { display:none; }

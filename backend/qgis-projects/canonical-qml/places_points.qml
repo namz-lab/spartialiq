@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : places_points
      style version : v1
-     style id      : b9f8eb1d-2a02-445a-9cbf-68993e6d84ff
+     style id      : 11b76596-4315-431a-bdea-0ed5240a25bf
      checksum      : sha256:15f3c8e37081356c61a2cc55bacfd3a356840b9583231f5a8e3790fba03c053f
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

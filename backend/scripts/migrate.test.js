@@ -91,6 +91,9 @@ describe('migration plan', () => {
       '134_zones_single_source.sql',
       '135_zones_area_ha.sql',
       '136_zones_id_sequence.sql',
+      // Pre-existing drift, found while adding 188: 137 has been in migrate.js's allowlist and
+      // absent from this pin, which is the staleness the comment below warns about.
+      '137_parcel_accuracy_basis.sql',
       '138_district_development_matrix.sql',
       '139_plan_model_foundation.sql',
       '140_plan_scoped_matrix.sql',
@@ -129,6 +132,53 @@ describe('migration plan', () => {
       '174_parcel_survey_class.sql',
       '175_parcel_event.sql',
       '176_surveypro_import_run.sql',
+      // Applied to dev by hand and once missing from this list: routes read columns these add
+      // (stands.requires_minister_approval among them), so a chain-built database 500s without them.
+      '181_council_statutory_registers.sql',
+      '182_custodian_boundary_scaffolds.sql',
+      '183_acua_stand_subunits.sql',
+      '184_runtime_gap_tables.sql',
+      '185_use_cases_complete.sql',
+      '186_zoning_lookup_view.sql',
+      '187_fill_parcel_register_and_rates.sql',
+      // The finance foundation: the finance schema, the chart of accounts, budgets and their
+      // revision history, the actuals register, imports, projects, publication control and the
+      // finance permission catalogue. Depends on 154/165/167 for tenancy.
+      '188_finance_foundation.sql',
+      // Audit closures: project year/currency reporting, transaction/line year guard, document
+      // year derivation, closed-year coverage for project links, and the dormant exchange-rate note.
+      '189_finance_project_reporting.sql',
+      '190_finance_transaction_line_year.sql',
+      '191_finance_document_year.sql',
+      '192_finance_closed_year_project_links.sql',
+      '193_finance_exchange_rate_dormant.sql',
+      // P-01: set-based publication policies; no RLS weakening.
+      '194_finance_public_query_performance.sql',
+      // /api/context/parcels reads it; the endpoint 500s on a chain-built database without it.
+      '195_parcel_estimated_accuracy.sql',
+      // 085 dropped 077's pending_payment from the permit status CHECK; the online
+      // application-fee flow has been refused since.
+      '196_permit_pending_payment_restored.sql',
+      // published_select is the public session's path, not other councils' staff.
+      '197_published_select_public_session_only.sql',
+      '198_finance_spatial_allocation.sql',
+      '199_finance_ward_performance.sql',
+      // The four access-control blockers from the production-readiness audit: published_select
+      // for finance.spatial_allocation, the published budget-line view, the
+      // finance.document.withdraw write permission, and separation of duties over one person's
+      // effective permission set.
+      '200_finance_access_control_hardening.sql',
+      // Decision D11 provisionally: the COD-AB ZW1704 wards linked to VUNGU as basis 'interim'.
+      '201_authority_ward_provisional_register.sql',
+      // The ward/project measure views the finance map renders, project physical progress (D12),
+      // the closed-year guard on spatial allocations, and the reduction re-validation.
+      '202_finance_spatial_measures_and_progress.sql',
+      '203_finance_general_ledger.sql',
+      '204_finance_budget_phasing.sql',
+      '205_finance_rates.sql',
+      '206_finance_rates_operations.sql',
+      '207_finance_cash_office.sql',
+      '208_cash_session_lifecycle.sql',
     ])
 
     for (const filename of MIGRATIONS) {

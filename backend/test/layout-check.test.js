@@ -51,8 +51,11 @@ describe('service tokens', () => {
 })
 
 // ── the route and the rules ─────────────────────────────────────────────────────────────────────────────────────────────────────
-// its own patch of ground, so suites running side by side cannot meet on it
-const W0 = -86500, S0 = 2153500
+// its own patch of ground, so suites running side by side cannot meet on it -- and, since
+// migration 187 filled the register with the real farm extract (lon 29.1-30.2 across the
+// district), far from the district entirely: north of the Zambezi at lat -17.5, in the same
+// Lo29 belt the check transforms from, where the council holds no parcels within 50 km.
+const W0 = -86500, S0 = 1935750
 const poly = (w, s, size = 30) => JSON.stringify({ type: 'Polygon', coordinates: [[[w, s], [w + size, s], [w + size, s + size], [w, s + size], [w, s]]] })
 const TOWN = 'CHK-TEST-TOWN'
 const PROJECT = 998001

@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : vungu_cemeteries
      style version : v1
-     style id      : 8d4d9853-dadd-499a-a731-b2a461f65a8d
+     style id      : 81e3bb6a-a100-498d-87aa-900dcd51e561
      checksum      : sha256:31928a7ec66ad50a5d457788241dddb670d7246758f46f45e4873a47613e05b5
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

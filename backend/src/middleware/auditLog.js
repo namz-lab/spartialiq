@@ -69,6 +69,66 @@ const RULES = [
   { match: '/admin/ip-blocks',     event: 'SECURITY',      severity: 'high',     entity: 'ip_block' },
   { match: '/admin/announcements', event: 'ANNOUNCE',      severity: 'medium',   entity: 'announcement' },
   { match: '/admin/org',           event: 'ORG',           severity: 'medium',   entity: 'org_position' },
+  // Finance (migration 188). Listed before the general '/documents' and '/gis' rules because the
+  // first match wins and '/api/finance/documents' would otherwise be filed as a plain document.
+  // A publication or an approval is the most consequential thing this module does, so both are
+  // 'critical'; a refused attempt lands here too, which is what makes an unauthorised publication
+  // attempt visible to an auditor.
+  { match: '/finance/publications', event: 'FIN_PUBLICATION', severity: 'critical', entity: 'finance_publication' },
+  { match: '/finance/budget-revisions', event: 'FIN_REVISION', severity: 'critical', entity: 'finance_budget_revision' },
+  { match: '/finance/budget-lines', event: 'FIN_BUDGET',     severity: 'high',     entity: 'finance_budget_line' },
+  // Geographic attribution of money (GIS-finance migration 198): changes how every ward
+  // roll-up reads, so refusals are as visible as decisions.
+  { match: '/finance/spatial-allocations', event: 'FIN_SPATIAL_ALLOCATION', severity: 'high', entity: 'finance_spatial_allocation' },
+  { match: '/finance/imports',     event: 'FIN_IMPORT',     severity: 'critical', entity: 'finance_import_batch' },
+  { match: '/finance/financial-years', event: 'FIN_CONFIG',  severity: 'high',     entity: 'finance_financial_year' },
+  { match: '/finance/accounts',    event: 'FIN_CONFIG',     severity: 'high',     entity: 'finance_account' },
+  { match: '/finance/departments', event: 'FIN_CONFIG',     severity: 'high',     entity: 'finance_department' },
+  { match: '/finance/programmes',  event: 'FIN_CONFIG',     severity: 'medium',   entity: 'finance_programme' },
+  { match: '/finance/activities',  event: 'FIN_CONFIG',     severity: 'medium',   entity: 'finance_activity' },
+  { match: '/finance/settings',    event: 'FIN_CONFIG',     severity: 'high',     entity: 'finance_setting' },
+  { match: '/finance/column-mappings', event: 'FIN_CONFIG', severity: 'medium',   entity: 'finance_column_mapping' },
+  { match: '/finance/projects',    event: 'FIN_PROJECT',    severity: 'high',     entity: 'finance_project' },
+  { match: '/finance/transactions', event: 'FIN_TRANSACTION', severity: 'high',   entity: 'finance_transaction' },
+  { match: '/finance/documents',   event: 'FIN_DOCUMENT',   severity: 'medium',   entity: 'finance_document' },
+  // Changing who holds finance access is a permission grant, not generic finance activity: the
+  // audit screen's "Permission grants" filter must find it.
+  { match: '/finance/users',       event: 'FIN_PERMISSION', severity: 'high',     entity: 'finance_user_access' },
+  { match: '/finance/permissions', event: 'FIN_PERMISSION', severity: 'high',     entity: 'finance_permission_grant' },
+  // The book of account (migration 203) and rates billing (205, 206). These had no rule of their
+  // own and fell through to the generic '/finance' line below, so posting a voucher, closing a
+  // year and committing a billing run were all filed as medium-severity "FINANCE" with no entity
+  // -- indistinguishable, in the audit screen, from somebody opening a report. Posting is the act
+  // that puts a figure beyond amendment and a tariff approval sets what every property is charged,
+  // so both are 'critical', and a refused attempt lands here too.
+  { match: '/finance/ledger/close-year', event: 'FIN_LEDGER_POST', severity: 'critical', entity: 'finance_ledger_year' },
+  { match: '/finance/ledger/vouchers', event: 'FIN_LEDGER_POST', severity: 'critical', entity: 'finance_voucher' },
+  { match: '/finance/ledger/periods', event: 'FIN_LEDGER',  severity: 'high',     entity: 'finance_ledger_period' },
+  { match: '/finance/ledger',      event: 'FIN_LEDGER',     severity: 'high',     entity: 'finance_ledger' },
+  { match: '/finance/rates/billing', event: 'FIN_RATES_BILLING', severity: 'critical', entity: 'finance_rates_billing_run' },
+  { match: '/finance/rates/tariffs', event: 'FIN_RATES_TARIFF', severity: 'critical', entity: 'finance_rates_tariff' },
+  { match: '/finance/rates/receipts', event: 'FIN_RATES_RECEIPT', severity: 'high', entity: 'finance_rates_receipt' },
+  { match: '/finance/rates',       event: 'FIN_RATES',      severity: 'high',     entity: 'finance_rates' },
+  // The cash office (migration 207). Verifying a cash-up posts a day's takings and is the same
+  // act as posting a voucher, so it is 'critical'; a receipt, a cancellation and a banking are money
+  // changing hands and are 'high'. More specific prefixes first: the first match wins.
+  { match: '/finance/cash/sessions', event: 'FIN_CASH_SESSION', severity: 'critical', entity: 'finance_cashier_session' },
+  { match: '/finance/cash/receipts', event: 'FIN_CASH_RECEIPT', severity: 'high', entity: 'finance_cash_receipt' },
+  { match: '/finance/cash/deposits', event: 'FIN_CASH_DEPOSIT', severity: 'high', entity: 'finance_bank_deposit' },
+  // Migration 208: who may work which drawer. Session lifecycle acts (suspend, abandon, supervised
+  // count) fall under /finance/cash/sessions above, at critical.
+  { match: '/finance/cash/assignments', event: 'FIN_CASH_ASSIGNMENT', severity: 'high', entity: 'finance_cash_point_assignment' },
+  { match: '/finance/cash',        event: 'FIN_CASH',       severity: 'high',     entity: 'finance_cash_office' },
+  // The internal audit plan and its findings (migration 210): the auditor's own record.
+  { match: '/finance/payables/payments', event: 'FIN_PAYMENT_VOUCHER', severity: 'critical', entity: 'finance_supplier_payment' },
+  { match: '/finance/payables', event: 'FIN_SUPPLIER_INVOICE', severity: 'high', entity: 'finance_supplier_invoice' },
+  { match: '/finance/assets/runs', event: 'FIN_DEPRECIATION', severity: 'critical', entity: 'finance_depreciation_run' },
+  { match: '/finance/assets', event: 'FIN_ASSET', severity: 'high', entity: 'finance_fixed_asset' },
+  { match: '/finance/bank', event: 'FIN_BANK_RECONCILIATION', severity: 'high', entity: 'finance_bank_statement' },
+  { match: '/finance/migration/cutovers', event: 'FIN_CUTOVER', severity: 'critical', entity: 'finance_cutover' },
+  { match: '/finance/migration', event: 'FIN_MIGRATION', severity: 'critical', entity: 'finance_migration_batch' },
+  { match: '/finance/internal-audit', event: 'FIN_INTERNAL_AUDIT', severity: 'high', entity: 'finance_audit_engagement' },
+  { match: '/finance',             event: 'FINANCE',        severity: 'medium',   entity: null },
   { match: '/auth/invite',         event: 'USER_MGMT',     severity: 'high',     entity: 'invite' },
   { match: '/auth',                event: 'AUTH',          severity: 'medium',   entity: null },
   { match: '/kyc',                 event: 'KYC',           severity: 'high',     entity: 'kyc_check' },
@@ -165,7 +225,15 @@ async function auditLog(fastify) {
           Number.isFinite(ms) ? Math.round(ms) : null,
           entity, entityId(req),
           ip, ua,
-          JSON.stringify({ routerPath: req.routeOptions?.url ?? req.routerPath ?? null }),
+          // A route may attach the before/after state of the change it just made
+          // (req.auditDetails). The generic hook cannot know it, and an auditor
+          // needs it for the changes that matter most — a permission grant, for
+          // one. Everything is merged under the route's own keys, so a route
+          // cannot accidentally overwrite routerPath.
+          JSON.stringify({
+            ...(req.auditDetails && typeof req.auditDetails === 'object' ? req.auditDetails : {}),
+            routerPath: req.routeOptions?.url ?? req.routerPath ?? null,
+          }),
         ],
       )
     } catch (err) {

@@ -3,6 +3,14 @@
 -- uuid while the zone polygons use integer ids. This adds a polygon matrix
 -- the lookup can read, and fills a working decision for each real land use.
 -- Notes say it is not a gazetted resolution.
+--
+-- The two views are DROPped rather than CREATE OR REPLACEd: the chain's own
+-- zone_effective_controls (migration 138, refined through 165) carries a
+-- `source` column this replacement intentionally does not, and PostgreSQL
+-- refuses to drop a column through CREATE OR REPLACE VIEW. A view is code,
+-- not data — dropping and recreating is the same act, expressed in a way
+-- that works on a database built from the chain and on one this was first
+-- run against by hand.
 
 BEGIN;
 
@@ -18,7 +26,8 @@ CREATE TABLE IF NOT EXISTS public.zone_polygon_decision (
   PRIMARY KEY (zone_id, land_use_group_id)
 );
 
-CREATE OR REPLACE VIEW public.zone_effective_controls AS
+DROP VIEW IF EXISTS public.zone_effective_controls;
+CREATE VIEW public.zone_effective_controls AS
 SELECT NULL::uuid AS id,
        d.zone_id,
        d.land_use_group_id,
@@ -32,7 +41,8 @@ SELECT NULL::uuid AS id,
        NULL::uuid AS deleted_by
   FROM public.zone_polygon_decision d;
 
-CREATE OR REPLACE VIEW public.zone_decision_status AS
+DROP VIEW IF EXISTS public.zone_decision_status;
+CREATE VIEW public.zone_decision_status AS
 SELECT z.id AS zone_id,
        NULL::uuid AS plan_id,
        'Vungu working matrix'::text AS plan_title,

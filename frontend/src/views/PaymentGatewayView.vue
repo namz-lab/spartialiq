@@ -6,14 +6,12 @@ import { ArrowLeft, Shield, Lock, CheckCircle2, AlertCircle, FileText } from 'lu
 
 const route  = useRoute()
 const router = useRouter()
-const paymentId = computed(() => String(route.params.refNo || route.params.id || ''))
+const paymentId = computed(() => String(route.params.id || ''))
 
 const payment = ref<any>(null)
 const loading = ref(true)
 const fatal   = ref('')
 const polling = ref(false)
-const confirming = ref(false)
-const confirmError = ref('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const step = computed<'awaiting'|'success'|'cancelled'|'failed'>(() => {
@@ -37,15 +35,6 @@ async function checkNow() {
   finally { polling.value = false }
 }
 
-async function confirmReceipt() {
-  if (confirming.value) return
-  confirming.value = true
-  confirmError.value = ''
-  try { payment.value = await paymentsService.confirmManual(paymentId.value) }
-  catch { confirmError.value = 'The receipt could not be issued. Try again, or pay at the finance counter.' }
-  finally { confirming.value = false }
-}
-
 async function cancel() {
   if (!confirm('Cancel this payment? You can pay again from the Payments tab.')) return
   try { payment.value = await paymentsService.cancel(paymentId.value) }
@@ -57,11 +46,6 @@ function startPolling() {
 }
 
 onMounted(async () => {
-  if (!paymentId.value) {
-    fatal.value = 'Payment not found.'
-    loading.value = false
-    return
-  }
   await refresh()
   loading.value = false
   if (step.value === 'awaiting') startPolling()
@@ -105,22 +89,15 @@ function fmtAmount() {
       <div v-if="step === 'awaiting'" class="pgw-center-card">
         <div class="pgw-state-emoji">📱</div>
         <h2 class="pgw-center-heading">Check your phone</h2>
-        <p v-if="payment.metadata?.title" class="pgw-center-text">{{ payment.metadata.title }}</p>
         <p class="pgw-center-text">
           A payment prompt has been sent to <strong>{{ payment.metadata?.phone || 'your phone' }}</strong>.
         </p>
-        <p class="pgw-hint pgw-hint--center">
-          <template v-if="payment.driver === 'paynow'">Accept the prompt to pay {{ fmtAmount() }}.</template>
-          <template v-else>Paynow sends this prompt when the council Paynow account is connected. Confirming here issues the council receipt.</template>
-        </p>
+        <p class="pgw-hint pgw-hint--center">Accept the prompt to pay {{ fmtAmount() }}.</p>
         <div class="pgw-center-actions">
-          <button v-if="payment.driver === 'manual'" class="pgw-btn-primary" data-test="pgw-confirm"
-                  :disabled="confirming" @click="confirmReceipt">Confirm and issue receipt</button>
           <button class="pgw-btn-secondary" data-test="pgw-check-now"
                   :disabled="polling" @click="checkNow">Check Now</button>
           <button class="pgw-btn-ghost" @click="cancel">Cancel</button>
         </div>
-        <p v-if="confirmError" class="pgw-hint pgw-hint--center">{{ confirmError }}</p>
       </div>
 
       <div v-else-if="step === 'success'" class="pgw-center-card">

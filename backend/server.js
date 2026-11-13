@@ -48,7 +48,6 @@ const { applicationStatusRoutes } = require('./src/routes/application-status')
 
 // Turn C: payments (USD/ZiG) + citizen-document verification.
 const { paymentRoutes } = require('./src/routes/payments')
-const { financeRoutes } = require('./src/routes/finance')
 const { documentRoutes } = require('./src/routes/documents')
 
 // Editable public-site content (CMS) — replaces the static vungurdc.org.zw
@@ -110,6 +109,33 @@ const { controlPointRoutes } = require('./src/routes/controlPoints')
 const { propertyRoutes } = require('./src/routes/properties')
 const { councilOpsRoutes } = require('./src/routes/council-ops')
 const { councilRegistersRoutes } = require('./src/routes/council-registers')
+// Integrated budget and financial management (migration 188). Seven modules, split by the thing
+// each one is responsible for rather than by screen: configuration, budgets, imports, projects,
+// publication, documents, reports — plus the public read-only surface, which is deliberately the
+// only one of them that answers an unauthenticated request.
+const { financeConfigRoutes } = require('./src/routes/finance-config')
+const { financeUsersRoutes } = require('./src/routes/finance-users')
+const { financeBudgetRoutes } = require('./src/routes/finance-budget')
+const { financeImportRoutes } = require('./src/routes/finance-imports')
+const { financeProjectRoutes } = require('./src/routes/finance-projects')
+const { financePublicationRoutes } = require('./src/routes/finance-publication')
+const { financeDocumentRoutes } = require('./src/routes/finance-documents')
+const { financeReportRoutes } = require('./src/routes/finance-reports')
+const { financePublicRoutes } = require('./src/routes/finance-public')
+const { financeSpatialRoutes } = require('./src/routes/finance-spatial')
+const { financeTransactionRoutes } = require('./src/routes/finance-transactions')
+const { financeLedgerRoutes } = require('./src/routes/finance-ledger')
+const { financeRatesRoutes } = require('./src/routes/finance-rates')
+const { financeCashRoutes } = require('./src/routes/finance-cash')
+const { financeAccountingRoutes } = require('./src/routes/finance-accounting')
+const { financeBudgetingRoutes } = require('./src/routes/finance-budgeting')
+const { financeDashboardRoutes } = require('./src/routes/finance-dashboards')
+const { financeInternalAuditRoutes } = require('./src/routes/finance-internal-audit')
+const { financeOverviewRoutes } = require('./src/routes/finance-overview')
+const { financeMigrationRoutes } = require('./src/routes/finance-migration')
+const { financeBankRoutes } = require('./src/routes/finance-bank')
+const { financePayablesRoutes } = require('./src/routes/finance-payables')
+const { financeAssetsRoutes } = require('./src/routes/finance-assets')
 const { custodianBoundaryRoutes } = require('./src/routes/custodian-boundary')
 const { titleNoticeRoutes } = require('./src/routes/title-notices')
 const { publicObjectionRoutes } = require('./src/routes/public-objections')
@@ -225,36 +251,17 @@ async function build() {
     'http://localhost:5174',
     'http://localhost:5175',
     'http://localhost:3000',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-    'http://127.0.0.1:5175',
-    'http://127.0.0.1:3000',
     'http://127.0.0.1:58487',
-    'http://tauri.localhost',
-    'https://tauri.localhost',
-    'tauri://localhost',
   ]
   const configuredOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '')
     .split(',')
     .map(origin => origin.trim())
     .filter(Boolean)
-  // The desktop window is http://tauri.localhost and calls the API on
-  // 127.0.0.1:3000. Without this origin the browser drops every response,
-  // so PostGIS layers and the QGIS catalogue look disconnected.
-  const devOriginAllowed = (origin) => {
-    if (!origin) return true
-    if (localOrigins.includes(origin) || configuredOrigins.includes(origin)) return true
-    try {
-      const url = new URL(origin)
-      if (url.protocol === 'tauri:') return true
-      if (url.hostname === 'tauri.localhost') return true
-      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true
-    } catch { /* not a URL */ }
-    return false
-  }
-  const corsOrigins = process.env.NODE_ENV === 'production'
-    ? (configuredOrigins.length ? configuredOrigins : ['https://vungu-rdc.org'])
-    : (origin, cb) => { cb(null, devOriginAllowed(origin) ? true : false) }
+  const corsOrigins = configuredOrigins.length
+    ? configuredOrigins
+    : process.env.NODE_ENV === 'production'
+      ? ['https://vungu-rdc.org']
+      : localOrigins
 
   // ── Security headers (@fastify/helmet) ──────────────────────────────────
   // Was installed but never registered. Without this, browsers receive no
@@ -630,10 +637,9 @@ async function build() {
   // Register Payments + Documents (Turn C).
   try {
     await server.register(paymentRoutes,   { prefix: '/api' })
-    await server.register(financeRoutes,   { prefix: '/api' })
     await server.register(documentRoutes,  { prefix: '/api' })
     await server.register(siteContentRoutes, { prefix: '/api' })
-    console.log('✅ Payment + finance + document + site-content routes registered')
+    console.log('✅ Payment + document + site-content routes registered')
   } catch (error) {
     server.log.error({ err: error }, 'Failed to register payment/document routes')
   }
@@ -714,6 +720,31 @@ async function build() {
     await server.register(planningRoutes, { prefix: '/api' })
     await server.register(councilOpsRoutes, { prefix: '/api' })
     await server.register(councilRegistersRoutes, { prefix: '/api' })
+    // Finance. All under /api, same as everything else; the public surface is distinguished by its
+    // own /public/finance path prefix and by using optionalAuth rather than a permission guard.
+    await server.register(financeConfigRoutes, { prefix: '/api' })
+    await server.register(financeUsersRoutes, { prefix: '/api' })
+    await server.register(financeBudgetRoutes, { prefix: '/api' })
+    await server.register(financeImportRoutes, { prefix: '/api' })
+    await server.register(financeProjectRoutes, { prefix: '/api' })
+    await server.register(financePublicationRoutes, { prefix: '/api' })
+    await server.register(financeDocumentRoutes, { prefix: '/api' })
+    await server.register(financeReportRoutes, { prefix: '/api' })
+    await server.register(financePublicRoutes, { prefix: '/api' })
+    await server.register(financeSpatialRoutes, { prefix: '/api' })
+    await server.register(financeTransactionRoutes, { prefix: '/api' })
+    await server.register(financeLedgerRoutes, { prefix: '/api' })
+    await server.register(financeRatesRoutes, { prefix: '/api' })
+    await server.register(financeCashRoutes, { prefix: '/api' })
+    await server.register(financeAccountingRoutes, { prefix: '/api' })
+    await server.register(financeBudgetingRoutes, { prefix: '/api' })
+    await server.register(financeDashboardRoutes, { prefix: '/api' })
+    await server.register(financeInternalAuditRoutes, { prefix: '/api' })
+    await server.register(financeOverviewRoutes, { prefix: '/api' })
+    await server.register(financeMigrationRoutes, { prefix: '/api' })
+    await server.register(financeBankRoutes, { prefix: '/api' })
+    await server.register(financePayablesRoutes, { prefix: '/api' })
+    await server.register(financeAssetsRoutes, { prefix: '/api' })
     await server.register(custodianBoundaryRoutes, { prefix: '/api' })
     await server.register(titleNoticeRoutes, { prefix: '/api' })
     await server.register(publicObjectionRoutes, { prefix: '/api' })
@@ -831,34 +862,8 @@ async function build() {
     console.log(server.printRoutes())
   }
 
-  // Hosted demo: the built Vue app sits next to the API. Real files are
-  // served; any other page URL returns the app shell so the router can open it.
-  const publicDir = process.env.PUBLIC_DIR
-    ? require('path').resolve(process.env.PUBLIC_DIR)
-    : ''
-  if (publicDir) {
-    await server.register(require('@fastify/static'), {
-      root: publicDir,
-      prefix: '/',
-      decorateReply: false,
-      index: 'index.html',
-    })
-  }
-
   // 404 handler
   server.setNotFoundHandler(async (request, reply) => {
-    const pagePath = String(request.url || '').split('?')[0]
-    if (
-      publicDir &&
-      request.method === 'GET' &&
-      !pagePath.startsWith('/api') &&
-      !pagePath.startsWith('/uploads')
-    ) {
-      try {
-        const html = require('node:fs').readFileSync(require('path').join(publicDir, 'index.html'))
-        return reply.type('text/html; charset=utf-8').send(html)
-      } catch { /* no shell yet */ }
-    }
     reply.status(404).send({
       error: 'Not Found',
       message: `Route ${request.method} ${request.url} not found`,

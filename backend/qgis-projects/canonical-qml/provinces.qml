@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : provinces
      style version : v1
-     style id      : c211aa87-d391-494f-9200-c5fc3cde000f
+     style id      : 195e9f0f-254b-4607-9a95-cf7c9c549402
      checksum      : sha256:aecdd8d45728992c19e8091700cd7fc281825200bbd777c386fdd01e4d015a02
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:19 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

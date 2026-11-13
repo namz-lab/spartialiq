@@ -23,6 +23,21 @@ export type DevType =
 
 export interface PermitApplication {
   id: string
+  /**
+   * The citizen-portal application this permit case was raised from:
+   * `spatial_planning.permit_application.dev_app_id`, a soft reference to
+   * `public.development_applications.id` (migration 070 — no hard FK, because the two lineages
+   * use different id types, so the linkage is enforced in application code).
+   *
+   * Null for a staff-captured application, which is most of them: an officer registering a case
+   * at the counter creates the permit directly and there is no portal record to point at. It is
+   * also the id the finance module's linked-record lookup expects for
+   * `kind: 'development_application'`, so it is the ONLY value that may be passed there — the
+   * permit's own id names a different register and would answer "nothing attached".
+   *
+   * Present on getPermit (`SELECT *`); absent from the list views, which project a column set.
+   */
+  dev_app_id?: string | null
   tpd_reference: string | null
   dev_register_no: string | null
   stand_number: string

@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -61,90 +61,16 @@ fn load_desktop_env(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn read_http_line(path: &Path) -> Option<String> {
-    let text = fs::read_to_string(path).ok()?;
-    let line = text.lines().map(str::trim).find(|line| line.starts_with("http"))?;
-    Some(line.trim_end_matches('/').to_string())
-}
-
-/// Public council address. A line in hosted-server.txt or SPARTIALIQ_WEB_URL
-/// wins over the copy packaged with the installer, so the same program can
-/// follow the server when it moves.
-fn hosted_web_url_value(app: &AppHandle) -> Option<String> {
-    if let Ok(value) = std::env::var("SPARTIALIQ_WEB_URL") {
-        let value = value.trim().trim_end_matches('/').to_string();
-        if value.starts_with("http") {
-            return Some(value);
-        }
-    }
-    let mut files = Vec::new();
-    if let Ok(config) = app.path().app_config_dir() {
-        files.push(config.join("hosted-server.txt"));
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            files.push(dir.join("hosted-server.txt"));
-        }
-    }
-    if let Ok(resources) = app.path().resource_dir() {
-        files.push(resources.join("hosted-server.txt"));
-        files.push(resources.join("resources").join("hosted-server.txt"));
-    }
-    files.into_iter().find_map(|path| read_http_line(&path))
-}
-
-#[tauri::command]
-fn hosted_web_url(app: AppHandle) -> Option<String> {
-    let url = hosted_web_url_value(&app)?;
-    if let Ok(parsed) = url.parse::<tauri::Url>() {
-        if let Some(window) = app.get_webview_window("main") {
-            let already = window
-                .url()
-                .ok()
-                .map(|current| current.origin() == parsed.origin())
-                .unwrap_or(false);
-            if !already {
-                let _ = window.navigate(parsed);
-            }
-        }
-    }
-    Some(url)
-}
-
-/// Folders that may hold the packaged backend and Node runtime.
-/// On Windows the installer puts them in `{exe}\resources`, while
-/// `resource_dir()` sometimes returns the folder that contains `resources`.
-fn search_roots(app: &AppHandle) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Ok(dir) = resource_dir(app) {
-        roots.push(dir.join("resources"));
-        roots.push(dir);
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            roots.push(dir.join("resources"));
-            roots.push(dir.to_path_buf());
-        }
-    }
-    roots
-}
-
 fn install_root(app: &AppHandle) -> Result<PathBuf, String> {
-    let roots = search_roots(app);
-    for root in &roots {
-        let stack = root.join("local-stack");
-        if stack.join("backend").join("server.js").exists() {
-            return Ok(stack);
-        }
+    let resources = resource_dir(app)?;
+    let root = resources.join("local-stack");
+    if !root.join("backend").join("server.js").exists() {
+        return Err(format!(
+            "The local stack is not packaged under {}. See the desktop setup guide.",
+            root.display()
+        ));
     }
-    let looked = roots
-        .iter()
-        .map(|root| root.join("local-stack").display().to_string())
-        .collect::<Vec<_>>()
-        .join("; ");
-    Err(format!(
-        "The local stack is not packaged. Looked in: {looked}. See the desktop setup guide."
-    ))
+    Ok(root)
 }
 
 /// Recursive copy used to materialise the packaged backend into writable app-data.
@@ -164,11 +90,9 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
 }
 
 fn runtime_exe(app: &AppHandle) -> Result<PathBuf, String> {
-    for root in search_roots(app) {
-        let bundled_node = root.join("node").join("node.exe");
-        if bundled_node.exists() {
-            return Ok(bundled_node);
-        }
+    let bundled_node = resource_dir(app)?.join("node").join("node.exe");
+    if bundled_node.exists() {
+        return Ok(bundled_node);
     }
     if let Ok(path) = std::env::var("SPARTIALIQ_NODE_EXE") {
         return Ok(PathBuf::from(path));
@@ -275,35 +199,6 @@ fn spawn_logged(app: &AppHandle, mut command: Command, label: &'static str) -> R
     Ok(child)
 }
 
-fn api_already_running() -> bool {
-    let address: std::net::SocketAddr = match "127.0.0.1:3000".parse() {
-        Ok(address) => address,
-        Err(_) => return false,
-    };
-    let mut stream = match TcpStream::connect_timeout(&address, Duration::from_secs(2)) {
-        Ok(stream) => stream,
-        Err(_) => return false,
-    };
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    if stream
-        .write_all(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
-        .is_err()
-    {
-        return false;
-    }
-    let mut body = String::new();
-    let _ = stream.read_to_string(&mut body);
-    body.contains("spartialiq-backend")
-}
-
-fn existing_council_database() -> Option<String> {
-    if TcpStream::connect(("127.0.0.1", 5432)).is_ok() {
-        Some("postgresql://postgres@127.0.0.1:5432/vungu_master_db_v1".into())
-    } else {
-        None
-    }
-}
-
 fn wait_for_port(port: u16, child: &mut Child, label: &str) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(45);
     loop {
@@ -367,16 +262,6 @@ async fn start_local_stack(app: AppHandle, state: tauri::State<'_, Arc<LocalStac
 
         let result = (|| {
             load_desktop_env(&app)?;
-            if api_already_running() {
-                emit_status(&app, StackStatus {
-                    phase: "ready".into(),
-                    message: "The council API is already running on this computer.".into(),
-                    postgres: true,
-                    backend: true,
-                    qgis: false,
-                });
-                return Ok(());
-            }
             let root = install_root(&app)?;
             let bin = find_postgres_bin(&app)?;
             let pg_lib = resource_dir(&app)?.join("postgres").join("lib");
@@ -401,14 +286,12 @@ async fn start_local_stack(app: AppHandle, state: tauri::State<'_, Arc<LocalStac
             } else {
                 stored_password
             };
-            let fresh_database_url = database_url(&port, &password);
-            let attached_database = existing_council_database();
+            let database_url = database_url(&port, &password);
             let qgis_service_file = write_qgis_service_file(&app, &port, &password)?;
             let pgpass_file = create_pgpass(&app, &port, &password)?;
             let uploads_dir = data_dir(&app)?.parent().ok_or("Local app data directory missing")?.join("uploads");
             fs::create_dir_all(&uploads_dir).map_err(|error| format!("Cannot create local uploads directory: {error}"))?;
 
-            if attached_database.is_none() {
             emit_status(&app, StackStatus { phase: "starting".into(), message: "Starting local PostGIS…".into(), postgres: false, backend: false, qgis: false });
             if !data.join("PG_VERSION").exists() {
                 std::fs::create_dir_all(&data).map_err(|error| format!("Cannot create local database folder: {error}"))?;
@@ -482,7 +365,6 @@ async fn start_local_stack(app: AppHandle, state: tauri::State<'_, Arc<LocalStac
             if !extension.status.success() {
                 return Err(format!("PostGIS setup failed. Install the PostGIS extension matching your PostgreSQL version: {}", String::from_utf8_lossy(&extension.stderr)));
             }
-            }
 
             // Writable runtime copy: packaged tree has no node_modules (Tauri embed limit).
             let runtime_backend = data_dir(&app)?
@@ -514,18 +396,15 @@ async fn start_local_stack(app: AppHandle, state: tauri::State<'_, Arc<LocalStac
                 }
             }
 
-            if attached_database.is_none() {
             emit_status(&app, StackStatus { phase: "starting".into(), message: "Applying local database migrations…".into(), postgres: true, backend: false, qgis: false });
             let mut migrate = Command::new(&node_exe);
             migrate.creation_flags(CREATE_NO_WINDOW);
-            migrate.current_dir(&runtime_backend).arg("scripts/migrate.js");
-            migrate.env("DATABASE_URL", &fresh_database_url).env("NODE_ENV", "development");
+            migrate.current_dir(&runtime_backend).arg("scripts/migrate-render.js");
+            migrate.env("DATABASE_URL", &database_url).env("NODE_ENV", "development");
             let migrations = migrate.output().map_err(|error| format!("Could not run local migrations: {error}"))?;
             if !migrations.status.success() {
                 return Err(format!("Database migrations failed: {}", String::from_utf8_lossy(&migrations.stderr)));
             }
-            }
-            let database_url = attached_database.unwrap_or(fresh_database_url);
 
             emit_status(&app, StackStatus { phase: "starting".into(), message: "Starting local API…".into(), postgres: true, backend: false, qgis: false });
             let mut backend = Command::new(&node_exe);
@@ -569,7 +448,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(stack.clone())
-        .invoke_handler(tauri::generate_handler![hosted_web_url, start_local_stack, stop_local_stack])
+        .invoke_handler(tauri::generate_handler![start_local_stack, stop_local_stack])
         .build(tauri::generate_context!())
         .expect("error while building desktop application")
         .run(move |_app, event| {

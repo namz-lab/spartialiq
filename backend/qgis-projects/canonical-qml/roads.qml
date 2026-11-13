@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : roads
      style version : v1
-     style id      : 32be66e0-a9b8-4011-9529-e5d11e649ed9
+     style id      : 0dfb1281-5ff9-4c4e-8d7b-faf6dc17f562
      checksum      : sha256:c5e0195ee7fe191698454e97f245afc00e556bc739422b8f2ad94d051f1d3c73
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

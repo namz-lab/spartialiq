@@ -2,10 +2,10 @@
 <!-- GENERATED from the Vungu enterprise GIS symbology registry.
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : vungu_beyond_peri_urban_zones
-     style version : v1
-     style id      : aa938619-5b53-456c-b3da-329fa70d481a
-     checksum      : sha256:8f14f9469bea10d06523a72b4a0bd16ba09a0ae4b35d5cabbc6aa6b3dd32bb24
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     style version : v3
+     style id      : fe3740d0-fe46-4ba9-9170-22033240d81b
+     checksum      : sha256:a6bdb36c8572dc880daf3419ac4676e43d8dcb342535117cee33d0fdfef90753
+     published     : Mon Nov 02 2026 12:56:31 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

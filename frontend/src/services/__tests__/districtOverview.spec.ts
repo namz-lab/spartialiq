@@ -52,7 +52,12 @@ describe('freshness', () => {
   const now = new Date('2026-09-23T12:00:00Z')
 
   it('says "today" for a reading taken today', () => {
-    expect(freshness(new Date('2026-09-23T06:00:00Z'))).toMatch(/today/)
+    // "Today" moves with the clock: a hardcoded date stopped being today the
+    // day after it was written. Take a timestamp this morning, whenever this
+    // runs (the 06:00 cut keeps it on the same UTC day at any hour after it).
+    const thisMorning = new Date()
+    thisMorning.setUTCHours(6, 0, 0, 0)
+    expect(freshness(thisMorning)).toMatch(/today/)
   })
 
   it('falls back to a date once the reading is a month old', () => {

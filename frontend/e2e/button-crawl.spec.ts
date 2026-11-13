@@ -76,21 +76,21 @@ async function crawlNav(page: Page, role: string, max = 18) {
       '.planner-rail button:visible',
     ].join(', '),
   )
-  let controls = nav
   const count = await nav.count().catch(() => 0)
   if (count === 0) {
-    controls = page.locator('[role="tab"]:visible, .sr-tab:visible, [role="menuitem"]:visible')
-    const tcount = await controls.count().catch(() => 0)
+    // Fallback: section tabs / role="tab"
+    const tabs = page.locator('[role="tab"]:visible, .sr-tab:visible')
+    const tcount = await tabs.count().catch(() => 0)
     if (tcount === 0) {
       record(role, 'crawl_summary', true, 'no nav items found (shell may be map-first)', true)
       return
     }
   }
-  const limit = Math.min(await controls.count(), max)
+  const limit = Math.min(await nav.count(), max)
   let clicked = 0
   for (let i = 0; i < limit; i++) {
     await dismissOverlays(page)
-    const btn = controls.nth(i)
+    const btn = nav.nth(i)
     try {
       if (!(await btn.isVisible().catch(() => false))) continue
       const label = ((await btn.innerText().catch(() => '')) || (await btn.getAttribute('title')) || `nav-${i}`)

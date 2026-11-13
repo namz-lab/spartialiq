@@ -40,10 +40,7 @@
 const { requireRole } = require('../middleware/jwtAuth')
 
 // Everyone in the planning office can read a register; the clerk keeps it.
-const READ_ROLES = [
-  'planning_clerk', 'admin', 'planner', 'eo', 'gis_officer',
-  'building_inspector', 'inspector', 'env_officer', 'surveyor',
-]
+const READ_ROLES = ['planning_clerk', 'admin', 'planner', 'eo', 'gis_officer', 'inspector', 'env_officer']
 const WRITE_ROLES = ['planning_clerk', 'admin']
 
 // ── Field types ─────────────────────────────────────────────────────────

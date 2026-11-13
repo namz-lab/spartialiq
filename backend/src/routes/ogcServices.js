@@ -230,21 +230,11 @@ async function ogcServicesRoutes(fastify, options) {
       } else {
         console.log('[OGC Routes] 🔍 Health check requested (WMS probe)')
         let wms = false
-        // One short try. A stopped QGIS Server must not burn the 30s request
-        // timeout three times — the planner gives up at 5s and then never
-        // reads the project layers that PostGIS can still draw.
-        const previousTimeout = bridge.serverConfig.timeout
-        const previousRetries = bridge.serverConfig.maxRetries
-        bridge.serverConfig.timeout = 1500
-        bridge.serverConfig.maxRetries = 1
         try {
           await bridge.wmsGetCapabilities()
           wms = true
         } catch (e) {
           console.log(`[OGC Routes] ⚠️ WMS probe failed: ${e.message}`)
-        } finally {
-          bridge.serverConfig.timeout = previousTimeout
-          bridge.serverConfig.maxRetries = previousRetries
         }
         data = {
           status: wms ? 'healthy' : 'degraded',

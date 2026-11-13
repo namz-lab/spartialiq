@@ -23,6 +23,11 @@ export interface LegendEntry {
 export interface MapExportOptions {
   title?: string
   subtitle?: string
+  /**
+   * One line printed in the footer above the coordinates. Use it for the figures' provenance
+   * (year, currency, source view), so a printed sheet cannot be quoted without them.
+   */
+  provenance?: string
   /** optional swatch + label rows drawn over the top-left of the map image */
   legend?: LegendEntry[]
   /** file name without extension */
@@ -82,25 +87,43 @@ export async function exportMapToPdf(map: any, opts: MapExportOptions = {}): Pro
   const pageW = pdf.internal.pageSize.getWidth()
   const pageH = pdf.internal.pageSize.getHeight()
   const margin = 28
-  const headerH = 58
-  const footerH = 30
+  const contentW = pageW - margin * 2
+  const footerH = opts.provenance ? 42 : 30
 
   // ── Header ──────────────────────────────────────────────────────────────
+  // Measure the wrapped title/subtitle first: a long provenance subtitle must grow the header
+  // rather than run underneath the map image.
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(15)
+  const titleLines = pdf.splitTextToSize(title, contentW) as string[]
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(10)
+  const subtitleLines = subtitle ? (pdf.splitTextToSize(subtitle, contentW) as string[]) : []
+  const headerH = 34 + titleLines.length * 18
+    + (subtitleLines.length > 0 ? 4 + subtitleLines.length * 12 : 0) + 6
+
   pdf.setFillColor(...ACCENT)
   pdf.rect(0, 0, pageW, 6, 'F')
   pdf.setTextColor(...INK)
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(15)
-  pdf.text(title, margin, 34)
-  if (subtitle) {
+  let headerY = 34
+  for (const line of titleLines) {
+    pdf.text(line, margin, headerY)
+    headerY += 18
+  }
+  if (subtitleLines.length > 0) {
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(10)
     pdf.setTextColor(...MUTED)
-    pdf.text(subtitle, margin, 49)
+    headerY += 4
+    for (const line of subtitleLines) {
+      pdf.text(line, margin, headerY)
+      headerY += 12
+    }
   }
 
   // ── Map image (fit within content box, preserve aspect ratio) ───────────
-  const contentW = pageW - margin * 2
   const contentH = pageH - headerH - footerH - margin
   const ratio = Math.min(contentW / wpx, contentH / hpx)
   const imgW = wpx * ratio
@@ -115,14 +138,18 @@ export async function exportMapToPdf(map: any, opts: MapExportOptions = {}): Pro
   if (opts.legend && opts.legend.length) {
     const rowH = 14
     const padding = 8
-    const boxW = 132
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    // Size the card to its longest label so a class label ("200k – 500k") or a status
+    // ("Awaiting approval") cannot spill over the white card and onto the map.
+    const labelWidth = Math.max(...opts.legend.map((entry) => pdf.getTextWidth(entry.label)))
+    const boxW = Math.min(imgW - 20, Math.ceil(labelWidth) + padding * 2 + 15)
     const boxH = padding * 2 + opts.legend.length * rowH
     const lx = imgX + 10
     const ly = imgY + 10
     pdf.setFillColor(255, 255, 255)
     pdf.setDrawColor(...HAIRLINE)
     pdf.rect(lx, ly, boxW, boxH, 'FD')
-    pdf.setFontSize(8)
     opts.legend.forEach((entry, i) => {
       const ry = ly + padding + i * rowH
       const rgb = hexToRgb(entry.color)
@@ -143,6 +170,9 @@ export async function exportMapToPdf(map: any, opts: MapExportOptions = {}): Pro
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(8)
   pdf.setTextColor(...MUTED)
+  if (opts.provenance) {
+    pdf.text(opts.provenance, margin, pageH - 26)
+  }
   pdf.text(
     `Centre ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}   ·   Zoom ${z.toFixed(1)}   ·   ~${barMeters} m / 100 px   ·   ${stamp}`,
     margin,

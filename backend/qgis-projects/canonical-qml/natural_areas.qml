@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : natural_areas
      style version : v1
-     style id      : 2e0b451c-7fa9-44cd-9b41-73ecfaa5f239
+     style id      : 71f43d3a-1a3e-4aa3-b915-d87351b318d6
      checksum      : sha256:bc760e2d2b35ca962652edf91d37b0359026b1401c322bf8cd177e51d4e8e885
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

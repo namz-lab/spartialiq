@@ -13,6 +13,10 @@ const fastifyCookie = require('@fastify/cookie')
 const { gisRoutes } = require('../gis')
 const { standsRoutes } = require('../stands')
 const { createSession } = require('../../middleware/jwtAuth')
+// Production runs dbContext.install + the request store (server.js). Without it
+// fastify.pg is the plain pool: superuser, no app.authority_id, and the tenanted
+// inserts these routes make fail with a NULL authority — not what production does.
+const dbContext = require('../../lib/dbContext')
 
 const TEST_USER_ID = randomUUID()
 const TEST_WARD = `jesttest-geom-${TEST_USER_ID.slice(0, 8)}`
@@ -28,15 +32,17 @@ const bowtiePoly = { type: 'Polygon', coordinates: [[[0, 0], [1, 1], [1, 0], [0,
 beforeAll(async () => {
   app = Fastify({ logger: false })
   await app.register(fastifyPostgres, { connectionString: process.env.DATABASE_URL })
+  dbContext.install(app)
+  app.addHook('onRequest', (_q, _r, done) => dbContext.runWithRequest(done))
   await app.register(fastifyCookie, { secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET })
   await app.register(async (s) => {
     await gisRoutes(s)
     await standsRoutes(s)
   }, { prefix: '/api' })
   await app.ready()
-  await app.pg.query(
-    `INSERT INTO users (id, email, full_name, name, role, active, status, password_hash)
-     VALUES ($1,$2,'Jest Geom','Jest Geom','planner',true,'active','$2b$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+  await dbContext.systemOf(app.pg).query(
+    `INSERT INTO users (id, email, full_name, name, role, active, status, password_hash, authority_id)
+     VALUES ($1,$2,'Jest Geom','Jest Geom','planner',true,'active','$2b$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 1)
      ON CONFLICT (id) DO NOTHING`,
     [TEST_USER_ID, `jesttest-geom-${TEST_USER_ID}@example.test`],
   )
@@ -53,11 +59,11 @@ beforeAll(async () => {
 }, 30000)
 
 afterAll(async () => {
-  await app.pg.query(`DELETE FROM public.user_session WHERE id = $1`, [sid])
-  await app.pg.query(`DELETE FROM spatial_planning.gis_feature WHERE layer = $1`, [TEST_LAYER])
-  await app.pg.query(`DELETE FROM spatial_planning.gis_feature_history WHERE layer = $1`, [TEST_LAYER])
-  await app.pg.query(`DELETE FROM stands WHERE ward = $1`, [TEST_WARD])
-  await app.pg.query(`DELETE FROM users WHERE id = $1`, [TEST_USER_ID])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM public.user_session WHERE id = $1`, [sid])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.gis_feature WHERE layer = $1`, [TEST_LAYER])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.gis_feature_history WHERE layer = $1`, [TEST_LAYER])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM stands WHERE ward = $1`, [TEST_WARD])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM users WHERE id = $1`, [TEST_USER_ID])
   await app.close()
 }, 30000)
 
@@ -71,7 +77,7 @@ test('gis digitize: valid polygon accepted, bowtie rejected 422', async () => {
   expect(bad.json().message).toMatch(/self-intersection/i)
 
   // The bad geometry was never stored.
-  const cnt = await app.pg.query(`SELECT COUNT(*)::int n FROM spatial_planning.gis_feature WHERE layer = $1`, [TEST_LAYER])
+  const cnt = await dbContext.systemOf(app.pg).query(`SELECT COUNT(*)::int n FROM spatial_planning.gis_feature WHERE layer = $1`, [TEST_LAYER])
   expect(cnt.rows[0].n).toBe(1)
 })
 

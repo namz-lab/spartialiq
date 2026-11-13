@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : buildings
      style version : v1
-     style id      : d423fcd4-0d66-41ed-9b84-f89232c2370d
+     style id      : 5d3cd048-4db1-4cc0-a6b5-23fc021fd020
      checksum      : sha256:98a957c4dc3333389bec79abdf2e17d068d7a1ea47591c79d222ecb87a6563bf
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

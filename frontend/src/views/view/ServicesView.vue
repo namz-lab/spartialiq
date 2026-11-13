@@ -97,7 +97,7 @@ import {
               </div>
             </router-link>
 
-            <router-link to="/payments" class="dataset-card ds-card-link">
+            <router-link to="/citizen?section=payments" class="dataset-card ds-card-link">
               <div class="ds-card-accent"></div>
               <div class="ds-card-body">
                 <div class="ds-card-icon"><CreditCard :size="24" color="#111827" /></div>

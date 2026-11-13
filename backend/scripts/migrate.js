@@ -133,6 +133,8 @@ const MIGRATIONS = [
   // A value source for proposed_peri_urban_zones.id, without which drawing a new
   // zone in QGIS Desktop fails the NOT NULL constraint on insert.
   '136_zones_id_sequence.sql',
+  // 137: land.parcel.accuracy_basis, how a parcel's position was arrived at; 174 fills it.
+  '137_parcel_accuracy_basis.sql',
   // 138: district development control matrix. Zone-type keyed controls, the
   // coded land-use vocabulary, and the zone_effective_controls view.
   '138_district_development_matrix.sql',
@@ -201,6 +203,130 @@ const MIGRATIONS = [
   '174_parcel_survey_class.sql',
   '175_parcel_event.sql',
   '176_surveypro_import_run.sql',
+  // 181–187 were first applied to dev databases by hand, out of band, which left them off this
+  // list — until a fresh deploy (and the acceptance harness) proved the point: routes read
+  // columns these add (stands.requires_minister_approval from 185 among them) and a database
+  // migrated from the chain alone 500s on stand allocation. They are idempotent (IF NOT EXISTS
+  // / DO guards, no destructive statements) and sit in numeric order, which is the order they
+  // were applied in by hand, so adding them here changes nothing for a database that already
+  // has them and fixes one that does not.
+  '181_council_statutory_registers.sql',
+  '182_custodian_boundary_scaffolds.sql',
+  '183_acua_stand_subunits.sql',
+  '184_runtime_gap_tables.sql',
+  '185_use_cases_complete.sql',
+  '186_zoning_lookup_view.sql',
+  '187_fill_parcel_register_and_rates.sql',
+  // The finance foundation: the finance schema, the chart of accounts, budgets and their
+  // revision history, the actuals register, imports, projects, publication control and the
+  // finance permission catalogue. Depends on 154/165/167 (tenancy) and nothing from 181-187.
+  '188_finance_foundation.sql',
+  '189_finance_project_reporting.sql',
+  // F-05: a transaction may not be posted against a budget line from another financial year.
+  // Currency mismatches stay storable and reported (specification A8/§6.4), so they are not rejected.
+  '190_finance_transaction_line_year.sql',
+  // F-07: derive a document's financial year from its subject and index it for the public register.
+  '191_finance_document_year.sql',
+  // D-04: the closed-year guard also covers project allocations and project links.
+  '192_finance_closed_year_project_links.sql',
+  // D-05: document in the schema that the exchange-rate table is intentionally dormant (decision D4).
+  '193_finance_exchange_rate_dormant.sql',
+  // P-01: make the publication policies set-based and short-circuit the tenant policies for the
+  // public session. Fixes the 20k-transaction statement timeout without weakening RLS.
+  '194_finance_public_query_performance.sql',
+  // The column /api/context/parcels reads (estimated positional accuracy, metres). Its migration
+  // never landed: the endpoint 500s on a chain-built database without this.
+  '195_parcel_estimated_accuracy.sql',
+  // 085 rebuilt the permit status CHECK without 077's 'pending_payment': the online
+  // application-fee flow has 500'd on every chain-built database since. Restores it.
+  '196_permit_pending_payment_restored.sql',
+  // Cross-tenant fix: published_select serves only the authority-less public session
+  // (and a session's own council). Other councils' staff no longer match it.
+  '197_published_select_public_session_only.sql',
+  // GIS-finance integration Milestone 2: the explicit multi-area split table with its
+  // guard trigger (subject/currency/council pinning, all-or-nothing roll-up semantics,
+  // approval caps against the canonical totals) and ward-code normalisation.
+  '198_finance_spatial_allocation.sql',
+  // The ward roll-ups the map renders: budget attribution (allocation splits, whole-line
+  // ward codes, unallocated remainders, unlocated), ward performance per year+currency,
+  // the unlocated register, and the read-only finance.map.view permission.
+  '199_finance_ward_performance.sql',
+  // Access-control hardening for the four blockers in the production-readiness audit:
+  // published_select for finance.spatial_allocation (B-1), the published budget-line view the
+  // public route now filters through (BLOCKER-1), the finance.document.withdraw write permission
+  // with its withdrawn_reason column (BLOCKER-3), and the deferred separation-of-duties
+  // constraint over one person's EFFECTIVE permission set (BLOCKER-2).
+  '200_finance_access_control_hardening.sql',
+  // Decision D11, provisionally: links the COD-AB wards of district ZW1704 to authority VUNGU
+  // with basis 'interim' and an instrument_ref saying the list is unconfirmed, so the ward
+  // choropleth has real geometry. Loads exactly what admin.ward actually contains -- none, on a
+  // database where the national ward register was never imported.
+  '201_authority_ward_provisional_register.sql',
+  // The SQL half of GIS-finance M4/M5/M7: project physical progress with its configurable
+  // spend-versus-progress threshold (D12), the attribution and ward views completed with the
+  // missing dimensions, measures and the second actuals basis, the department/programme
+  // breakdown view, spatial_allocation inside the closed-year trigger set (MAJOR-8), and the
+  // re-validation that refuses a reduction leaving approved splits over the revised total
+  // (MAJOR-1).
+  '202_finance_spatial_measures_and_progress.sql',
+  // The general ledger core: the GL chart of accounts, accounting periods, the voucher /
+  // voucher_line business document, the INSERT-ONLY finance.ledger_entry, the party register and
+  // the trial-balance / account-balance / debtor-ageing views. The three invariants live in the
+  // DATABASE rather than in a route -- a deferred constraint trigger asserting that a voucher's
+  // debits equal its credits, one currency per voucher (two books, no rate, decision D4), and
+  // immutability of a posted line, with UPDATE/DELETE/TRUNCATE revoked from the application role
+  // and refused by trigger. Seeds the eight finance.ledger.* permissions and no data at all: the
+  // chart of accounts is a Council resolution, and the retraction that lets this be the book of
+  // account is decision D16.
+  '203_finance_general_ledger.sql',
+  // Budget phasing profiles: a named per-financial-year profile of period percentages, keyed by
+  // the SAME period keys src/lib/financePeriods.js generates, so a July-June year phases Jul-Sep
+  // as Q1. The total-100 rule is a DEFERRED CONSTRAINT TRIGGER rather than a model validation, so
+  // a profile written by psql or an import is refused too. budget_line.distribution_id is
+  // NULLABLE and NULL means the phasing was never recorded -- the management account then reports
+  // the annual allocation and no per-period budget, and never an even twelfth. Seeds nothing: an
+  // even spread is a Council choice (decision D20), not a default the code applies.
+  '204_finance_budget_phasing.sql',
+  // Rates billing, debtors and arrears -- the client's selected functional scope. The valuation
+  // roll (D17), the tariff schedule (D18) and the rates accounts that tie a land.parcel to a
+  // finance.party as ratepayer of record (D19), plus the bill, receipt, billing-run and
+  // billing-REFUSAL records. Bills post through finance.post_voucher() and nothing here writes
+  // finance.ledger_entry. finance.rates_bill.amount is a GENERATED column over
+  // finance.rates_bill_amount(), so the charge has exactly one definition and no route computes
+  // it. Seeds no data at all: 731 parcels exist, none has a value, no rate exists and
+  // spatial_planning.parcel_owner holds 0 rows -- so a run today considers 731 properties, raises
+  // 0 bills and writes 731 refusals naming the decision each waits on (acceptance check G9).
+  '205_finance_rates.sql',
+  // Rates operations. Corrects finance.v_debtor_ageing so a reversal acts on the voucher it
+  // reverses: until this, a dishonoured receipt left its bill reading `settled` and the debt fell
+  // out of finance.v_rates_arrears, which then disagreed with the receivable control account.
+  // Adds the three acts 205 stopped short of -- finance.record_rates_receipt(),
+  // finance.commit_rates_billing_run() and finance.cancel_rates_billing_run(), each atomic and
+  // none writing finance.ledger_entry itself -- plus finance.rates_bill_unsettled() (the cashier's
+  // figure, counting draft receipts so one bill cannot be settled twice) and the constraint that
+  // whoever drafts a tariff does not approve it. Uses CREATE OR REPLACE VIEW, never DROP CASCADE:
+  // finance.v_rates_arrears reads the ageing view. Seeds nothing.
+  '206_finance_rates_operations.sql',
+  // The enterprise role model, phase 1, and the cash office. Adds four roles that arrive WITH
+  // work -- cashier, accountant, revenue_officer, accounting_officer -- by rebuilding
+  // users_role_check additively from whatever it holds. Adds cash points and income codes (both
+  // seeded empty, decision D22), cashier sessions, the general receipt, the cash-up and the
+  // banking. Receipt numbers come from finance.document_sequence, a ROW counter and not a
+  // SEQUENCE, so a rolled-back receipt burns no number. A receipt is taken only inside the
+  // caller's own open session, is never edited or deleted, and reaches the ledger when a
+  // DIFFERENT person verifies the cash-up -- finance.verify_cashier_session() posts the whole
+  // session through finance.post_voucher(), which stays the only writer of finance.ledger_entry.
+  // A cash difference is posted to the cash point's difference account or verification is
+  // refused. Seeds the seven finance.cash.* permissions and no data.
+  '207_finance_cash_office.sql',
+  // The till session lifecycle. Adds `suspended` and `abandoned` to a cashier session -- both still
+  // HOLD the drawer, so one-cashier-per-drawer is unchanged -- and the only way out of `abandoned` is a
+  // count by a supervisor with a witness, verified by a fourth person. Adds the cash_supervisor role,
+  // cash point assignment, and finance.cashier_session_event, an append-only history written by
+  // triggers. Fingerprints every existing session, receipt, voucher and ledger row and refuses to
+  // commit if any changed. Policy values (abandon threshold, assignment required) are provisional,
+  // decision D29. Rollback: migrations/rollback/208_cash_session_lifecycle.down.sql.
+  '208_cash_session_lifecycle.sql',
 ]
 
 function createPool(env = process.env) {

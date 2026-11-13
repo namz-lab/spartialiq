@@ -44,6 +44,60 @@ export const LABEL_COLOR_MUTED = '#666666'    // suburb / secondary labels
 export const LABEL_COLOR_WATER = '#4a80a0'    // waterway labels
 export const LABEL_HALO = 'rgba(255,255,255,0.9)'
 
+/**
+ * The empty sheet every map in this product is created with, before `addVunguBasemap` paints on it.
+ *
+ * IT IS NOT OPTIONAL. A `maplibregl.Map` constructed with no `style` never finishes loading: its
+ * `load` event does not fire, so the `map.on('load')` handler that adds the basemap and the overlay
+ * layers never runs, and the canvas stays fully transparent. Every other map in the repository
+ * passes this object inline; the finance maps did not, and so rendered NOTHING at all — no
+ * basemap, and no ward choropleth over it — however correct their data was. Measured: the finance
+ * map's canvas read a single colour, rgba(0,0,0,0), across its whole surface.
+ *
+ * It lives here so that cannot recur quietly, and so the sheet colour and the glyph endpoint come
+ * from the same place as the rest of the cartography.
+ */
+export function baseMapStyle(background: string = MAP_BACKGROUND) {
+  return {
+    version: 8 as const,
+    glyphs: '/fonts/{fontstack}/{range}.pbf',
+    sources: {},
+    layers: [
+      { id: 'background', type: 'background' as const, paint: { 'background-color': background } },
+    ],
+  }
+}
+
+// --- Finance overlays ------------------------------------------------------
+// The finance workspace is an OVERLAY on this basemap, not a second map style.
+// These ramps live here for the same reason every basemap colour does: the map
+// paint and the legend swatch must resolve from one source (DESIGN.md, "Finance
+// overlay"), and a finance measure must never add a private palette.
+//
+// A ward with no value is painted NO_DATA_GREY, never the bottom class: a ward
+// with no expenditure budget did not spend zero.
+export const FINANCE_NO_DATA = '#e8e8e8'
+
+/** Sequential single-hue ramp, light -> dark. Length = classes + 1. */
+export const FINANCE_CHOROPLETH = [
+  '#f7fbff', '#c9ddf0', '#94c3e0', '#5c9dc9', '#2f78b4', '#145a9e',
+] as const
+
+/**
+ * Project status scale for the capital map. Deliberately muted so a capital
+ * point can sit on a choropleth without competing with it; status is also in
+ * the panel and the legend, so colour is never the only carrier.
+ */
+export const FINANCE_PROJECT_STATUS: Readonly<Record<string, string>> = {
+  proposed: '#9aa5b1',
+  awaiting_approval: '#c9a227',
+  approved: '#3f7d58',
+  in_progress: '#2f78b4',
+  suspended: '#b45309',
+  completed: '#4b5563',
+  cancelled: '#9b2c2c',
+}
+
 // --- Diagnostic appearance for an unresolved layer -------------------------
 // Deliberately drab and uniform so "the registry did not answer" is visually
 // unmistakable and can never be mistaken for approved cartography.

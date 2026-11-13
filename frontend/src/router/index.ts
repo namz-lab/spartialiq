@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import type { Role } from '../services/types'
+import { FINANCE_ROLES } from '../services/types'
+import { financeEntry, guardUnknownWorkspace } from '../modules/finance/shell/workspaceGuard'
+import { financeWorkspaceRoutes } from '../modules/finance/workspaces'
 import { routePattern, trackPageView } from '../services/analytics'
 import { GMS_CAN } from '../services/gms'
 
@@ -17,6 +20,8 @@ declare module 'vue-router' {
     roles?: readonly Role[]
     /** GIS portal section a /gis/* route opens (GISOfficerPortalView). */
     gisSection?: string
+    /** The finance role workspace a /finance/<workspace>/* route belongs to. */
+    financeWorkspace?: string
   }
 }
 
@@ -54,6 +59,13 @@ const ProfileView = () => import('../views/ProfileView.vue')
 // the open section and its filters in the query (src/admin/console.ts).
 // Replaces AdminView.vue, whose four tabs held a hardcoded org chart and a
 // session-only "activity log" that no backend ever wrote to.
+// Council finance: the staff workspace (src/modules/finance, ADR 0005 feature-module layout) and
+// the public financial transparency portal. The workspace's rail and every action inside it are
+// decided by the server's finance permission catalogue, not by the role list on this route — the
+// role list only says who may open the door.
+const FinanceWorkspace = () => import('../modules/finance/pages/FinanceWorkspace.vue')
+const FinanceNoWorkspace = () => import('../modules/finance/shell/NoWorkspaceView.vue')
+const CouncilFinanceView = () => import('../modules/finance/pages/CouncilFinanceView.vue')
 const AdminWorkspaceView = () => import('../views/AdminWorkspaceView.vue')
 const QGISPluginView = () => import('../views/admin/QGISPluginView.vue')
 // Enterprise GIS symbology registry: which style version is live on every
@@ -113,7 +125,6 @@ const CouncilPageView = () => import('../views/council/CouncilPageView.vue')
 const ContactView     = () => import('../views/council/ContactView.vue')
 const ContentManagementView = () => import('../views/admin/ContentManagementView.vue')
 const StatutoryRegistersView = () => import('../views/StatutoryRegistersView.vue')
-const FinanceWorkspaceView = () => import('../views/FinanceWorkspaceView.vue')
 const TitleNoticesView = () => import('../views/TitleNoticesView.vue')
 const CustodianDeskView = () => import('../views/CustodianDeskView.vue')
 
@@ -133,6 +144,21 @@ const router = createRouter({
       component: PlanLookupView,
       meta: { title: 'What can I build here? - Vungu Spatial Data Portal' }
     },
+    {
+      // The council's published finances. No sign-in: the database returns an anonymous request
+      // only rows a live publication covers, so there is nothing here to guard.
+      path: '/council/finances',
+      name: 'council-finances',
+      component: CouncilFinanceView,
+      meta: { title: 'Council finances - Vungu Rural District Council' },
+    },
+    // The specification's §7.4 paths, kept working as links into the one public surface.
+    { path: '/council/overview', redirect: { name: 'council-finances', query: { view: 'overview' } } },
+    { path: '/council/budget', redirect: { name: 'council-finances', query: { view: 'budget' } } },
+    { path: '/council/revenue', redirect: { name: 'council-finances', query: { view: 'revenue' } } },
+    { path: '/council/expenditure', redirect: { name: 'council-finances', query: { view: 'expenditure' } } },
+    { path: '/council/projects', redirect: { name: 'council-finances', query: { view: 'projects' } } },
+    { path: '/council/documents', redirect: { name: 'council-finances', query: { view: 'documents' } } },
     {
       path: '/explorer',
       name: 'map-explorer',
@@ -642,19 +668,7 @@ const router = createRouter({
       meta: {
         title: 'Statutory Registers — Vungu RDC',
         requiresAuth: true,
-        roles: ['admin', 'eo', 'planner', 'planning_clerk', 'finance_officer'],
-      },
-    },
-    {
-      // Chegutu-style finance console: cadastre-linked accounts, district
-      // balances, map topography, clearances, receipts, tariff, workflows.
-      path: '/finance',
-      name: 'finance-workspace',
-      component: FinanceWorkspaceView,
-      meta: {
-        title: 'Finance — Vungu RDC',
-        requiresAuth: true,
-        roles: ['admin', 'eo', 'planner', 'planning_clerk', 'gis_officer', 'finance_officer'],
+        roles: ['admin', 'eo', 'planner', 'planning_clerk'],
       },
     },
     {
@@ -778,6 +792,74 @@ const router = createRouter({
     // (/privacy and /terms intentionally NOT redirected — they resolve to the
     //  real LegalView routes declared above.)
     {
+      // The council finance workspace. Fifteen sections behind one route, with the open section in
+      // the query — a finance conversation ends in "send me the link" as often as a planning one,
+      // and an explicit section in the link always beats the role preset that otherwise chooses
+      // where a role lands (src/modules/finance/stores/rolePreset.ts).
+      //
+      // `admin` is included because a technical administrator must be able to read the finance
+      // audit trail and provision finance roles. It holds no permission that approves, publishes,
+      // commits an import or discloses restricted data, so the sections it cannot use are not
+      // rendered for it, it lands on Finance access rather than on a page of figures it does not
+      // act on, and the one section it might expect and will not find — the finance map — is
+      // explained on the Permissions page; see finance.role_permission in backend migration 188
+      // and finance.map.view in 199.
+      //
+      // `planner`, `eo` and `env_officer` are NOT here: they follow their own project's money
+      // through /api/finance/linked/:kind/:id from their own workspaces, which needs only
+      // finance.project.view. Giving them the finance console would be giving them the budget.
+      //
+      // SINCE 2026-11-12 THE CONSOLE IS BEING REPLACED by twelve role workspaces at
+      // /finance/<workspace> (docs/superpowers/specs/2026-11-12-finance-role-workspaces-design.md).
+      // `/finance` itself now only routes: to the person's home workspace, or — for an old
+      // `?section=` link — to the screen that replaced the section. The console stays at
+      // /finance/console until every workspace is built and verified, and anyone whose workspace is
+      // not built yet still lands there. VITE_FINANCE_WORKSPACES=off sends everything back to it.
+      path: '/finance',
+      name: 'finance',
+      component: FinanceWorkspace,
+      beforeEnter: financeEntry,
+      meta: {
+        title: 'Council finance - Vungu Rural District Council',
+        requiresAuth: true,
+        roles: [...FINANCE_ROLES, 'admin'],
+      },
+    },
+    {
+      path: '/finance/console',
+      name: 'finance-console',
+      component: FinanceWorkspace,
+      meta: {
+        title: 'Council finance - Vungu Rural District Council',
+        requiresAuth: true,
+        roles: [...FINANCE_ROLES, 'admin'],
+      },
+    },
+    {
+      path: '/finance/no-workspace',
+      name: 'finance-no-workspace',
+      component: FinanceNoWorkspace,
+      meta: {
+        title: 'Council finance - Vungu Rural District Council',
+        requiresAuth: true,
+        roles: [...FINANCE_ROLES, 'admin'],
+      },
+    },
+    ...financeWorkspaceRoutes(),
+    {
+      // A workspace not built yet, or not a workspace at all. Always redirects.
+      path: '/finance/:rest(.*)*',
+      name: 'finance-unknown',
+      component: FinanceNoWorkspace,
+      beforeEnter: guardUnknownWorkspace,
+      meta: {
+        title: 'Council finance - Vungu Rural District Council',
+        requiresAuth: true,
+        roles: [...FINANCE_ROLES, 'admin'],
+      },
+    },
+
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFoundView,
@@ -812,7 +894,6 @@ const ROLE_HOME: Record<Role, string> = {
   env_officer:        '/env-officer-workspace',
   building_inspector: '/inspector-workspace',
   planning_clerk:     '/planning-clerk-portal',
-  finance_officer:    '/finance',
   surveyor:           '/surveyor',
   gis_officer:        '/gis-officer-portal',
   gis_head:           '/gis',
@@ -823,6 +904,20 @@ const ROLE_HOME: Record<Role, string> = {
   gis_clerk:          '/gis',
   dept_editor:        '/gis',
   dept_viewer:        '/gis',
+  // Every finance role lands in the finance workspace. The sections it opens on, and the actions
+  // offered there, follow the permissions the server reports.
+  finance_admin:      '/finance',
+  finance_officer:    '/finance',
+  budget_officer:     '/finance',
+  dept_head:          '/finance',
+  finance_committee:  '/finance',
+  publisher:          '/finance',
+  auditor:            '/finance',
+  accountant:         '/finance',
+  cashier:            '/finance',
+  revenue_officer:    '/finance',
+  accounting_officer: '/finance',
+  cash_supervisor:    '/finance',
   viewer:             '/citizen',
   registered:         '/citizen',
   public:             '/citizen',

@@ -59,29 +59,13 @@ export interface Payment {
 }
 
 export interface InitPaymentInput {
-  purpose:      string
+  purpose:      'application_fee' | 'inspection_fee' | 'permit_fee' | 'occupation_certificate' | 'other'
   priceUsd:     number
   walletCcy:    WalletCurrency
-  driver?:      PaymentDriver
-  relatedKind?: 'inspection_booking' | 'development_application' | 'permit' | 'council_charge'
+  driver?:      PaymentDriver       // defaults to 'manual' for dev
+  relatedKind?: 'inspection_booking' | 'development_application' | 'permit'
   relatedId?:   string
   metadata?:    Record<string, unknown>
-}
-
-export interface CouncilCharge {
-  code: string
-  department: string
-  title: string
-  detail: string
-  amountUsd: number | null
-  unitLabel: string
-  pricedBy: 'tariff' | 'bill'
-}
-
-export interface PaymentMethod {
-  id: string
-  label: string
-  live: boolean
 }
 
 export const paymentsService = {
@@ -94,16 +78,6 @@ export const paymentsService = {
 
   async rate(): Promise<ExchangeRateMeta> {
     const res = await api.get<{ success: boolean; data: ExchangeRateMeta }>(`/payments/rate`)
-    return res.data.data
-  },
-
-  async tariff(): Promise<CouncilCharge[]> {
-    const res = await api.get<{ success: boolean; data: CouncilCharge[] }>(`/payments/tariff`)
-    return res.data.data
-  },
-
-  async methods(): Promise<PaymentMethod[]> {
-    const res = await api.get<{ success: boolean; data: PaymentMethod[] }>(`/payments/methods`)
     return res.data.data
   },
 

@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : stands
      style version : v1
-     style id      : 6bd9e0f9-8951-428e-b12d-0970adfc2d9c
+     style id      : 8c9dfeab-1176-4a9e-8c7b-a2426733bdef
      checksum      : sha256:6c1838efdbdcec0613689a26f7085723e6e4e55f056ba96f1d72bb96cc38e771
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

@@ -346,10 +346,22 @@ export const usePlanningWorkflowStore = defineStore('planningWorkflow', () => {
     )
   }
 
+  /**
+   * Drop the loaded board. Called at the session boundary (see
+   * src/services/sessionScope.ts), because these items carry applicant names and the stand they
+   * applied over, and the next officer at a shared workstation must load their own.
+   */
+  function reset(): void {
+    items.value = []
+    loading.value = false
+    error.value = null
+  }
+
   return {
     items,
     loading,
     error,
+    reset,
     loadFromBackend,
     submitForEnvClearance,
     grantEnvClearance,

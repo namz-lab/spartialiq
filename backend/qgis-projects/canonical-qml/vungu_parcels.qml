@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : vungu_parcels
      style version : v1
-     style id      : 0dba2554-cc1b-4930-abf2-46a914030804
+     style id      : e2c24ed8-5865-4a5f-8ef9-3b29350bca4c
      checksum      : sha256:de70d79d4a356c4dd24f14d4484e9b5be97a9a6715fa79b9e8b5744023e5abd2
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:21 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

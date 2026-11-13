@@ -9,7 +9,11 @@ const { loadReaders, scheduleMinutes, runScheduled, recentRuns, LOCK_KEY } = req
 
 const SCHEMA = 'sp_sched_test'
 const BASE_ID = 991000
-const W0 = -86100, S0 = 2153900       // its own patch of ground, so suites running side by side cannot meet on it
+// its own patch of ground, so suites running side by side cannot meet on it -- and, since
+// migration 187 filled the register with the real farm extract, far from the district:
+// north of the Zambezi at lat -17.5, same Lo29 belt, no council parcels within 50 km
+// (the same ground layout-check.test.js moved to, at a different offset).
+const W0 = -86100, S0 = 1936200
 const square = (w, s, size = 30) => `POLYGON((${w} ${s}, ${w + size} ${s}, ${w + size} ${s + size}, ${w} ${s + size}, ${w} ${s}))`
 
 describe('configuration', () => {

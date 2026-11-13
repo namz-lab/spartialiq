@@ -216,22 +216,22 @@ async function councilRegistersRoutes(fastify) {
     if (!isStr(b.stand_number, 60) || !isStr(b.applicant_name, 200)) {
       return reply.code(400).send({ success: false, error: 'stand_number and applicant_name required' })
     }
-    // Live balance from the finance revenue account linked to the stand.
+    // Pull assessment balance when present (ERP link may fill this later).
     let outstanding = null
     let band = null
     try {
-      const { rows: fr } = await pg.query(
-        `SELECT balance_usd, status_band
-           FROM finance.revenue_account
-          WHERE upper(stand_no) = upper($1)
-          LIMIT 1`,
+      const { rows: pr } = await pg.query(
+        `SELECT pa.rates_balance
+           FROM spatial_planning.property p
+           LEFT JOIN spatial_planning.property_assessment pa ON pa.property_id = p.id
+          WHERE UPPER(p.stand_number) = UPPER($1) LIMIT 1`,
         [b.stand_number.trim()],
       )
-      if (fr[0]) {
-        outstanding = Number(fr[0].balance_usd)
-        band = fr[0].status_band === 'in_arrears' || outstanding > 0 ? 'in_arrears' : 'current'
+      if (pr[0]?.rates_balance != null) {
+        outstanding = Number(pr[0].rates_balance)
+        band = outstanding > 0 ? 'arrears' : 'paid_up'
       }
-    } catch { /* finance schema not yet applied */ }
+    } catch { /* thin DB */ }
 
     const { rows } = await pg.query(
       `INSERT INTO council_ops.rates_clearance
@@ -252,33 +252,12 @@ async function councilRegistersRoutes(fastify) {
     if (decision === 'refused' && !isStr(b.refusal_reason, 500)) {
       return reply.code(400).send({ success: false, error: 'refusal_reason required' })
     }
-
-    const { rows: [existing] } = await pg.query(
-      `SELECT * FROM council_ops.rates_clearance WHERE id = $1`, [request.params.id],
-    )
-    if (!existing) return reply.code(404).send({ success: false, error: 'not_found' })
-
-    // Prefer the live finance balance for the stand over a typed figure.
-    let outstanding = b.charges_outstanding_usd != null ? Number(b.charges_outstanding_usd) : null
-    let band = null
-    try {
-      const { rows: fr } = await pg.query(
-        `SELECT balance_usd, status_band FROM finance.revenue_account
-          WHERE upper(stand_no) = upper($1) LIMIT 1`,
-        [existing.stand_number],
-      )
-      if (fr[0]) {
-        outstanding = Number(fr[0].balance_usd)
-        band = fr[0].status_band
-      }
-    } catch { /* finance schema optional until migration 192 */ }
-
+    const outstanding = b.charges_outstanding_usd != null ? Number(b.charges_outstanding_usd) : null
     if (decision === 'cleared' && outstanding != null && outstanding > 0) {
       return reply.code(400).send({
         success: false,
         error: 'cannot_clear_with_arrears',
-        message: `Section 109 requires all charges for the period to be paid. Live balance: USD ${Number(outstanding).toFixed(2)}.`,
-        liveBalanceUsd: outstanding,
+        message: 'Section 109 requires all charges for the period to be paid.',
       })
     }
     const no = decision === 'cleared' ? certNo() : null
@@ -286,7 +265,6 @@ async function councilRegistersRoutes(fastify) {
       `UPDATE council_ops.rates_clearance SET
          status = $2,
          charges_outstanding_usd = COALESCE($3, charges_outstanding_usd),
-         erp_status_band = COALESCE($7, erp_status_band),
          certificate_no = COALESCE($4, certificate_no),
          issued_at = CASE WHEN $2 = 'cleared' THEN now() ELSE issued_at END,
          valid_until = CASE WHEN $2 = 'cleared' THEN (CURRENT_DATE + 90) ELSE valid_until END,
@@ -294,7 +272,7 @@ async function councilRegistersRoutes(fastify) {
          reviewed_by = $6,
          updated_at = now()
        WHERE id = $1 RETURNING *`,
-      [request.params.id, decision, outstanding, no, b.refusal_reason || null, request.user.id, band],
+      [request.params.id, decision, outstanding, no, b.refusal_reason || null, request.user.id],
     )
     if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     return reply.send({ success: true, data: rows[0] })

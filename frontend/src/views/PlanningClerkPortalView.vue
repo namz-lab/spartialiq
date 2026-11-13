@@ -79,7 +79,7 @@ import {
   FileText, LayoutDashboard, Search, FileInput, ShieldCheck, Eye,
   AlarmClock, Mail, Megaphone, FileX, BookOpen, Inbox, Receipt, FolderInput,
   Send, ShieldAlert, Scale, Settings2, Menu, X, CornerDownLeft, RefreshCw,
-  AlertTriangle, FolderOpen, Table2, Landmark,
+  AlertTriangle, FolderOpen, Table2,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -370,17 +370,6 @@ function handleLogout() {
           {{ overview.loading.value ? 'Refreshing' : 'Refresh' }}
         </span>
         <RefreshCw :size="13" aria-hidden="true" :class="{ 'ins-spin': overview.loading.value }" />
-      </button>
-
-      <button
-        type="button"
-        class="ck-sync"
-        title="Open the finance revenue console"
-        data-testid="clerk-open-finance"
-        @click="router.push('/finance')"
-      >
-        <Landmark :size="13" aria-hidden="true" />
-        <span class="ck-sync-label">Finance</span>
       </button>
 
       <ProfileDropdown

@@ -40,7 +40,9 @@ import { createRequire } from 'node:module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FRONTEND = resolve(__dirname, '..')
-const BACKEND = process.env.VUNGU_BACKEND || resolve(FRONTEND, '../app-backend')
+// The real backend repo (see docs/finance/2026-11-05-finance-impact-gap-note.md: the ../app-backend
+// path named in CLAUDE.md has never existed). Set VUNGU_BACKEND when it lives elsewhere.
+const BACKEND = process.env.VUNGU_BACKEND || resolve(FRONTEND, '../Manicipal-drums-backend-3')
 
 // The backend owns pg + the registry modules; the frontend owns esbuild + the
 // statutory schedule. Bridge by requiring out of the backend's tree.
@@ -126,6 +128,9 @@ const QML_AUTHORS = {
   // symbol, while the .qgs project carries the 11-class categorized renderer.
   // Precedence is "richest usable style", not "newest file".
 }
+
+// Layer opacity for polygons whose style is converted from QGIS.
+const QGIS_POLYGON_OVERLAY_OPACITY = 0.3
 
 // Single-symbol sidecars that exist and parse, but would replace purpose-built
 // web cartography with an opaque QGIS default. Listed so the decision is
@@ -323,6 +328,25 @@ function statutoryDocs(S) {
     opacityCurve: opacityCurve([{ zoom: 9, value: 0.35 }, { zoom: 14, value: 0.55 }]),
   })
 
+  // Acua sub-units carry the same status vocabulary as their parent stands
+  // (migration 183), and they only render from z12 where street-level detail
+  // is already the reading mode -- so the same status colours, one step more
+  // opaque, is the whole style. Shipped without one: the layer resolved no
+  // style and the portal served it unstyled.
+  put('acua_stands', 'polygon', {
+    type: 'categorized',
+    attribute: 'status',
+    method: 'unique_values',
+    categories: [
+      { value: 'available', label: 'Available', symbol: solidFill('#22c55e', '#15803d') },
+      { value: 'reserved', label: 'Reserved', symbol: solidFill('#f97316', '#c2410c') },
+      { value: 'allocated', label: 'Allocated', symbol: solidFill('#3b82f6', '#1d4ed8') },
+      { value: 'withdrawn', label: 'Withdrawn', symbol: solidFill('#e5e7eb', '#9ca3af') },
+    ],
+    fallback: { label: 'Unknown', symbol: solidFill('#94a3b8', '#475569') },
+    opacityCurve: opacityCurve([{ zoom: 12, value: 0.45 }, { zoom: 15, value: 0.6 }]),
+  })
+
   // --- Vungu master plan (council overlays) --------------------------------
   put('vungu_cemeteries', 'polygon', { type: 'single', symbol: solidFill(S.mpColor('Grey 1.2'), S.mpColor('Grey 1'), 0.7) })
   put('vungu_waste_management', 'polygon', { type: 'single', symbol: solidFill(S.mpColor('Green-Brown 2'), '#6f724a', 0.7) })
@@ -452,6 +476,13 @@ const pad = (s, n) => String(s ?? '').padEnd(n)
         minZoom: decision.doc.scale?.minZoom ?? layer.minzoom ?? null,
         maxZoom: decision.doc.scale?.maxZoom ?? layer.maxzoom ?? null,
       },
+    }
+    // qgisImport drops QGIS symbol opacity (see QML_AUTHORS), so a converted
+    // polygon fills at 1 and buries the basemap under solid zone colour. Give
+    // QGIS-authored polygons the same see-through overlay weight the statutory
+    // master-plan layers use (cadastre 0.30, parcels 0.35).
+    if (decision.source === 'qgis' && layer.geomType === 'polygon' && (decision.doc.opacity ?? 1) === 1) {
+      decision.doc = { ...decision.doc, opacity: QGIS_POLYGON_OVERLAY_OPACITY }
     }
     plan.push({ layer, ...decision })
   }

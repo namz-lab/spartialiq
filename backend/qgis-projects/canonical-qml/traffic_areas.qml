@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : traffic_areas
      style version : v1
-     style id      : 337b4c1b-fa51-4afe-9af5-bcdab8dc4cae
+     style id      : d7d4cce8-b3a9-47ed-b1a0-1474f989e1c8
      checksum      : sha256:a1cc9049bfce644c38dcf77f40b91007e96d7c2ede8f8ac9ab7a6f43fabd92e9
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

@@ -100,6 +100,7 @@ const ev = (type, key, payload) => ({
   occurred_at: new Date().toISOString(),
   source: 'erp-sample',
   idempotency_key: key,
+  authority_code: 'VUNGU', // the sample is Vungu's; the inbound contract requires it
   payload,
 })
 

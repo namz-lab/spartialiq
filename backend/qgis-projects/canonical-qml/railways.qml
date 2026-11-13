@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : railways
      style version : v1
-     style id      : 28836429-3248-4861-aef0-a53cef4f8e49
+     style id      : c3764cc8-07f2-4513-8b1d-153c34fbc913
      checksum      : sha256:1f4fde2a9c7c8bc80c72e7a88b2fffd3537dba6c7794ab86ee857e3f110b4b7f
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

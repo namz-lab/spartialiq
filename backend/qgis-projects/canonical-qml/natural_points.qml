@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : natural_points
      style version : v1
-     style id      : 57cb6f77-20b0-478e-a90f-72a031d02fc3
+     style id      : 3da1d570-7073-40d8-b974-c28136059c40
      checksum      : sha256:71d212bb1995b4db2abfb1dfd78705dfd907cc2585172a3ffec569c85afa215a
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

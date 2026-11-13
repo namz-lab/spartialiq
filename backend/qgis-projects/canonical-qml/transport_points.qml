@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : transport_points
      style version : v1
-     style id      : 57173c5b-3a75-4599-9b34-5048a5408e6c
+     style id      : 9b9a2c30-2b36-4f67-894f-b9bfad9e4234
      checksum      : sha256:d7cc9895fcee3e0dca43ab00d06bf211a9b950bd382a71c8ccce31b5572f7f14
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

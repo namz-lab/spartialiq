@@ -2,6 +2,12 @@
 -- Parcels come from public.vungu_parcels (farm extract) and public.stands (layout).
 -- Rates figures are a working roll: site value from measured area, not a finance extract.
 -- Idempotent.
+--
+-- The farm extract (public.vungu_parcels) and the COD-AB ward extract (public.wards) are
+-- source data loaded by scripts/setup-spatial.mjs, not objects the migration chain creates.
+-- A database built from the chain alone has neither, and this migration converts what the
+-- database has (the stance migration 172 takes) rather than assuming the hand: every fill
+-- that reads them is guarded on to_regclass and simply does nothing where they are absent.
 
 BEGIN;
 
@@ -28,11 +34,16 @@ CREATE TABLE IF NOT EXISTS admin.ward (
   source text NOT NULL,
   geom geometry(MultiPolygon, 4326)
 );
-INSERT INTO admin.ward (ward_code, name, source, geom)
-SELECT w.pcode, COALESCE(NULLIF(btrim(w.name_en), ''), w.pcode), 'public.wards COD-AB extract', w.geom
-  FROM public.wards w
- WHERE w.pcode IS NOT NULL
-ON CONFLICT (ward_code) DO NOTHING;
+DO $$
+BEGIN
+  IF to_regclass('public.wards') IS NOT NULL THEN
+    INSERT INTO admin.ward (ward_code, name, source, geom)
+    SELECT w.pcode, COALESCE(NULLIF(btrim(w.name_en), ''), w.pcode), 'public.wards COD-AB extract', w.geom
+      FROM public.wards w
+     WHERE w.pcode IS NOT NULL
+    ON CONFLICT (ward_code) DO NOTHING;
+  END IF;
+END $$;
 
 CREATE SCHEMA IF NOT EXISTS land;
 CREATE SEQUENCE IF NOT EXISTS land.parcel_id_seq;
@@ -113,79 +124,119 @@ CREATE TABLE IF NOT EXISTS revenue_link.billing_status (
   as_at timestamptz NOT NULL
 );
 
-INSERT INTO land.general_plan (sg_ref, township_code, source_srid, feature_count)
-SELECT 'EXTRACT-VUNGU-PARCELS', 'VUNGU', 4326, count(*)
-  FROM public.vungu_parcels
- WHERE NOT EXISTS (SELECT 1 FROM land.general_plan WHERE sg_ref = 'EXTRACT-VUNGU-PARCELS');
+DO $$
+BEGIN
+  IF to_regclass('public.vungu_parcels') IS NOT NULL THEN
+    INSERT INTO land.general_plan (sg_ref, township_code, source_srid, feature_count)
+    SELECT 'EXTRACT-VUNGU-PARCELS', 'VUNGU', 4326, count(*)
+      FROM public.vungu_parcels
+     WHERE NOT EXISTS (SELECT 1 FROM land.general_plan WHERE sg_ref = 'EXTRACT-VUNGU-PARCELS');
+  END IF;
+END $$;
 
 INSERT INTO land.general_plan (sg_ref, township_code, source_srid, feature_count)
 SELECT 'LAYOUT-STANDS', 'LAYOUT', 4326, count(*)
   FROM public.stands
  WHERE NOT EXISTS (SELECT 1 FROM land.general_plan WHERE sg_ref = 'LAYOUT-STANDS');
 
-INSERT INTO land.parcel (
-  stand_no, township_code, ward_code, geom_source, source_srid, geom_wgs84,
-  transform_method, area_m2, sg_ref, general_plan_id, accuracy_class, source, status
-)
-SELECT d.stand_no, 'VUNGU', aw.ward_code,
-       d.geom, 4326, d.geom,
-       'already WGS84; farm extract, not a Surveyor-General diagram',
-       d.area_m2, d.gid, gp.import_id, 'D', 'public.vungu_parcels', 'current'
-  FROM (
-    SELECT s.fid, s.gid, s.geom, s.area_m2,
-           CASE WHEN count(*) OVER (PARTITION BY s.raw) > 1
-                THEN left(s.raw, 16) || '-' || s.fid::text
-                ELSE s.raw END AS stand_no
+DO $$
+BEGIN
+  -- The farm-parcel fill needs the extract AND the ward polygons it joins to.
+  IF to_regclass('public.vungu_parcels') IS NOT NULL
+     AND to_regclass('public.wards') IS NOT NULL THEN
+    INSERT INTO land.parcel (
+      stand_no, township_code, ward_code, geom_source, source_srid, geom_wgs84,
+      transform_method, area_m2, sg_ref, general_plan_id, accuracy_class, source, status
+    )
+    SELECT d.stand_no, 'VUNGU', aw.ward_code,
+           d.geom, 4326, d.geom,
+           'already WGS84; farm extract, not a Surveyor-General diagram',
+           d.area_m2, d.gid, gp.import_id, 'D', 'public.vungu_parcels', 'current'
       FROM (
-        SELECT p.fid, NULLIF(btrim(p.gid), '') AS gid,
-               ST_Multi(ST_CollectionExtract(ST_MakeValid(p.geom), 3)) AS geom,
-               round(ST_Area(p.geom::geography)::numeric, 2) AS area_m2,
-               left(COALESCE(NULLIF(btrim(p.name), ''), NULLIF(btrim(p.name_cfu), ''), 'GID-' || p.gid), 24) AS raw
-          FROM public.vungu_parcels p
-         WHERE p.geom IS NOT NULL
-           AND ST_Area(p.geom::geography) > 1
-      ) s
-     WHERE GeometryType(s.geom) = 'MULTIPOLYGON'
-  ) d
-  LEFT JOIN LATERAL (
-    SELECT w.pcode
-      FROM public.wards w
-     WHERE w.geom IS NOT NULL AND ST_Intersects(w.geom, ST_PointOnSurface(d.geom))
-     ORDER BY ST_Area(ST_Intersection(w.geom, d.geom)) DESC NULLS LAST
-     LIMIT 1
-  ) ward ON true
-  LEFT JOIN admin.ward aw ON aw.ward_code = ward.pcode
-  JOIN land.general_plan gp ON gp.sg_ref = 'EXTRACT-VUNGU-PARCELS'
- WHERE NOT EXISTS (
-   SELECT 1 FROM land.parcel x WHERE x.township_code = 'VUNGU' AND x.stand_no = d.stand_no AND x.status = 'current'
- );
+        SELECT s.fid, s.gid, s.geom, s.area_m2,
+               CASE WHEN count(*) OVER (PARTITION BY s.raw) > 1
+                    THEN left(s.raw, 16) || '-' || s.fid::text
+                    ELSE s.raw END AS stand_no
+          FROM (
+            SELECT p.fid, NULLIF(btrim(p.gid), '') AS gid,
+                   ST_Multi(ST_CollectionExtract(ST_MakeValid(p.geom), 3)) AS geom,
+                   round(ST_Area(p.geom::geography)::numeric, 2) AS area_m2,
+                   left(COALESCE(NULLIF(btrim(p.name), ''), NULLIF(btrim(p.name_cfu), ''), 'GID-' || p.gid), 24) AS raw
+              FROM public.vungu_parcels p
+             WHERE p.geom IS NOT NULL
+               AND ST_Area(p.geom::geography) > 1
+          ) s
+         WHERE GeometryType(s.geom) = 'MULTIPOLYGON'
+      ) d
+      LEFT JOIN LATERAL (
+        SELECT w.pcode
+          FROM public.wards w
+         WHERE w.geom IS NOT NULL AND ST_Intersects(w.geom, ST_PointOnSurface(d.geom))
+         ORDER BY ST_Area(ST_Intersection(w.geom, d.geom)) DESC NULLS LAST
+         LIMIT 1
+      ) ward ON true
+      LEFT JOIN admin.ward aw ON aw.ward_code = ward.pcode
+      JOIN land.general_plan gp ON gp.sg_ref = 'EXTRACT-VUNGU-PARCELS'
+     WHERE NOT EXISTS (
+       SELECT 1 FROM land.parcel x WHERE x.township_code = 'VUNGU' AND x.stand_no = d.stand_no AND x.status = 'current'
+     );
+  END IF;
+END $$;
 
-INSERT INTO land.parcel (
-  stand_no, township_code, ward_code, geom_source, source_srid, geom_wgs84,
-  transform_method, area_m2, general_plan_id, accuracy_class, source,
-  allocation_status, status, custodian_dept
-)
-SELECT s.stand_number, 'LAYOUT', aw.ward_code,
-       ST_Multi(s.geom), 4326, ST_Multi(s.geom),
-       'already WGS84; council layout stand',
-       round(ST_Area(s.geom::geography)::numeric, 2),
-       gp.import_id, 'C', 'public.stands',
-       CASE WHEN s.status = 'allocated' THEN 'allocated' ELSE 'unallocated' END,
-       'current', 'Housing'
-  FROM public.stands s
-  LEFT JOIN LATERAL (
-    SELECT w.pcode
-      FROM public.wards w
-     WHERE w.geom IS NOT NULL AND ST_Intersects(w.geom, ST_PointOnSurface(s.geom))
-     LIMIT 1
-  ) w ON true
-  LEFT JOIN admin.ward aw ON aw.ward_code = w.pcode
-  JOIN land.general_plan gp ON gp.sg_ref = 'LAYOUT-STANDS'
- WHERE ST_Area(s.geom::geography) > 1
-   AND NOT EXISTS (
-     SELECT 1 FROM land.parcel x
-      WHERE x.township_code = 'LAYOUT' AND x.stand_no = s.stand_number AND x.status = 'current'
-   );
+-- Layout stands exist wherever the chain has run (migration 105); the ward polygons they are
+-- joined to are the COD-AB extract, which may not. Without the extract the stands still fill,
+-- unattributed to a ward.
+DO $$
+BEGIN
+  IF to_regclass('public.wards') IS NOT NULL THEN
+    INSERT INTO land.parcel (
+      stand_no, township_code, ward_code, geom_source, source_srid, geom_wgs84,
+      transform_method, area_m2, general_plan_id, accuracy_class, source,
+      allocation_status, status, custodian_dept
+    )
+    SELECT s.stand_number, 'LAYOUT', aw.ward_code,
+           ST_Multi(s.geom), 4326, ST_Multi(s.geom),
+           'already WGS84; council layout stand',
+           round(ST_Area(s.geom::geography)::numeric, 2),
+           gp.import_id, 'C', 'public.stands',
+           CASE WHEN s.status = 'allocated' THEN 'allocated' ELSE 'unallocated' END,
+           'current', 'Housing'
+      FROM public.stands s
+      LEFT JOIN LATERAL (
+        SELECT w.pcode
+          FROM public.wards w
+         WHERE w.geom IS NOT NULL AND ST_Intersects(w.geom, ST_PointOnSurface(s.geom))
+         LIMIT 1
+      ) w ON true
+      LEFT JOIN admin.ward aw ON aw.ward_code = w.pcode
+      JOIN land.general_plan gp ON gp.sg_ref = 'LAYOUT-STANDS'
+     WHERE ST_Area(s.geom::geography) > 1
+       AND NOT EXISTS (
+         SELECT 1 FROM land.parcel x
+          WHERE x.township_code = 'LAYOUT' AND x.stand_no = s.stand_number AND x.status = 'current'
+       );
+  ELSE
+    INSERT INTO land.parcel (
+      stand_no, township_code, ward_code, geom_source, source_srid, geom_wgs84,
+      transform_method, area_m2, general_plan_id, accuracy_class, source,
+      allocation_status, status, custodian_dept
+    )
+    SELECT s.stand_number, 'LAYOUT', NULL,
+           ST_Multi(s.geom), 4326, ST_Multi(s.geom),
+           'already WGS84; council layout stand',
+           round(ST_Area(s.geom::geography)::numeric, 2),
+           gp.import_id, 'C', 'public.stands',
+           CASE WHEN s.status = 'allocated' THEN 'allocated' ELSE 'unallocated' END,
+           'current', 'Housing'
+      FROM public.stands s
+      JOIN land.general_plan gp ON gp.sg_ref = 'LAYOUT-STANDS'
+     WHERE ST_Area(s.geom::geography) > 1
+       AND NOT EXISTS (
+         SELECT 1 FROM land.parcel x
+          WHERE x.township_code = 'LAYOUT' AND x.stand_no = s.stand_number AND x.status = 'current'
+       );
+  END IF;
+END $$;
 
 INSERT INTO land.building (parcel_id, use, source, accuracy_class, geom)
 SELECT p.parcel_id, 'dwelling', 'stand centroid', 'D', ST_PointOnSurface(p.geom_wgs84)
@@ -193,25 +244,33 @@ SELECT p.parcel_id, 'dwelling', 'stand centroid', 'D', ST_PointOnSurface(p.geom_
  WHERE p.township_code = 'LAYOUT' AND p.status = 'current'
    AND NOT EXISTS (SELECT 1 FROM land.building b WHERE b.parcel_id = p.parcel_id);
 
-INSERT INTO revenue_link.account_link (parcel_id, erp_account_no, link_type, verified_by)
-SELECT p.parcel_id, 'VRDC-' || p.township_code || '-' || p.stand_no, 'rates', 'working roll from area'
+-- On the chain these tables were already made tenant data by migration 172 (which runs
+-- earlier), so the working roll states the authority it belongs to: the parcel's own. A
+-- parcel with no authority has no council a working-roll link could belong to, so it is
+-- left for the real ERP feed to claim.
+INSERT INTO revenue_link.account_link (parcel_id, erp_account_no, link_type, verified_by, authority_id)
+SELECT p.parcel_id, 'VRDC-' || p.township_code || '-' || p.stand_no, 'rates', 'working roll from area', p.authority_id
   FROM land.parcel p
  WHERE p.status = 'current'
+   AND p.authority_id IS NOT NULL
 ON CONFLICT (parcel_id, erp_account_no) DO NOTHING;
 
-INSERT INTO revenue_link.billing_status (erp_account_no, status_band, as_at)
+INSERT INTO revenue_link.billing_status (erp_account_no, status_band, as_at, authority_id)
 SELECT a.erp_account_no,
        CASE
          WHEN s.status = 'withdrawn' THEN 'closed'
          WHEN s.status = 'reserved' THEN 'in_arrears'
          ELSE 'current'
        END,
-       now()
+       now(),
+       a.authority_id
   FROM revenue_link.account_link a
   JOIN land.parcel p ON p.parcel_id = a.parcel_id
   LEFT JOIN public.stands s ON p.township_code = 'LAYOUT' AND s.stand_number = p.stand_no
+ WHERE a.authority_id IS NOT NULL
 ON CONFLICT (erp_account_no) DO UPDATE
-  SET status_band = EXCLUDED.status_band, as_at = EXCLUDED.as_at;
+  SET status_band = EXCLUDED.status_band, as_at = EXCLUDED.as_at
+ WHERE revenue_link.billing_status.authority_id = EXCLUDED.authority_id;
 
 INSERT INTO spatial_planning.property (stand_number, suburb_ward, area_sqm, aan)
 SELECT p.stand_no, COALESCE(p.ward_code, p.township_code), round(p.area_m2, 2),
