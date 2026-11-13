@@ -33,6 +33,8 @@ import OpsImportSection                from './gis-officer/sections/OpsImportSec
 // The GIS Branch's register sections (GMS, migration 132): the parcel register and profile, the survey import, and the integration console
 // (the ERP outbox, the SurveyPro importer). Each has its own address (/gis/parcels, /gis/data/import, /gis/integration) that opens it here.
 import ParcelRegisterSection           from './gis-officer/sections/ParcelRegisterSection.vue'
+// The map workspace (/gis/map): the parcel register drawn on the map, with identify, selection, measuring and QA-gated editing.
+import MapWorkspaceSection             from './gis-officer/map/MapWorkspaceSection.vue'
 import SurveyImportSection             from './gis-officer/sections/SurveyImportSection.vue'
 import IntegrationSection              from './gis-officer/sections/IntegrationSection.vue'
 import { GMS_CAN } from '@/services/gms'
@@ -45,7 +47,7 @@ import GisSymbologyRegistryView        from './admin/GisSymbologyRegistryView.vu
 import {
   Globe, LayoutDashboard, Database, MapPin, Users,
   Map as MapIcon, Trees, ShieldAlert, Building, Eye, BarChart3, Menu, X, SquarePen,
-  Palette, Send, Route, Droplets, Layers, Upload, Beef, Landmark, FileUp, Plug, Table2,
+  Palette, Send, Route, Droplets, Layers, Upload, Beef, Landmark, FileUp, Plug, Table2, MapPinned,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -59,7 +61,7 @@ type SectionKey =
   | 'zoning' | 'matrix' | 'environmental' | 'enforcement' | 'forward_planning'
   | 'roads' | 'wash' | 'livestock' | 'master_themes' | 'ops_import'
   | 'public_portal' | 'data_quality' | 'symbology'
-  | 'register' | 'survey_import' | 'integration'
+  | 'register' | 'map' | 'survey_import' | 'integration'
 
 // Order matters below 768px: the first four fill the bottom bar. The GIS
 // officer's daily loop is checking the queue, editing stands, keeping the
@@ -107,6 +109,8 @@ const sections: readonly (BottomNavItem & { key: SectionKey; desc: string })[] =
     desc:'Published style versions · QGIS ↔ web fidelity · rollback' },
   { key:'register',          label:'Parcel register',           short:'Register', icon: Landmark,
     desc:'Every parcel: search, profile, where it came from' },
+  { key:'map',               label:'Parcel map',                short:'Map',     icon: MapPinned,
+    desc:'Farms and townships on the map: search, identify, measure, edit' },
   { key:'survey_import',     label:'Survey import',             short:'Survey',  icon: FileUp,
     desc:'A plan from the Surveyor-General or a surveyor, into the register: preview, then adopt' },
   { key:'integration',       label:'Integration',               short:'Links',   icon: Plug,
@@ -115,9 +119,9 @@ const sections: readonly (BottomNavItem & { key: SectionKey; desc: string })[] =
 
 // The register sections are the GIS Branch's: a role sees one only if the API would let it use it (the same lists as the router and the backend).
 const GMS_SECTION_ROLES: Partial<Record<SectionKey, readonly string[]>> = {
-  register: GMS_CAN.view, survey_import: GMS_CAN.importSurvey, integration: GMS_CAN.integrationView,
+  register: GMS_CAN.view, map: GMS_CAN.view, survey_import: GMS_CAN.importSurvey, integration: GMS_CAN.integrationView,
 }
-const GMS_PATH: Partial<Record<SectionKey, string>> = { register: '/gis/parcels', survey_import: '/gis/data/import', integration: '/gis/integration' }
+const GMS_PATH: Partial<Record<SectionKey, string>> = { register: '/gis/parcels', map: '/gis/map', survey_import: '/gis/data/import', integration: '/gis/integration' }
 const visibleSections = computed(() => sections.filter((s) => {
   const roles = GMS_SECTION_ROLES[s.key]
   return !roles || [...roles, 'admin', 'planner'].includes(authStore.user?.role as string)
@@ -127,7 +131,7 @@ const activeSection = ref<SectionKey>('dashboard')
 const parcelId = computed(() => (typeof route.params.parcelId === 'string' ? route.params.parcelId : undefined))
 // An address that names a section (/gis/integration) opens it; moving between addresses moves between sections
 watch(() => route.meta.gisSection, (key) => {
-  if (key) activeSection.value = ({ register: 'register', survey_import: 'survey_import', integration: 'integration' } as Record<string, SectionKey>)[key as string] ?? activeSection.value
+  if (key) activeSection.value = ({ register: 'register', map: 'map', survey_import: 'survey_import', integration: 'integration' } as Record<string, SectionKey>)[key as string] ?? activeSection.value
 }, { immediate: true })
 function openSection(key: SectionKey) {
   activeSection.value = key
@@ -228,6 +232,7 @@ function handleLogout() {
         <PublicGISPortalSection          v-else-if="activeSection === 'public_portal'" />
         <DataQualitySection              v-else-if="activeSection === 'data_quality'" />
         <ParcelRegisterSection           v-else-if="activeSection === 'register'" :parcel-id="parcelId" />
+        <MapWorkspaceSection             v-else-if="activeSection === 'map'" />
         <SurveyImportSection             v-else-if="activeSection === 'survey_import'" />
         <IntegrationSection              v-else-if="activeSection === 'integration'" />
         <!-- Same console the IT Admin sees at /admin/gis-symbology — one
