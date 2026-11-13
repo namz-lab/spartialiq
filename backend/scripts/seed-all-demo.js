@@ -34,6 +34,8 @@ const SCRIPTS = [
   'seed-surveyor-demo.js',
   'seed-gis-officer-demo.js',
   'seed-admin-demo.js',
+  // The Chief Executive's overview: road, water and asset registers and the audit plan. Needs only the users.
+  'seed-executive-demo.js',
   // Last, and only dependent on the users: it creates its own financial year, classifications,
   // budget lines and a year of transactions under the `DD-` prefix, and removes them again on
   // --undo. It is what makes the finance reports and the Director's cockpit demonstrable — those

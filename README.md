@@ -124,6 +124,7 @@ Stand **HDR-105**, account **VRDC-LAYOUT-HDR-105**, parcel **P-0000746**, is the
 - **Surveyor.** Diagrams and the subdivision file.
 - **GIS officer.** The layers everyone else is reading.
 - **IT admin.** Issues the accounts. Does not decide an application or edit a rates balance.
+- **Chief executive.** The six areas of the Executive Arm on one read-only page: finance, planning and land, engineering, social services, human resources and internal audit. A department with no data says so, and human resources says it is not yet in the system. The finance dashboard is one click away. Demo account: `demo.ceo@vungu.test`.
 
 ## Run it locally
 
