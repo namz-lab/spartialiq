@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : wards
      style version : v1
-     style id      : b2a2c2bf-e2c3-4166-a44c-f8be188b5e35
+     style id      : 30f93fcb-7314-498a-811e-5866f6c6f5c6
      checksum      : sha256:9c07dd5022ba069df42dbd88d08bbb158926a3e640c0c34287014849aa44de3e
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:19 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

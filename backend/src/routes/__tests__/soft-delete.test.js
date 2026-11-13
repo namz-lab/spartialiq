@@ -18,6 +18,10 @@ const fastifyCookie = require('@fastify/cookie')
 const { gisRoutes } = require('../gis')
 const { planningRoutes } = require('../planning')
 const { createSession } = require('../../middleware/jwtAuth')
+// Production runs dbContext.install + the request store (server.js). Without it
+// fastify.pg is the plain pool: superuser, no app.authority_id, and the tenanted
+// inserts these routes make fail with a NULL authority — not what production does.
+const dbContext = require('../../lib/dbContext')
 
 const TEST_USER_ID = randomUUID()
 const TEST_LAYER = 'jesttest-soft'
@@ -32,16 +36,18 @@ beforeAll(async () => {
   // can't load under jest (chokidar v5 is ESM-only via ogcServices).
   app = Fastify({ logger: false })
   await app.register(fastifyPostgres, { connectionString: process.env.DATABASE_URL })
+  dbContext.install(app)
+  app.addHook('onRequest', (_q, _r, done) => dbContext.runWithRequest(done))
   await app.register(fastifyCookie, { secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET })
   await app.register(async (scope) => {
     await gisRoutes(scope)
     await planningRoutes(scope)
   }, { prefix: '/api' })
   await app.ready()
-  await app.pg.query(
-    `INSERT INTO users (id, email, full_name, name, role, active, status, password_hash)
+  await dbContext.systemOf(app.pg).query(
+    `INSERT INTO users (id, email, full_name, name, role, active, status, password_hash, authority_id)
      VALUES ($1, $2, 'Jest Soft Delete', 'Jest Soft Delete', 'planner', true, 'active',
-             '$2b$10$jesttestjesttestjesttestjesttestjesttestjesttestjestte')
+             '$2b$10$jesttestjesttestjesttestjesttestjesttestjesttestjestte', 1)
      ON CONFLICT (id) DO NOTHING`,
     [TEST_USER_ID, `jesttest-soft-${TEST_USER_ID}@example.test`],
   )
@@ -60,12 +66,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Test-data cleanup is legitimately a hard delete.
-  await app.pg.query(`DELETE FROM public.user_session WHERE id = $1`, [sid])
-  await app.pg.query(`DELETE FROM spatial_planning.gis_feature WHERE layer = $1`, [TEST_LAYER])
-  await app.pg.query(`DELETE FROM spatial_planning.gis_feature_history WHERE layer = $1`, [TEST_LAYER])
-  await app.pg.query(`DELETE FROM spatial_planning.planning_revision WHERE project_id = $1`, [TEST_PROJECT_ID])
-  await app.pg.query(`DELETE FROM spatial_planning.planning_project WHERE id = $1`, [TEST_PROJECT_ID])
-  await app.pg.query(`DELETE FROM users WHERE id = $1`, [TEST_USER_ID])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM public.user_session WHERE id = $1`, [sid])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.gis_feature WHERE layer = $1`, [TEST_LAYER])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.gis_feature_history WHERE layer = $1`, [TEST_LAYER])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.planning_revision WHERE project_id = $1`, [TEST_PROJECT_ID])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.planning_project WHERE id = $1`, [TEST_PROJECT_ID])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM users WHERE id = $1`, [TEST_USER_ID])
   await app.close()
 }, 30000)
 
@@ -94,7 +100,7 @@ test('gis feature: delete hides it from reads but keeps the row', async () => {
   expect(put.statusCode).toBe(404)
 
   // …but the row still exists, flagged.
-  const { rows } = await app.pg.query(
+  const { rows } = await dbContext.systemOf(app.pg).query(
     `SELECT deleted_at, deleted_by FROM spatial_planning.gis_feature WHERE id = $1`, [id])
   expect(rows).toHaveLength(1)
   expect(rows[0].deleted_at).not.toBeNull()
@@ -119,7 +125,7 @@ test('planning project: delete hides it; re-saving the same id resurrects it', a
   expect(getAfter.statusCode).toBe(404)
 
   // Row survived the delete.
-  const { rows } = await app.pg.query(
+  const { rows } = await dbContext.systemOf(app.pg).query(
     `SELECT deleted_at FROM spatial_planning.planning_project WHERE id = $1`, [TEST_PROJECT_ID])
   expect(rows).toHaveLength(1)
   expect(rows[0].deleted_at).not.toBeNull()

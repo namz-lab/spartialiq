@@ -38,6 +38,9 @@ const COUNCIL_PAGES = [
   { to: '/council/executive-arm', label: 'Executive arm' },
   { to: '/council/deliberative-arm', label: 'Deliberative arm' },
   { to: '/council/departments', label: 'Departments' },
+  { to: '/council/finance-department', label: 'Finance department' },
+  { to: '/council/planning', label: 'Planning department' },
+  { to: '/council/finances', label: 'Budgets & finances' },
   { to: '/council/publications', label: 'Publications & documents' },
   { to: '/council/stand-application', label: 'Stand applications' },
 ]

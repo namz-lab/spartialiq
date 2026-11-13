@@ -25,18 +25,29 @@
 const { GMS } = require('../services/gms/roles')
 
 /** Every role the users table's CHECK constraint permits. */
+const FINANCE_ROLES = [
+  'finance_admin', 'finance_officer', 'budget_officer', 'dept_head',
+  'finance_committee', 'publisher', 'auditor',
+  // Migration 207. Each arrives with a module that gives it work; see the enterprise design §4.
+  'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
+  // Migration 208: the senior cashier who supervises the tills.
+  'cash_supervisor',
+]
+
 const ALL_ROLES = [
   'admin', 'planner', 'eo', 'env_officer', 'building_inspector',
-  'planning_clerk', 'surveyor', 'gis_officer', 'finance_officer',
+  'planning_clerk', 'surveyor', 'gis_officer',
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
+  ...FINANCE_ROLES,
   'viewer', 'registered', 'public',
 ]
 
 /** Council employees. Mirrors STAFF_ROLES in src/routes/auth.js. */
 const STAFF_ROLES = [
   'admin', 'planner', 'eo', 'env_officer', 'building_inspector',
-  'planning_clerk', 'surveyor', 'gis_officer', 'finance_officer',
+  'planning_clerk', 'surveyor', 'gis_officer',
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
+  ...FINANCE_ROLES,
 ]
 
 /** Council clients (citizens). Never staff; they see only their own records. */
@@ -52,7 +63,6 @@ const ROLE_LABELS = {
   env_officer:        { name: 'Environmental Health Officer', short: 'EHO',       summary: 'Public Health Act duties: premises, outbreaks, notices, certificates.' },
   building_inspector: { name: 'Building Inspector',          short: 'Inspector',  summary: 'Stage inspections, enforcement and occupation certificates.' },
   planning_clerk:     { name: 'Planning Clerk',              short: 'Clerk',      summary: 'Intake, fees, document registry and correspondence.' },
-  finance_officer:    { name: 'Finance Officer',             short: 'Finance',    summary: 'Rates accounts, receipts, the USD/ZWG book and section 109 clearances.' },
   surveyor:           { name: 'Surveyor',                    short: 'Surveyor',   summary: 'Survey tasks, control points, beacon and diagram work.' },
   gis_officer:        { name: 'GIS Officer',                 short: 'GIS',        summary: 'Spatial data, cartography and the published symbology.' },
   gis_head:           { name: 'Principal GIS Officer',       short: 'GIS Head',   summary: 'Leads the GIS Branch. Approves publication, data sharing, schema and integration changes.' },
@@ -63,6 +73,18 @@ const ROLE_LABELS = {
   gis_clerk:          { name: 'GIS Data Clerk',              short: 'GIS Clerk',  summary: 'Logs requests, raises fees through the ERP, links documents and issues maps.' },
   dept_editor:        { name: 'Departmental GIS focal point', short: 'Dept editor', summary: "Edits only the layers their department is custodian of; every edit goes through QA." },
   dept_viewer:        { name: 'Departmental map viewer',     short: 'Dept viewer', summary: 'Views maps, parcel profiles and reports allowed for their department.' },
+  finance_admin:      { name: 'Finance Administrator',       short: 'Fin Admin',  summary: 'Financial years, classifications, imports and publication preparation. Approves nothing and publishes nothing.' },
+  finance_officer:    { name: 'Finance Officer',             short: 'Fin Officer', summary: 'Prepares and validates financial data, records explanations and generates reports.' },
+  budget_officer:     { name: 'Budget Officer',              short: 'Budget',     summary: 'Prepares budget lines and revisions, consolidates submissions and monitors allocations.' },
+  dept_head:          { name: 'Departmental Head',           short: 'Dept Head',  summary: 'Views the department’s own budget and actuals as scoped; prepares submissions and explanations.' },
+  finance_committee:  { name: 'Finance Committee / Treasurer', short: 'Committee', summary: 'Reviews submissions and reports and approves financial content where delegated. Cannot publish.' },
+  publisher:          { name: 'Publisher',                   short: 'Publisher',  summary: 'Releases approved datasets and documents to the public portal. Cannot approve them.' },
+  auditor:            { name: 'Auditor',                     short: 'Auditor',    summary: 'Read-only access to financial records, documents, audit logs and restricted evidence.' },
+  accountant:         { name: 'Accountant',                  short: 'Accountant', summary: 'Keeps the book of account: journals, posting, period close and statements. Verifies the cash office’s cash-up. Cannot post what they prepared.' },
+  cashier:            { name: 'Cashier',                     short: 'Cashier',    summary: 'Opens a till, receipts rates and sundry income, cashes up and prepares the banking. Posts nothing and cannot verify their own count.' },
+  revenue_officer:    { name: 'Revenue Officer',             short: 'Revenue',    summary: 'Valuation roll, rates accounts, billing runs, debtors and arrears. Drafts tariffs and raises runs; approves and commits neither.' },
+  accounting_officer: { name: 'Accounting Officer (CEO)',    short: 'CEO',        summary: 'Reads the council’s whole financial position, the cash office and the audit trail. Writes nothing in this phase.' },
+  cash_supervisor:    { name: 'Cash Supervisor',             short: 'Supervisor', summary: 'Watches every till, recovers an abandoned drawer by a witnessed count, assigns cashiers and verifies cash-ups. Takes no money and keeps no book.' },
   viewer:             { name: 'Citizen (legacy account)',    short: 'Citizen',    summary: 'A client account from before self-registration. Same access as a registered citizen.' },
   registered:         { name: 'Registered citizen',          short: 'Citizen',    summary: 'Applies, pays and tracks their own case. Issued on self-registration.' },
   public:             { name: 'Public',                      short: 'Public',     summary: 'Anonymous visitor. The explorer and the public registers only.' },
@@ -134,11 +156,8 @@ const CAPABILITIES = [
 
   // ── Money and documents ───────────────────────────────────────────
   { id: 'pay.record',      group: 'Revenue', label: 'Record payments and receipts',
-    roles: ['admin', 'planning_clerk', 'eo', 'finance_officer'],
+    roles: ['admin', 'planning_clerk', 'eo'],
     routes: ['/api/payments'] },
-  { id: 'finance.console', group: 'Revenue', label: 'Open the revenue console',
-    roles: ['admin', 'eo', 'planner', 'planning_clerk', 'gis_officer', 'finance_officer'],
-    routes: ['/api/finance'] },
   { id: 'doc.manage',      group: 'Revenue', label: 'Manage the document registry',
     roles: ['admin', 'planning_clerk', 'planner', 'eo'],
     routes: ['/api/documents'] },
@@ -185,6 +204,6 @@ function capabilitiesFor(role) {
 }
 
 module.exports = {
-  ALL_ROLES, STAFF_ROLES, CLIENT_ROLES, ASSIGNABLE_ROLES, ROLE_LABELS,
+  ALL_ROLES, STAFF_ROLES, FINANCE_ROLES, CLIENT_ROLES, ASSIGNABLE_ROLES, ROLE_LABELS,
   CAPABILITIES, matrix, capabilitiesFor,
 }

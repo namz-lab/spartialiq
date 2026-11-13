@@ -31,6 +31,11 @@ const SCRIPTS = [
   'seed-surveyor-demo.js',
   'seed-gis-officer-demo.js',
   'seed-admin-demo.js',
+  // Last, and only dependent on the users: it creates its own financial year, classifications,
+  // budget lines and a year of transactions under the `DD-` prefix, and removes them again on
+  // --undo. It is what makes the finance reports and the Director's cockpit demonstrable — those
+  // screens are correct but unreadable against the four hand-made budget lines that preceded it.
+  'seed-finance-director-demo.js',
 ]
 
 // seed-demo-users.js refuses to run without this, and it has no --undo:

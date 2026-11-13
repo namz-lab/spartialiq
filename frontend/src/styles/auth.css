@@ -594,6 +594,14 @@
   grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
   gap: 4px;
 }
+.auth-demo-group {
+  font-size: var(--ent-fs-micro);
+  color: var(--ent-text-3);
+  margin: var(--ent-s2) 0 2px;
+}
+.auth-demo-group:first-of-type {
+  margin-top: 0;
+}
 .auth-demo-pill {
   font: inherit;
   font-size: var(--ent-fs-xs);

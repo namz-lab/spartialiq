@@ -84,7 +84,13 @@ function parseProject(xml) {
   }
   walk((q['layer-tree-group'] ?? [])[0] ?? {}, [], true)
 
-  const ext = q.mapcanvas?.extent
+  // QGIS 3.4x saves one <mapcanvas> per map view: the main canvas first, then the layout and
+  // overview canvases ("mMapCanvas"). A project with several parses to an ARRAY, and reading
+  // .extent off the array is undefined — the opening extent went null for every real project.
+  // The extent the author left THE map on is the first canvas in document order; a
+  // single-canvas project (what the unit tests build) parses to the same object either way.
+  const canvas = Array.isArray(q.mapcanvas) ? q.mapcanvas[0] : q.mapcanvas
+  const ext = canvas?.extent
   const extent = ext && [ext.xmin, ext.ymin, ext.xmax, ext.ymax].every((v) => Number.isFinite(Number(v)))
     ? [Number(ext.xmin), Number(ext.ymin), Number(ext.xmax), Number(ext.ymax)]
     : null

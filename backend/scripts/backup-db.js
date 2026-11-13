@@ -16,8 +16,10 @@
  */
 require('dotenv').config()
 const { spawnSync } = require('node:child_process')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
+const { Client } = require('pg')
 
 const ROOT = path.resolve(__dirname, '..')
 const BACKUP_DIR = path.join(ROOT, 'backups')
@@ -66,8 +68,77 @@ async function dumpDatabase(ts) {
   const out = path.join(BACKUP_DIR, `db-${ts}.dump`)
   const res = spawnSync(pgDump, [url, '-Fc', '-f', out], { stdio: 'inherit' })
   if (res.status !== 0) throw new Error(`pg_dump exited with ${res.status}`)
+  await verifyDump(out, url)
+  writeChecksum(out)
   console.log(`[backup] database → ${out} (${(fs.statSync(out).size / 1e6).toFixed(1)} MB)`)
   prune('db-')
+}
+
+/**
+ * A dump is not a backup until it is known to contain the records that matter.
+ * `pg_restore -l` reads only the table of contents, so this is cheap. Every
+ * finance base table that exists in the live database must appear with both a
+ * schema entry and a data entry, and the migration history must be present.
+ * A failed check exits non-zero, which is the signal a cron job should alert on.
+ */
+async function verifyDump(dumpPath, url) {
+  const client = new Client({ connectionString: url })
+  await client.connect()
+  let tables
+  try {
+    ({ rows: tables } = await client.query(
+      `SELECT table_name FROM information_schema.tables
+        WHERE table_schema = 'finance' AND table_type = 'BASE TABLE'
+        ORDER BY table_name`,
+    ))
+  } finally {
+    await client.end()
+  }
+
+  const pgRestore = findBin('pg_restore')
+  if (!pgRestore) throw new Error('pg_restore not found on PATH')
+  const toc = spawnSync(pgRestore, ['-l', dumpPath], { encoding: 'utf8' })
+  if (toc.status !== 0) throw new Error(`pg_restore -l exited with ${toc.status}`)
+  const lines = toc.stdout.split('\n')
+
+  const missing = []
+  if (!lines.some((l) => / TABLE public schema_migrations /.test(l))) {
+    missing.push('public.schema_migrations (schema)')
+  }
+  if (!lines.some((l) => / TABLE DATA public schema_migrations /.test(l))) {
+    missing.push('public.schema_migrations (data)')
+  }
+  for (const { table_name: table } of tables) {
+    if (!lines.some((l) => new RegExp(` TABLE finance ${table} `).test(l))) {
+      missing.push(`finance.${table} (schema)`)
+    }
+    if (!lines.some((l) => new RegExp(` TABLE DATA finance ${table} `).test(l))) {
+      missing.push(`finance.${table} (data)`)
+    }
+  }
+  if (missing.length) {
+    throw new Error(`backup verification failed; missing from dump: ${missing.join(', ')}`)
+  }
+  console.log(`[backup] verified ${tables.length} finance tables and schema_migrations in ${path.basename(dumpPath)}`)
+}
+
+function findBin(name) {
+  if (spawnSync(name, ['--version']).status === 0) return name
+  const base = 'C:\\Program Files\\PostgreSQL'
+  if (process.platform === 'win32' && fs.existsSync(base)) {
+    for (const v of fs.readdirSync(base).sort((a, b) => Number(b) - Number(a))) {
+      const exe = path.join(base, v, 'bin', `${name}.exe`)
+      if (fs.existsSync(exe)) return exe
+    }
+  }
+  return null
+}
+
+function writeChecksum(file) {
+  const hash = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+  const line = `${hash}  ${path.basename(file)}\n`
+  fs.writeFileSync(`${file}.sha256`, line)
+  console.log(`[backup] checksum → ${path.basename(file)}.sha256`)
 }
 
 async function zipUploads(ts) {

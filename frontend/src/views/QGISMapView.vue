@@ -592,7 +592,7 @@ async function loadStyledLayer(layerName: string) {
             type: 'line',
             source: sourceId,
             paint: additionalLayer.paint
-          }
+          } satisfies maplibregl.AddLayerObject
           if (additionalLayer.placement === 'below') {
             map.addLayer(definition, layerId)
           } else {

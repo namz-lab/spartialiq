@@ -4,7 +4,7 @@ Project-level instructions for Claude Code and other agentic tools working in th
 
 ## Project
 
-Vungu Rural District Council planning portal — Vue 3 + Pinia + MapLibre GL frontend, Fastify + PostGIS backend (separate repo at `../app-backend`). Replaces paper-based development control with a digital workflow from intake through inspections, and publishes country-wide spatial data (provinces, districts, wards, roads, buildings, landuse) to staff and citizens.
+Vungu Rural District Council planning portal — Vue 3 + Pinia + MapLibre GL frontend, Fastify + PostGIS backend (separate repo at `../Manicipal-drums-backend-3`). Replaces paper-based development control with a digital workflow from intake through inspections, and publishes country-wide spatial data (provinces, districts, wards, roads, buildings, landuse) to staff and citizens.
 
 ## Design Context
 
@@ -35,20 +35,27 @@ The impeccable skill at `.claude/skills/impeccable/` reads both files automatica
 - Spatial store: `src/stores/spatial.ts` — Pinia store with `loadTileLayers()` / `toggleTileLayer(map, id)` actions, OGC fallback for QGIS Server layers.
 - API client: `src/services/api.ts` (axios, `baseURL: '/api'`), `src/services/vectorTiles.ts` (`getTileLayerCatalog()`, `getFeature(layer, fid)`, `tileUrlTemplate(layer)`).
 
-### Backend (`../app-backend`)
+- Finance workspaces (migration in progress, spec `docs/superpowers/specs/2026-11-12-finance-role-workspaces-design.md`): twelve role applications at `/finance/<workspace>`. Which ones a person may open, and their home, come from the server (`/api/finance/me` → `workspaces`, `home_workspace`, backend `src/config/financeWorkspaces.js`); the browser never computes access. Shell in `src/modules/finance/shell/` (frame, switcher, guard, `useFinanceNav` target resolver); each workspace registers itself from `src/modules/finance/workspaces/<key>/routes.ts` and is imported in `workspaces/index.ts`. Until all are built the previous console stays at `/finance/console` and `VITE_FINANCE_WORKSPACES=off` routes everything back to it. Access map: `docs/finance/WORKSPACE-ACCESS.md`.
+
+### Backend (`../Manicipal-drums-backend-3`)
 
 - Entry: `server.js` (CommonJS) loads `.env`, registers Fastify routes under `/api`. Postgres via `@fastify/postgres` -> `fastify.pg`.
 - Tile service: `src/routes/tiles.js` serves `GET /api/tiles/layers`, `GET /api/tiles/:layer/:z/:x/:y.pbf` (`ST_AsMVT` over the registry-allowlisted tables), and `GET /api/tiles/:layer/:id` (single feature as GeoJSON).
 - Layer registry: `src/config/spatialLayers.js` — 24 layers from `zimbabwe.gpkg`, with per-layer `minzoom`, `attributes` allowlist, and `lowZoomFilter` for roads. SRID 900914 (= WGS 84 CRS84, equivalent to 4326, handled in SQL).
 - Migration: `migrations/074_spatial_tile_indexes.sql` adds GiST indexes on every geom column + `roads.fclass`. Run with `node scripts/migrate.js` (or apply directly, the 074 file is idempotent).
-- DB: `Vungu_spatial333` on local Postgres (or the production server via `DATABASE_URL`). The 24 layers live alongside existing app data (`gweru_*`, `development_applications`).
+- DB: `vungu_dev` on local Postgres, user `postgres` / password `postgres` (or the production server via `DATABASE_URL`). The 24 layers live alongside existing app data (`gweru_*`, `development_applications`, `finance.*`). The database carries a 30 s `statement_timeout`, so a bulk load needs `PGOPTIONS="-c statement_timeout=0"`.
 - Smoke tests: `test-tiles-endpoint.js` (8 checks), `scripts/verify-spatial-tables.js` (table inventory).
+
+> **The backend path in this file was wrong until 2026-11-10** and read `../app-backend`, which
+> does not exist. The real repository is `../Manicipal-drums-backend-3` (`package.json` name
+> `vungu-master-alpha-backend`). Scripts that still default to the old path need
+> `VUNGU_BACKEND=/home/theo-madzinaga/Documents/Manicipal-drums-backend-3`.
 
 ## Local development
 
 ```bash
 # Backend
-cd ../app-backend
+cd ../Manicipal-drums-backend-3
 npm run dev                # node server.js, reads .env, listens on :3000
 
 # Frontend

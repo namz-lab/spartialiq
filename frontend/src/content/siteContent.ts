@@ -76,6 +76,8 @@ const COMMITTEE_INDEX: { title: string; desc: string; slug: string }[] = [
 
 const DEPARTMENT_INDEX: { title: string; desc: string; slug: string }[] = [
   { title: 'Your Council', slug: 'your-council', desc: 'District profile, location and the executive team that runs the council.' },
+  { title: 'Finance Department', slug: 'finance-department', desc: 'Budgets, rates and fees, and the council’s published accounts.' },
+  { title: 'Planning Department', slug: 'planning', desc: 'Development permits, subdivisions, building plans and inspections, and how to apply.' },
   { title: 'Health Facilities', slug: 'health-facilities', desc: 'The clinics and mobile health services serving the 19 wards.' },
   { title: 'Roads', slug: 'roads', desc: 'The primary, secondary and farm road network across the district.' },
   { title: 'Environment & Agriculture', slug: 'environment-agriculture', desc: 'Irrigation schemes, livelihood zones and natural-resource stewardship.' },
@@ -260,6 +262,13 @@ export const SITE_CONTENT: Record<string, CouncilPage> = {
     intro:
       'Official council plans and notices. Download the documents below. The IT Admin can replace these with updated files at any time.',
     blocks: [
+      {
+        type: 'cta',
+        heading: 'Budgets and financial statements',
+        text: 'The approved budget, revenue, expenditure and financial documents for each year are published by the Finance Department on the council finances page.',
+        primary: { label: 'View council finances', to: '/council/finances' },
+        secondary: { label: 'Finance department', to: '/council/finance-department' },
+      },
       {
         type: 'attachments',
         heading: 'Council Documents',
@@ -637,6 +646,186 @@ export const SITE_CONTENT: Record<string, CouncilPage> = {
           { name: 'Mr. Lawrence Chikwira', role: 'Internal Auditor' },
           { name: 'Mr. Kudzai Njodzi', role: 'Engineer' },
         ],
+      },
+    ],
+  },
+
+  // Not to be confused with `finance`, the Finance Committee of the deliberative arm. This is
+  // the executive department; the figures themselves live on /council/finances, which reads
+  // only what the department has published, so this page carries no numbers of its own.
+  'finance-department': {
+    slug: 'finance-department',
+    title: 'Finance Department',
+    eyebrow: 'Department',
+    intro:
+      'The Finance Department manages the council’s money: it prepares the annual budget, bills and collects rates and fees, pays for council services and projects, and publishes what was budgeted, collected and spent.',
+    blocks: [
+      {
+        type: 'cta',
+        heading: 'Council budgets and accounts',
+        text: 'The approved budget and the council’s revenue, expenditure and projects are published for each financial year, with the date of publication and the period covered shown beside every figure.',
+        primary: { label: 'View council finances', to: '/council/finances' },
+        secondary: { label: 'Pay council fees', to: '/citizen?section=payments' },
+      },
+      {
+        type: 'cards',
+        heading: 'Published financial information',
+        items: [
+          {
+            title: 'Budget',
+            desc: 'What the council approved for the year, with any later adjustments shown beside the original.',
+            to: '/council/finances?view=budget',
+            meta: 'By financial year',
+          },
+          {
+            title: 'Revenue',
+            desc: 'Rates, fees, levies and grants collected against the budget.',
+            to: '/council/finances?view=revenue',
+            meta: 'By financial year',
+          },
+          {
+            title: 'Expenditure',
+            desc: 'What the council spent, by department and purpose.',
+            to: '/council/finances?view=expenditure',
+            meta: 'By financial year',
+          },
+          {
+            title: 'Projects',
+            desc: 'Funded council projects, their wards and progress.',
+            to: '/council/finances?view=projects',
+            meta: 'By ward',
+          },
+          {
+            title: 'Documents',
+            desc: 'Budget statements, approval notices and financial reports to download.',
+            to: '/council/finances?view=documents',
+            meta: 'Downloads',
+          },
+        ],
+      },
+      {
+        type: 'prose',
+        heading: 'What the department does',
+        paragraphs: [
+          'Each year the department consolidates the estimates of income and expenditure from every council department into a draft budget. The Finance Committee considers it and recommends it to the full council, and the approved budget is then published here.',
+          'Through the year the department bills and collects rates, levies, licences and application fees, pays for approved spending, and reports the council’s financial position to the Finance Committee. The council’s accounts are audited every year.',
+        ],
+      },
+      {
+        type: 'bullets',
+        heading: 'How the figures are published',
+        items: [
+          'US dollar and ZiG amounts are reported separately and never added together, because the council has approved no basis for converting between them.',
+          'Each figure shows when it was published and the period it covers.',
+          'Supplier and beneficiary names, personal data and commercially sensitive information are not published.',
+        ],
+      },
+      {
+        type: 'staff',
+        heading: 'Head of department',
+        members: [{ name: 'Mrs. Grace Kembo', role: 'Executive Officer — Finance' }],
+      },
+      {
+        type: 'cta',
+        heading: 'Questions about a bill or the budget',
+        text: 'Account and billing enquiries are taken at the council offices, 19 Lincoln Road, Light Industrial Site, Gweru, 8am to 5pm, Monday to Friday.',
+        primary: { label: 'Contact the council', to: '/contact' },
+        secondary: { label: 'Finance Committee', to: '/council/finance' },
+      },
+    ],
+  },
+
+  planning: {
+    slug: 'planning',
+    title: 'Planning Department',
+    eyebrow: 'Department',
+    intro:
+      'The Planning Department guides how land in Vungu district is used and developed. It decides applications to develop land, keeps the district’s plans up to date, and inspects building work so that what is built is safe and matches what was approved.',
+    blocks: [
+      {
+        type: 'prose',
+        heading: 'What the department does',
+        paragraphs: [
+          'Vungu Rural District Council is the local planning authority for the district under the Regional, Town and Country Planning Act [Chapter 29:12]. Before land is built on, subdivided or put to a new use, the Council must grant a permit. The Planning Department receives those applications, assesses them against the district’s plans and the law, and recommends a decision.',
+          'The department also prepares the district’s master and local plans, keeps the register of applications and permits, and works with the Planning & Environment Committee, which considers planning matters on behalf of the elected council.',
+        ],
+      },
+      {
+        type: 'cards',
+        heading: 'Services',
+        items: [
+          {
+            title: 'Development permit',
+            desc: 'Permission to develop land, change its use or build in a new way.',
+            to: '/citizen?section=new',
+            meta: 'Apply online',
+          },
+          {
+            title: 'Subdivision and consolidation',
+            desc: 'Dividing a property into stands, or joining stands into one property.',
+            to: '/citizen?section=new',
+            meta: 'Apply online',
+          },
+          {
+            title: 'Building plan approval',
+            desc: 'Submit building plans for checking against the building regulations before you build.',
+            to: '/plan-review',
+            meta: 'Submit plans',
+          },
+          {
+            title: 'Stage inspections',
+            desc: 'Building inspectors visit at each stage of construction, from foundations to occupation.',
+            to: '/citizen?section=applications',
+            meta: 'Book from your portal',
+          },
+          {
+            title: 'What can I build here?',
+            desc: 'Look up a stand or farm to see what the published plan allows on it.',
+            to: '/lookup',
+            meta: 'Plan lookup',
+          },
+          {
+            title: 'Stand applications',
+            desc: 'Join the waiting list for a residential or commercial stand.',
+            to: '/council/stand-application',
+            meta: 'Stands',
+          },
+        ],
+      },
+      {
+        type: 'numbered',
+        heading: 'How an application is decided',
+        items: [
+          'Submit your application with the required plans and documents, and pay the application fee. You receive a reference number to track it.',
+          'The department checks that the application is complete. If something is missing, you are told what to add.',
+          'Where the law requires it, notice is given to neighbouring owners and the public, who may comment or object within the notice period.',
+          'A planner assesses the proposal, visits the site where needed, and consults other departments such as roads, environment and health.',
+          'The Council decides the application: it may approve it, approve it with conditions, or refuse it with reasons. The Act gives the Council three months from a complete application to decide.',
+          'If you disagree with the decision, you may appeal to the Administrative Court.',
+          'Once a permit is granted, building work is inspected at each stage until the Council issues a certificate of occupation.',
+        ],
+      },
+      {
+        type: 'bullets',
+        heading: 'Before you apply',
+        items: [
+          'Check what the plan allows on your stand with the plan lookup, or on the district map.',
+          'Have proof of ownership or the owner’s written consent if you are applying on someone else’s behalf.',
+          'Plans and drawings should be prepared by a qualified architect, draughtsperson or land surveyor, depending on the application.',
+          'Building or changing land use without a permit is an offence, and unauthorised work may have to be removed at the owner’s cost.',
+        ],
+      },
+      {
+        type: 'staff',
+        heading: 'Head of department',
+        members: [{ name: 'Mr. C. Maramwidze', role: 'Executive Officer — Planner' }],
+      },
+      {
+        type: 'cta',
+        heading: 'Start or track an application',
+        text: 'Create an account to apply online, pay fees and follow your application through each step. Planning enquiries are also taken at the council offices, 19 Lincoln Road, Light Industrial Site, Gweru, 8am to 5pm, Monday to Friday.',
+        primary: { label: 'Apply online', to: '/citizen?section=new' },
+        secondary: { label: 'Contact the council', to: '/contact' },
       },
     ],
   },

@@ -226,10 +226,31 @@ const demoAccounts: DemoAccount[] = isDev
       { label: 'Env. health', email: 'demo.envoffice@vungu.test', password: 'demo1234', role: 'env_officer' },
       { label: 'Inspector',  email: 'demo.inspector@vungu.test', password: 'demo1234', role: 'building_inspector' },
       { label: 'Clerk',      email: 'demo.clerk@vungu.test',     password: 'demo1234', role: 'planning_clerk' },
-      { label: 'Finance',    email: 'demo.finance@vungu.test',   password: 'demo1234', role: 'finance_officer' },
       { label: 'Surveyor',   email: 'demo.surveyor@vungu.test',  password: 'demo1234', role: 'surveyor' },
       { label: 'GIS officer', email: 'demo.gis@vungu.test',      password: 'demo1234', role: 'gis_officer' },
       { label: 'IT admin',   email: 'demo.admin@vungu.test',     password: 'demo1234', role: 'admin' },
+    ]
+  : []
+
+// The budget module's personas, seeded with the same demo set (backend
+// scripts/seed-demo-users.js). Each carries a different slice of the finance
+// permission catalogue, which is the quick way to see the duty separations:
+// only the Committee approves, only the Publisher releases, only the Auditor
+// reads everything and writes nothing.
+const financeDemoAccounts: DemoAccount[] = isDev
+  ? [
+      { label: 'Finance admin', email: 'demo.finance-admin@vungu.test',   password: 'demo1234', role: 'finance_admin' },
+      { label: 'Fin. officer',  email: 'demo.finance-officer@vungu.test', password: 'demo1234', role: 'finance_officer' },
+      { label: 'Budget officer', email: 'demo.budget-officer@vungu.test', password: 'demo1234', role: 'budget_officer' },
+      { label: 'Dept head',     email: 'demo.dept-head@vungu.test',       password: 'demo1234', role: 'dept_head' },
+      { label: 'Committee',     email: 'demo.treasurer@vungu.test',       password: 'demo1234', role: 'finance_committee' },
+      { label: 'Publisher',     email: 'demo.publisher@vungu.test',       password: 'demo1234', role: 'publisher' },
+      { label: 'Auditor',       email: 'demo.auditor@vungu.test',         password: 'demo1234', role: 'auditor' },
+      { label: 'Accountant',    email: 'demo.accountant@vungu.test',      password: 'demo1234', role: 'accountant' },
+      { label: 'Cashier',       email: 'demo.cashier@vungu.test',         password: 'demo1234', role: 'cashier' },
+      { label: 'Cash supervisor', email: 'demo.supervisor@vungu.test',    password: 'demo1234', role: 'cash_supervisor' },
+      { label: 'Revenue',       email: 'demo.revenue@vungu.test',         password: 'demo1234', role: 'revenue_officer' },
+      { label: 'CEO',           email: 'demo.ceo@vungu.test',             password: 'demo1234', role: 'accounting_officer' },
     ]
   : []
 
@@ -336,9 +357,20 @@ function fillDemo(account: DemoAccount) {
 
       <div v-if="isDev" class="auth-demo">
         <p class="auth-demo-title">Demo accounts — development build</p>
+        <p class="auth-demo-group">Planning &amp; operations</p>
         <div class="auth-demo-grid">
           <button
             v-for="d in demoAccounts"
+            :key="d.email"
+            type="button"
+            class="auth-demo-pill"
+            @click="fillDemo(d)"
+          >{{ d.label }}</button>
+        </div>
+        <p class="auth-demo-group">Budget &amp; finance</p>
+        <div class="auth-demo-grid">
+          <button
+            v-for="d in financeDemoAccounts"
             :key="d.email"
             type="button"
             class="auth-demo-pill"

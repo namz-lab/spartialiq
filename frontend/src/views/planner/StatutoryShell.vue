@@ -34,6 +34,7 @@ import PermitDocumentsPanel from '@/components/workflow/PermitDocumentsPanel.vue
 import CaseReferralsPanel from './case/CaseReferralsPanel.vue'
 import CaseClockPanel from './case/CaseClockPanel.vue'
 import CasePicker from './case/CasePicker.vue'
+import CaseFinancePanel from './case/CaseFinancePanel.vue'
 import { statusLabel } from '@/composables/useApplicationPipeline'
 import RefusalDrafting from './permit/RefusalDrafting.vue'
 import AppealsSection from './sections/AppealsSection.vue'
@@ -348,6 +349,10 @@ watch(() => [activeTab.value, c.value?.property.standNo, c.value?.permitId] as c
               <li v-if="c.dueDiligence.completedAt"><span>{{ fmtDate(c.dueDiligence.completedAt) }}</span> Planner assessment recorded</li>
             </ol>
           </section>
+          <!-- What the council has spent on this application, if it came from the portal. The
+               component owns the identifier question: the finance register keys on the portal
+               application id (permit_application.dev_app_id), not on the permit's own id. -->
+          <CaseFinancePanel :dev-app-id="c.devAppId" :case-reference="caseNo" />
           <Step1Intake />
         </div>
 

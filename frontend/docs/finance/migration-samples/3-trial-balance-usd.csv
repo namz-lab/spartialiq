@@ -1,0 +1,13 @@
+Account,Description,Debit,Credit
+1000,Land and buildings,"250,000.00",
+1100,Motor vehicles,"85,000.00",
+2000,Debtors control,"42,650.00",
+2500,Stores stock,"6,300.00",
+8400,CBZ current account,"31,275.40",
+8410,Petty cash,150.00,
+3000,Creditors control,,"18,420.00"
+3100,VAT control,,"2,310.40"
+3500,Long-term loan,,"60,000.00"
+5000,Accumulated surplus,,"334,645.00"
+6000,Property rates,0.00,0.00
+,Total,"415,375.40","415,375.40"

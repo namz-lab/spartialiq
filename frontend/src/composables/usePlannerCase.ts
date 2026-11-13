@@ -50,6 +50,16 @@ export interface CaseFile {
   registrationNo: string
   fileRef: string
   permitId: string | null
+  /**
+   * The citizen-portal application this case was raised from, if any —
+   * `permit_application.dev_app_id`, pointing at `public.development_applications.id`.
+   *
+   * Carried on the case file because it is a different register from `permitId` and the two are
+   * not interchangeable: any cross-register lookup (council finance attached to the application,
+   * for one) keys on this id, and passing the permit's own id instead returns an empty answer
+   * that reads as a fact rather than a mistake. Null for a staff-captured application.
+   */
+  devAppId: string | null
   // Backend permit status (drives the shared cross-role ApplicationPipeline).
   status?: string
   applicant: { name: string; idNumber: string; phone: string; email: string }
@@ -227,7 +237,7 @@ function consultationToReferral(c: {
 
 export function emptyCase(): CaseFile {
   return {
-    registrationNo: '', fileRef: '', permitId: null, status: 'registered',
+    registrationNo: '', fileRef: '', permitId: null, devAppId: null, status: 'registered',
     applicant: { name:'', idNumber:'', phone:'', email:'' },
     property:  { standNo:'', ward:'', description:'', titleDeedNo:'' },
     proposal:  { devType:'new_building', description:'', estimatedCost:0,
@@ -363,6 +373,7 @@ export function providePlannerCase(): PlannerCaseContext {
         merged = {
           ...emptyCase(),
           permitId: server.id,
+          devAppId: server.dev_app_id ?? null,
           status: server.status,
           registrationNo: caseRef(server),
           fileRef: `file/${server.dev_register_no || server.id}`,
@@ -413,6 +424,10 @@ export function providePlannerCase(): PlannerCaseContext {
     // on the shape, and default revision to 0 (the server's column default).
     merged.permit = { ...emptyCase().permit, ...merged.permit }
     merged.revision = merged.revision ?? 0
+    // Same for the citizen-portal link: a draft cached before this field existed has no idea
+    // whether the case has one. `undefined` would be read as "not linked" by anything keying on
+    // it, so it is normalised to null — absent and known-absent look the same to a consumer.
+    merged.devAppId = merged.devAppId ?? null
 
     // Hydrate referral outcomes from server consultations so specialist
     // findings return to the planner console (closes the referral loop).

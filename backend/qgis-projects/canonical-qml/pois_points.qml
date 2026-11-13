@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : pois_points
      style version : v1
-     style id      : 5ec2484f-a606-4427-bf49-e5d4dca2fe3e
+     style id      : b3d4fa5c-aa5a-4f7e-b1de-05ba6f91d1b5
      checksum      : sha256:ad90fadd3170c9049edea8c23b91410c5fa9269e81518e96c79e670361747c18
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

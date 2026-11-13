@@ -34,14 +34,24 @@ Backend: Fastify + PostgreSQL/PostGIS, self-hosted on the council's own server. 
   This dumps the database (`backups/db-<ts>.dump`, pg_dump custom format) **and**
   zips `uploads/` (`backups/uploads-<ts>.zip`) — citizen documents and inspection
   photos live on the server's disk alongside the database. Retention: newest 14 of each (override with `BACKUP_KEEP`).
+  Each dump is verified with `pg_restore -l` before the script reports success: every
+  `finance` base table must appear with both schema and data entries, and
+  `public.schema_migrations` must be present. A checksum is written alongside the dump
+  (`db-<ts>.dump.sha256`); verify it before restoring with
+  `cd backups && sha256sum -c db-<ts>.dump.sha256`.
   **Copy `backups/` off the server every night** (second disk, another machine, or
   off-site storage). A backup on the same disk is lost with the disk.
 - **Restore drill (run at least quarterly, not just when something breaks):**
-  1. Spin up a scratch Postgres instance (local Docker or a spare machine).
-  2. `pg_restore -d "$SCRATCH_DATABASE_URL" backup-*.dump`
-  3. Run `node scripts/verify-spatial-tables.js` and `node test-tiles-endpoint.js` against the restored instance.
-  4. Record how long the restore took — this is your recovery-time estimate, not a guess.
-  5. Delete the scratch instance when done.
+  1. Create an isolated scratch database (never point this at production).
+  2. `CONFIRM_RESTORE=1 DATABASE_URL="$SCRATCH_DATABASE_URL" node scripts/restore-db.js backups/db-<ts>.dump`
+  3. `SOURCE_DATABASE_URL="$SOURCE_URL" RESTORE_DATABASE_URL="$SCRATCH_DATABASE_URL" node scripts/verify-restore.js`
+     — compares migration history, every finance table's row count, views, triggers and
+     currency-separated financial totals. It exits non-zero on any difference.
+  4. Extract `backups/uploads-<ts>.zip` and compare file counts and SHA-256 hashes with
+     the live `uploads/` directory.
+  5. Record how long the backup and restore took — this is your recovery-time estimate,
+     not a guess (see §7 and `docs/audit/BACKUP-RESTORE-EVIDENCE.md`).
+  6. Delete the scratch instance when done.
 
 ## 4. Rollback procedure
 
@@ -65,6 +75,7 @@ Current gaps (be honest about what's NOT wired up yet, not just what should exis
 
 ## 7. Disaster recovery
 
-- **Objective (current, not aspirational — update once actually tested)**: Recovery Point Objective = up to 24h (nightly `npm run backup`, until continuous backup / WAL archiving is configured). Recovery Time Objective = untested — the first restore drill (§3) should set a real number here instead of a guess.
+- **Objective (measured 2026-11-06 on a 709 MB dump, same host)**: Recovery Point Objective = up to 24h (nightly `npm run backup`, until continuous backup / WAL archiving is configured). Recovery Time Objective = **65 seconds to restore the database, plus 103 seconds to create the backup**; the measured drill is recorded in `docs/audit/BACKUP-RESTORE-EVIDENCE.md`. This figure excludes copying the dump off-host, DNS/service cut-over and application-level smoke tests, so the operational RTO must be set after an off-host rehearsal.
+- The drill also verified that the `uploads/` archive restored with 190/190 files and identical SHA-256 hashes.
 - Run the restore drill in §3 on a fixed cadence (quarterly minimum) and update the RTO/RPO figures above with what was actually observed, not what was hoped for.
 - Keep this runbook itself under version control in the repo (it is) so a DR event doesn't depend on someone's memory of where the runbook lives.

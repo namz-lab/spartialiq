@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : water_areas
      style version : v1
-     style id      : 0cc4ffe7-993d-47aa-9a92-71f85f82171b
+     style id      : 30af5c8c-9af4-4c55-9522-1c3cbc64f229
      checksum      : sha256:b2a53b39a4f4726485727afe28f71f6ce600824f478bf618f08ff1396148069e
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

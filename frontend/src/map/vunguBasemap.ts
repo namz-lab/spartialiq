@@ -866,6 +866,49 @@ function wireGlobalContextMenu(map: any, interactiveStyleIds: string[]): void {
   })
 }
 
+/**
+ * Tell the host when the map's WebGL context is lost, and when the browser grants it back.
+ *
+ * WHY THIS IS NOT OPTIONAL ON A CHOROPLETH
+ * MapLibre does not recover from a lost context on its own: the canvas goes permanently blank and
+ * nothing says so. On a basemap that reads as "the map is broken"; on a FINANCE map it reads as
+ * "this ward has no budget", which is the one misreading this product's honest-state discipline
+ * exists to prevent. Missing is not zero, and that applies to a broken canvas as much as to a
+ * missing figure. A browser drops a context under GPU or memory pressure, which on the low-end
+ * machines this platform targets is a real condition rather than a theoretical one.
+ *
+ * `preventDefault()` on the lost event is what makes `webglcontextrestored` possible at all; the
+ * browser may still never fire it, so a host must offer a manual retry rather than wait.
+ *
+ * Returns a disposer. Call it from `onBeforeUnmount` alongside `map.remove()`.
+ */
+export function watchWebglContext(
+  map: { getCanvas(): HTMLCanvasElement },
+  handlers: { onLost?: () => void; onRestored?: () => void },
+): () => void {
+  let canvas: HTMLCanvasElement | null = null
+  try {
+    canvas = map.getCanvas()
+  } catch {
+    return () => {}
+  }
+  if (!canvas || typeof canvas.addEventListener !== 'function') return () => {}
+
+  const lost = (event: Event): void => {
+    // Without this the context can never be restored, only re-created from scratch.
+    event.preventDefault()
+    handlers.onLost?.()
+  }
+  const restored = (): void => { handlers.onRestored?.() }
+
+  canvas.addEventListener('webglcontextlost', lost as EventListener, false)
+  canvas.addEventListener('webglcontextrestored', restored as EventListener, false)
+  return () => {
+    canvas?.removeEventListener('webglcontextlost', lost as EventListener, false)
+    canvas?.removeEventListener('webglcontextrestored', restored as EventListener, false)
+  }
+}
+
 /** Returns true when the user has asked the OS for reduced motion. */
 export function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined'

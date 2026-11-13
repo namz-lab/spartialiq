@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : protected_areas
      style version : v1
-     style id      : 6f0f248a-481c-4859-bfab-45ca9162a624
+     style id      : dadd6027-2917-4848-9f55-89abd11ff195
      checksum      : sha256:bc5b12e49fb52afeb4e393da375be67b54d53e99c0ce2e52d3ec92256679cdef
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

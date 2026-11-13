@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : places_of_worship_points
      style version : v1
-     style id      : 70afe6ce-7a5d-49d2-a422-32f22092f660
+     style id      : ad11d157-3fe6-4985-8984-dd352537ece4
      checksum      : sha256:dedf214bce59c7e17026be224c4c1f6371092bc07d9586ea61b12e94e1793987
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

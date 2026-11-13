@@ -14,7 +14,11 @@ const BASE_ID = 990000                       // project ids this suite uses, so 
 // A 30 m square in Cape / Lo29 near Gweru. SurveyPro stores the WESTING as the X ordinate and the SOUTHING as the Y ordinate.
 const square = (westing, southing, size = 30) =>
   `POLYGON((${westing} ${southing}, ${westing + size} ${southing}, ${westing + size} ${southing + size}, ${westing} ${southing + size}, ${westing} ${southing}))`
-const W0 = -84035, S0 = 2151377
+// North of the Zambezi (lat -17.5), same Lo29 belt, where the register holds no council
+// parcels within 50 km: since migration 187 filled the register with the real farm extract
+// across the district, fixture ground inside the district meets real parcels. Same move as
+// layout-check.test.js and surveypro-schedule.test.js.
+const W0 = -84035, S0 = 1934600
 
 describe('importing the council\'s survey work from SurveyPro', () => {
   let pool, vungu, other, nextId = BASE_ID
@@ -171,10 +175,23 @@ describe('importing the council\'s survey work from SurveyPro', () => {
       expect(Number(row.area_m2)).toBe(900)
       // VunGIS's own registry SRID for Lo29, not SurveyPro's EPSG code, so the register has one transformation
       expect(row.source_srid).toBe(922029); expect(row.src).toBe(922029); expect(row.wgs).toBe(4326)
-      expect(row.transform_method).toMatch(/Cape -> WGS 84/); expect(Number(row.transform_accuracy_m)).toBeGreaterThan(0)
-      // the westing is X and the southing is Y, and the transformation puts a Gweru point in Gweru
-      expect(row.lon).toBeGreaterThan(29.79); expect(row.lon).toBeLessThan(29.81)
-      expect(row.lat).toBeGreaterThan(-19.46); expect(row.lat).toBeLessThan(-19.44)
+      // Arc 1950 is the datum the Cape system was realised on: newer PROJ names the
+      // transformation "Arc 1950 -> WGS 84, 3-parameter..." where older data said
+      // "Cape -> WGS 84". Either name is the same declared datum transformation.
+      expect(row.transform_method).toMatch(/(Cape|Arc 1950) -> WGS 84/); expect(Number(row.transform_accuracy_m)).toBeGreaterThan(0)
+      // the westing is X and the southing is Y, and the parcel lands where the Lo coordinates
+      // say: within 5 m of the same point transformed independently, wherever the fixture
+      // ground is. (It was a hardcoded Gweru box while the fixture lived in Gweru; asserting
+      // against the transformed fixture is the same check, and it stays true wherever the
+      // suite's ground is moved to keep clear of the real register.)
+      const [tx] = (await q(
+        `SELECT ST_X(c) AS lon, ST_Y(c) AS lat FROM ST_Transform(ST_SetSRID(ST_MakePoint($1 + 15, $2 + 15), 22289), 4326) AS c`,
+        [W0, S0])).map((r) => ({ lon: Number(r.lon), lat: Number(r.lat) }))
+      // ~100 m: far tighter than any wrong-belt or wrong-datum transformation would land
+      // (kilometres), loose enough for the few metres between a transformed centre and the
+      // centroid of a transformed 30 m square.
+      expect(Number(row.lon)).toBeGreaterThan(tx.lon - 0.001); expect(Number(row.lon)).toBeLessThan(tx.lon + 0.001)
+      expect(Number(row.lat)).toBeGreaterThan(tx.lat - 0.001); expect(Number(row.lat)).toBeLessThan(tx.lat + 0.001)
       expect((await q("SELECT count(*)::int n FROM integration.outbox_event WHERE type = 'ParcelCreated' AND idempotency_key LIKE 'ParcelCreated:%' AND payload ->> 'stand_no' IN ('A1','A2')"))[0].n).toBeGreaterThanOrEqual(2)
     })
 

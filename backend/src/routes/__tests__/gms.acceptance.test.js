@@ -44,7 +44,7 @@ describe('GMS phase 1 acceptance', () => {
   }
   const erpEvent = (type, key, payload) => ({
     event_id: crypto.randomUUID(), type, version: 1, occurred_at: new Date().toISOString(),
-    source: 'erp-test', idempotency_key: `${TOWNSHIP}:${key}`, payload,
+    source: 'erp-test', idempotency_key: `${TOWNSHIP}:${key}`, authority_code: 'VUNGU', payload,
   })
 
   beforeAll(async () => {

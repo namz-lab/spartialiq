@@ -15,7 +15,6 @@ const VALID_ROLES = new Set([
   'env_officer',
   'building_inspector',
   'planning_clerk',
-  'finance_officer',
   'surveyor',
   'gis_officer',
   'gis_head',
@@ -26,6 +25,22 @@ const VALID_ROLES = new Set([
   'gis_clerk',
   'dept_editor',
   'dept_viewer',
+  // Finance (migration 188). Seven roles, and the separation between them is the point: no single
+  // one of these accounts can prepare a budget, approve it and publish it.
+  'finance_admin',
+  'finance_officer',
+  'budget_officer',
+  'dept_head',
+  'finance_committee',
+  'publisher',
+  'auditor',
+  // Finance (migration 207).
+  'accountant',
+  'cashier',
+  'revenue_officer',
+  'accounting_officer',
+  // Migration 208.
+  'cash_supervisor',
 ])
 
 const DEFAULT_DEMO_USERS = [
@@ -35,7 +50,6 @@ const DEFAULT_DEMO_USERS = [
   { email: 'demo.envoffice@vungu.test', name: 'Demo Environmental Officer', role: 'env_officer' },
   { email: 'demo.inspector@vungu.test', name: 'Demo Building Inspector', role: 'building_inspector' },
   { email: 'demo.clerk@vungu.test', name: 'Demo Planning Clerk', role: 'planning_clerk' },
-  { email: 'demo.finance@vungu.test', name: 'Demo Finance Officer', role: 'finance_officer', department: 'Finance' },
   { email: 'demo.surveyor@vungu.test', name: 'Demo Surveyor', role: 'surveyor' },
   { email: 'demo.gis@vungu.test', name: 'Demo GIS Officer', role: 'gis_officer' },
   { email: 'demo.viewer@vungu.test', name: 'Demo Viewer', role: 'viewer' },
@@ -52,6 +66,26 @@ const DEFAULT_DEMO_USERS = [
   // The applicant. Every staff role had an account and the citizen did not,
   // so the one journey that begins outside the council could not be walked.
   { email: 'demo.citizen@vungu.test', name: 'Demo Citizen', role: 'registered' },
+  // Finance (migration 188). Walking the budget journey end to end needs all of these, because
+  // each step is deliberately barred to the person who took the previous one: the officer who
+  // uploads cannot commit, the administrator who prepares cannot approve, the committee that
+  // approves cannot publish, and the technical administrator can do none of it.
+  { email: 'demo.finance-admin@vungu.test', name: 'Demo Finance Administrator', role: 'finance_admin', department: 'Finance' },
+  { email: 'demo.finance-officer@vungu.test', name: 'Demo Finance Officer', role: 'finance_officer', department: 'Finance' },
+  { email: 'demo.budget-officer@vungu.test', name: 'Demo Budget Officer', role: 'budget_officer', department: 'Finance' },
+  { email: 'demo.dept-head@vungu.test', name: 'Demo Departmental Head', role: 'dept_head', department: 'Engineering' },
+  { email: 'demo.treasurer@vungu.test', name: 'Demo Finance Committee Member', role: 'finance_committee' },
+  { email: 'demo.publisher@vungu.test', name: 'Demo Publisher', role: 'publisher' },
+  { email: 'demo.auditor@vungu.test', name: 'Demo Auditor', role: 'auditor' },
+  // Finance (migration 207). The cash-up cannot be walked with fewer than two of these: the
+  // cashier who declares the count is barred from verifying it, and the accountant does.
+  { email: 'demo.accountant@vungu.test', name: 'Demo Accountant', role: 'accountant', department: 'Finance' },
+  { email: 'demo.cashier@vungu.test', name: 'Demo Cashier', role: 'cashier', department: 'Finance' },
+  { email: 'demo.cashier2@vungu.test', name: 'Demo Relief Cashier', role: 'cashier', department: 'Finance' },
+  { email: 'demo.revenue@vungu.test', name: 'Demo Revenue Officer', role: 'revenue_officer', department: 'Finance' },
+  { email: 'demo.ceo@vungu.test', name: 'Demo Accounting Officer', role: 'accounting_officer' },
+  // Migration 208. Recovers an abandoned drawer with a witness; never the cashier or the verifier.
+  { email: 'demo.supervisor@vungu.test', name: 'Demo Cash Supervisor', role: 'cash_supervisor', department: 'Finance' },
 ]
 
 function normalizeEnabled(value) {

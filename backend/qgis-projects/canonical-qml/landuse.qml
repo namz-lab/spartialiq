@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : landuse
      style version : v1
-     style id      : 3a7c6507-5143-4441-9792-dbae53e148f3
+     style id      : 71536199-9407-4b69-9964-fb4cbd81fe1d
      checksum      : sha256:fedb4e14bb8298aab7728eca417ab3104a1deeeab7c4510fe1ee1e4430edb0cf
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

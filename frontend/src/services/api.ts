@@ -10,6 +10,7 @@ import type {
 } from './types'
 
 import { clearSession } from './session'
+import { resetSessionScope } from './sessionScope'
 import { apiBaseUrl } from './runtimeOrigin'
 
 // Re-export so call-sites can `import type { … } from '@/services/api'`.
@@ -50,6 +51,11 @@ api.interceptors.response.use(
       // interceptor and mask the real error.
       if (originalRequest) originalRequest._retry = true
       clearSession()
+      // In-memory state goes too. The bounce below is a full page load, which would clear the
+      // stores anyway — but it does not always happen (the boot-time session probe, or a 401
+      // raised while already on /login), and a rejected session must not leave one officer's
+      // permissions and loaded records in the stores for the next person at this machine.
+      resetSessionScope()
       // /auth/me is the boot-time session probe. A 401 there is the expected
       // "not signed in" answer for an anonymous visitor, not an expired
       // session — bouncing on it would eject visitors from public pages.

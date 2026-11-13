@@ -13,6 +13,10 @@ const fastifyPostgres = require('@fastify/postgres')
 const fastifyCookie = require('@fastify/cookie')
 const { standsRoutes } = require('../stands')
 const { createSession } = require('../../middleware/jwtAuth')
+// Production runs dbContext.install + the request store (server.js). Without it
+// fastify.pg is the plain pool: superuser, no app.authority_id, and the tenanted
+// inserts these routes make fail with a NULL authority — not what production does.
+const dbContext = require('../../lib/dbContext')
 
 const TEST_USER_ID = randomUUID()
 const TEST_WARD = `jesttest-ward-${TEST_USER_ID.slice(0, 8)}`
@@ -27,13 +31,15 @@ const poly = {
 beforeAll(async () => {
   app = Fastify({ logger: false })
   await app.register(fastifyPostgres, { connectionString: process.env.DATABASE_URL })
+  dbContext.install(app)
+  app.addHook('onRequest', (_q, _r, done) => dbContext.runWithRequest(done))
   await app.register(fastifyCookie, { secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET })
   await app.register(async (s) => { await standsRoutes(s) }, { prefix: '/api' })
   await app.ready()
 
-  await app.pg.query(
-    `INSERT INTO users (id, email, full_name, name, role, active, status, password_hash)
-     VALUES ($1,$2,'Jest Allocator','Jest Allocator','planner',true,'active','$2b$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+  await dbContext.systemOf(app.pg).query(
+    `INSERT INTO users (id, email, full_name, name, role, active, status, password_hash, authority_id)
+     VALUES ($1,$2,'Jest Allocator','Jest Allocator','planner',true,'active','$2b$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 1)
      ON CONFLICT (id) DO NOTHING`,
     [TEST_USER_ID, `jesttest-alloc-${TEST_USER_ID}@example.test`],
   )
@@ -57,10 +63,10 @@ beforeAll(async () => {
 }, 30000)
 
 afterAll(async () => {
-  await app.pg.query(`DELETE FROM public.user_session WHERE id = $1`, [sid])
-  await app.pg.query(`DELETE FROM stand_allocation WHERE stand_id = $1`, [standId])
-  await app.pg.query(`DELETE FROM stands WHERE ward = $1`, [TEST_WARD])
-  await app.pg.query(`DELETE FROM users WHERE id = $1`, [TEST_USER_ID])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM public.user_session WHERE id = $1`, [sid])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM stand_allocation WHERE stand_id = $1`, [standId])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM stands WHERE ward = $1`, [TEST_WARD])
+  await dbContext.systemOf(app.pg).query(`DELETE FROM users WHERE id = $1`, [TEST_USER_ID])
   await app.close()
 }, 30000)
 
@@ -81,7 +87,7 @@ test('allocate creates a register entry and flips the stand to allocated', async
   allocId = res.json().data.id
   expect(res.json().data.reference_no).toMatch(/^VRDC-STD-\d{4}-\d{6}$/)
 
-  const stand = await app.pg.query(`SELECT status, allocated_at FROM stands WHERE id = $1`, [standId])
+  const stand = await dbContext.systemOf(app.pg).query(`SELECT status, allocated_at FROM stands WHERE id = $1`, [standId])
   expect(stand.rows[0].status).toBe('allocated')
   expect(stand.rows[0].allocated_at).not.toBeNull()
 })
@@ -109,7 +115,7 @@ test('revoke frees the stand and preserves history; re-allocation works', async 
   })
   expect(rev.statusCode).toBe(200)
 
-  const stand = await app.pg.query(`SELECT status FROM stands WHERE id = $1`, [standId])
+  const stand = await dbContext.systemOf(app.pg).query(`SELECT status FROM stands WHERE id = $1`, [standId])
   expect(stand.rows[0].status).toBe('available')
 
   // History keeps the revoked row (soft), and a fresh allocation can proceed.

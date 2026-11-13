@@ -210,6 +210,28 @@ All halos: `rgba(255,255,255,0.95)`, width 1.2, blur 0.4. Visible but not shouty
 ### Filter chip swatch system
 Every layer in `src/map/vunguBasemapStyle.ts:PALETTE.chip` exposes one representative colour for the filter UI. The map paint and the filter swatch always agree (single source of truth via `chipColorFor()`).
 
+### Finance overlay (GIS–finance M4–M7)
+The finance map is an **overlay on the planning basemap**, not a second basemap. Its cartography lives beside the basemap palette in `src/map/vunguBasemapStyle.ts`, and both the paint expression and the legend swatch import the same constants — a legend that disagrees with the map is a bug, not a styling choice.
+
+| Role | Colour | Use |
+|------|--------|-----|
+| Choropleth ramp | `FINANCE_CHOROPLETH` `#f7fbff → #145a9e` | sequential single-hue, light → dark; exactly `breaks + 1` classes |
+| No data | `FINANCE_NO_DATA` `#e8e8e8` | a ward with no figure; never the bottom class, because no budget is not zero spend |
+| Project status | `FINANCE_PROJECT_STATUS` | muted proposed → approved → in progress → completed; status is also in the panel and table, so colour is never the only carrier |
+
+Rules for any finance layer:
+- The ward overlay stamps the SQL-computed view figure on the feature; the client never computes an aggregate.
+- The map opens on a measure derived from the reader's permissions (`mapPresetFor`). That is ordering and emphasis only: every control stays available to anyone holding `finance.map.view`, and two people with the same grants always see the same defaults.
+- A measure has one currency. USD and ZWG are separate layers/filters and are never added or ramped together.
+- Public project markers are drawn only where the council released a finite coordinate; a ward code is an area, not a point. A project with no released location is listed, not dropped, and the public project layer follows the same one-currency filter as the wards.
+- The staff map mounts `PLANNER_BASEMAP_DEFAULT` and the public map the same base, so basemap ward shading and drill-zoom do not compete with the overlay.
+- A provisional ward register (decision D11, basis `interim`) is labelled on the map; the polygons are still drawn because the figures are real, but the boundary list is not presented as settled.
+- An exported map sheet carries its provenance — year, currency, measure, breakdown, source view and the view's `generated_at` — and reuses the same ramp and project-status constants as the screen. A print with no provenance cannot be quoted beside a committee report.
+- `fitBounds` follows the same motion rule as the basemap: `duration: 0` under `prefers-reduced-motion`.
+- Every map is constructed with `baseMapStyle()` from the same module. A MapLibre map built with no `style` never fires `load`, so the basemap and every overlay layer are silently never added and the canvas stays transparent — the finance maps were built that way and drew nothing at all.
+- A data-driven paint expression is only emitted when the data supports one. Fewer than two distinct values is not a scale: the ward fill falls back to a flat class and the legend says "all wards with a figure", because a `step` with no stop pair is an expression MapLibre refuses outright.
+- A lost WebGL context is a stated state, not a blank canvas. The map is covered with a sentence and a reload control and the ward table stays, since an unshaded ward must never read as a ward with no money.
+
 ### Click and motion
 - Click on a province: fits to province bounds at zoom 9, shows districts + wards filtered by `parent_pcode` and pcode prefix.
 - Click on a district: fits to district bounds at zoom 11, shows wards filtered.

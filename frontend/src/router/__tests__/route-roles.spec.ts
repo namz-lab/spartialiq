@@ -98,15 +98,68 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
     expect(rec('/qgis-map')).toBeTruthy()
   })
 
+  it('keeps the finance console out of planning hands, and planning out of finance', () => {
+    // A finance officer has no business in a permit case file, and a planner has no business in
+    // the finance console. A planner follows their own project's money through
+    // /api/finance/linked/:kind/:id from their own workspace, which needs one read permission —
+    // not the budget.
+    const finance = rolesFor('/finance')
+    expect(finance).toContain('finance_admin')
+    expect(finance).toContain('auditor')
+    // 'admin' is here to read the finance audit trail and provision finance roles; the server
+    // grants it no permission that approves, publishes, commits an import or discloses
+    // restricted data (backend migration 188, finance.role_permission).
+    expect(finance).toContain('admin')
+    expect(finance).not.toContain('planner')
+    expect(finance).not.toContain('eo')
+    expect(finance).not.toContain('env_officer')
+    expect(finance).not.toContain('registered')
+
+    // And no finance role appears on a planning surface.
+    for (const path of ['/planner', '/analytics']) {
+      const roles = rolesFor(path)
+      for (const financeRole of ['finance_admin', 'finance_officer', 'budget_officer',
+        'finance_committee', 'publisher', 'auditor'] as Role[]) {
+        expect(roles, `${path} lists finance role "${financeRole}"`).not.toContain(financeRole)
+      }
+    }
+  })
+
+  it('keeps the previous finance console reachable while the workspaces are built', () => {
+    // Spec 2026-11-12 §13.7: the migration is reversible, so the console stays mounted, behind
+    // the same role list as /finance.
+    expect(router.resolve('/finance/console').name).toBe('finance-console')
+    expect(rolesFor('/finance/console')).toEqual(rolesFor('/finance'))
+  })
+
+  it('sends an address for a workspace not in this build to the redirecting catch-all', () => {
+    expect(router.resolve('/finance/committee').name).toBe('finance-unknown')
+    expect(router.resolve('/finance/no-workspace').name).toBe('finance-no-workspace')
+  })
+
+  it('leaves the public financial transparency portal public', () => {
+    // Nothing here needs guarding: the database returns an anonymous request only rows a live
+    // publication covers, so an unguarded route cannot expose an unpublished figure.
+    const m = router.resolve('/council/finances').meta
+    expect(m?.requiresAuth).toBeFalsy()
+    expect(m?.roles).toBeUndefined()
+  })
+
   it('never lists a role the backend cannot issue', () => {
     // The DB CHECK constraint (migration 061, widened by 132 for the GIS
-    // Branch) is the authority; a role outside it makes a guard that can
-    // never pass.
+    // Branch and by 188, 207 and 208 for finance) is the authority; a role outside it makes
+    // a guard that can never pass.
     const ISSUABLE: Role[] = [
       'admin', 'planner', 'eo', 'env_officer', 'building_inspector',
       'planning_clerk', 'surveyor', 'gis_officer', 'viewer', 'registered', 'public',
       'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk',
       'dept_editor', 'dept_viewer',
+      'finance_admin', 'finance_officer', 'budget_officer', 'dept_head',
+      'finance_committee', 'publisher', 'auditor',
+      // Migration 207: the enterprise finance desks.
+      'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
+      // Migration 208: the senior cashier who supervises the tills.
+      'cash_supervisor',
     ]
     for (const r of router.getRoutes()) {
       for (const role of (r.meta?.roles ?? []) as Role[]) {
@@ -127,6 +180,13 @@ describe('roleHome', () => {
       planning_clerk:     '/planning-clerk-portal',
       surveyor:           '/surveyor',
       gis_officer:        '/gis-officer-portal',
+      finance_admin:      '/finance',
+      finance_officer:    '/finance',
+      budget_officer:     '/finance',
+      dept_head:          '/finance',
+      finance_committee:  '/finance',
+      publisher:          '/finance',
+      auditor:            '/finance',
       viewer:             '/citizen',
       registered:         '/citizen',
       public:             '/citizen',

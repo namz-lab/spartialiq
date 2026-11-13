@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : vungu_waste_management
      style version : v1
-     style id      : aa6713d5-6d1a-4f7c-958c-bf9b34d84646
+     style id      : c90b9117-a162-4c58-973b-a2f7b47a3007
      checksum      : sha256:30fcfbac19068bf13b7c1740675164917f3550f498a1a12c287df38f34bc608c
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

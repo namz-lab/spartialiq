@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '../services/api'
 import { markSignedIn, clearSession, hasSessionHint } from '../services/session'
+import { resetSessionScope } from '../services/sessionScope'
 import { isClientRole, type AuthUser, type Role } from '../services/types'
 
 // Re-export so existing imports (`import type { User } from '@/stores/auth'`) keep working.
@@ -61,9 +62,21 @@ export const useAuthStore = defineStore('auth', () => {
     markSignedIn()
   }
 
+  /**
+   * End the session locally. This is the single place the signed-in person is dropped: an explicit
+   * sign-out, a 401 from any endpoint, a rejected refresh, an idle timeout. All three kinds of
+   * state they left behind go together — the user record here, the cached case files in
+   * localStorage, and the Pinia stores holding their permissions, scope and loaded records.
+   *
+   * The store clearing matters most on a shared council workstation, where signing out is a route
+   * change inside one long-lived tab rather than a page load: without it the next officer to sign
+   * in at the same machine saw the previous officer's finance permissions, departmental scope and
+   * selected financial year until each store happened to refetch.
+   */
   function clearLocal() {
     user.value = null
     clearSession()
+    resetSessionScope()
   }
 
   // ── Actions ───────────────────────────────────────────────────────────

@@ -55,7 +55,7 @@ const year = computed(() => new Date().getFullYear())
             </li>
             <li><router-link to="/council/stand-application" class="footer-link">Apply for a stand</router-link></li>
             <li><router-link to="/plan-review" class="footer-link">Submit building plans</router-link></li>
-            <li><router-link to="/payments" class="footer-link">Pay council fees</router-link></li>
+            <li><router-link to="/citizen?section=payments" class="footer-link">Pay council fees</router-link></li>
             <li>
               <router-link :to="{ path: '/citizen', query: { section: 'applications' } }" class="footer-link">
                 Track an application
@@ -74,6 +74,9 @@ const year = computed(() => new Date().getFullYear())
             <li><router-link to="/council/executive-arm" class="footer-link">Executive arm</router-link></li>
             <li><router-link to="/council/deliberative-arm" class="footer-link">Deliberative arm</router-link></li>
             <li><router-link to="/council/departments" class="footer-link">Departments</router-link></li>
+            <li><router-link to="/council/finance-department" class="footer-link">Finance department</router-link></li>
+            <li><router-link to="/council/planning" class="footer-link">Planning department</router-link></li>
+            <li><router-link to="/council/finances" class="footer-link">Budgets &amp; finances</router-link></li>
             <li><router-link to="/council/publications" class="footer-link">Publications &amp; documents</router-link></li>
             <li><router-link to="/contact" class="footer-link">Contact us</router-link></li>
           </ul>

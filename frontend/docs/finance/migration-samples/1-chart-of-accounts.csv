@@ -1,0 +1,18 @@
+Account Number,Description,Financial Category
+1000,Land and buildings,Fixed Assets
+1100,Motor vehicles,Fixed Assets
+2000,Debtors control,Accounts Receivable
+2500,Stores stock,Inventory
+8400,CBZ current account,Bank
+8410,Petty cash,Cash on hand
+3000,Creditors control,Accounts Payable
+3100,VAT control,Taxation
+3500,Long-term loan,Long Term Borrowings
+5000,Accumulated surplus,Retained Income
+6000,Property rates,Sales
+6100,Refuse charges,Sales
+6200,Licence fees,Other Income
+7000,Salaries and wages,Expenses
+7100,Fuel and oils,Expenses
+7200,Repairs and maintenance,Expenses
+9990,Suspense (old),Suspense

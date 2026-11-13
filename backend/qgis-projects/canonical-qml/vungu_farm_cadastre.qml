@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : vungu_farm_cadastre
      style version : v1
-     style id      : 4b12336c-1c51-464e-90c8-e4d7b43c73cd
+     style id      : 04353bf6-3371-48a6-965b-64032eb749d8
      checksum      : sha256:d5370c52a424c90b5432aeadd768b1f890c5446985ba83b78759f1b34cce2d03
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

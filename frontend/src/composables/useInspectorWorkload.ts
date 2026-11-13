@@ -5,6 +5,7 @@ import { complaintsApi } from '@/services/buildingComplaints'
 import { complianceDeadline } from '@/inspector/caseFile'
 import { officialEnforcementOpen } from '@/inspector/architecture'
 import type { SectionKey } from '@/inspector/consoleRoute'
+import { onSessionEnd } from '../services/sessionScope'
 
 /**
  * What is outstanding, per console section, for the rail and the phone's
@@ -100,6 +101,15 @@ async function refreshWorkload(): Promise<void> {
     await refreshWorkload()
   }
 }
+
+// The badge counts are one inspector's outstanding work, held at module scope for the life of the
+// tab. Cleared at the session boundary so the next person to sign in does not see the previous
+// inspector's counts on the rail until the first refresh lands. See services/sessionScope.ts.
+onSessionEnd(() => {
+  workload.value = {}
+  loading.value = false
+  rerunRequested = false
+})
 
 export function useInspectorWorkload() {
   return { workload, workloadLoading: loading, refreshWorkload }

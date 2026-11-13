@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : pois_areas
      style version : v1
-     style id      : c1199604-81f6-46c3-84e3-bd5c66f8131a
+     style id      : 00bee817-25f1-4d08-b961-8324282bd329
      checksum      : sha256:d7fedd81e736ee724a9846811e02afd7ac9428c534671ddd6d73c09f7482084c
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:20 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">

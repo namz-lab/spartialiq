@@ -98,6 +98,22 @@ export default defineConfig({
   test: {
     include: ['src/**/*.{test,spec}.{ts,tsx,js,jsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', '**/.git/**'],
+    // The document's origin during a test run.
+    //
+    // happy-dom defaults to http://localhost:3000, which is the port the development backend
+    // listens on. The axios client's baseURL is the relative '/api', so every unmocked request a
+    // test made resolved to http://localhost:3000/api — the real server, with the real database
+    // behind it. Tests therefore passed or failed depending on whether a backend happened to be
+    // running on the machine and what was in it: the citizen notices section read a live 401 with
+    // a developer's server up and a connection refusal without one, and the suite logged socket
+    // hang-ups from racing it.
+    //
+    // A host that resolves to nothing makes an unmocked request a plain network failure, the same
+    // on every machine and in CI, and makes it impossible for a unit test to read or write
+    // council data. A spec that needs a reply from the server mocks it.
+    environmentOptions: {
+      happyDOM: { url: 'https://tests.vungu.invalid/' },
+    },
   },
   server: {
     host: true,

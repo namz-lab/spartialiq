@@ -39,6 +39,7 @@ const CASE_CACHE_PREFIXES = [
   'studio-draft:', // subdivision studio drafts
   'bpa_check_',    // building-plan appraisal checklists
   'survey.',       // survey.estimate.draft
+  'vungu.finance.', // vungu.finance.lastFinancialYear — the officer's chosen reporting period
 ]
 
 /**

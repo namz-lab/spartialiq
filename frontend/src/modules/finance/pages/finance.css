@@ -1,0 +1,247 @@
+/*
+  Finance workspace — the primitives the finance sections share.
+
+  Built on the same --ent-* tokens as the inspector/admin sheet and imported alongside it, so the
+  finance console reads as one more room in the same building rather than a fifth vocabulary. All
+  classes are `fin-` prefixed; nothing here leaks into another role's surface.
+
+  THE ONE RULE THIS SHEET ENCODES
+  Money is right-aligned, tabular and monospaced in the figure columns, and every table that shows
+  amounts carries a currency column. A finance table where 1 000.00 and 10 000.00 do not line up is
+  a table nobody checks, and one where the currency is implied is a table that will be read wrongly.
+*/
+
+.fin-rail { display: flex; flex-direction: column; gap: 2px; }
+.fin-rail-group { margin-top: var(--ent-s3); }
+.fin-rail-group:first-child { margin-top: 0; }
+.fin-rail-group-label {
+  padding: 0 var(--ent-s2) var(--ent-s1);
+  font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ent-text-3);
+}
+.fin-rail-item {
+  display: flex; align-items: center; gap: var(--ent-s2);
+  width: 100%; padding: var(--ent-s2) var(--ent-s2);
+  border: 0; border-radius: var(--ent-r-sm); background: transparent;
+  font: inherit; font-size: var(--ent-fs-sm); color: var(--ent-text-2);
+  text-align: left; cursor: pointer;
+  transition: background var(--ent-dur) var(--ent-ease), color var(--ent-dur) var(--ent-ease);
+}
+.fin-rail-item:hover { background: var(--ent-surface-2); color: var(--ent-text); }
+.fin-rail-item.is-active {
+  background: var(--ent-accent-soft); color: var(--ent-text);
+  font-weight: var(--ent-fw-semibold);
+  box-shadow: inset 2px 0 0 var(--ent-accent);
+}
+.fin-rail-item:focus-visible { outline: var(--ent-focus-ring); outline-offset: 2px; }
+.fin-rail-item .fin-rail-count {
+  margin-left: auto; font-variant-numeric: tabular-nums;
+  font-size: var(--ent-fs-micro); color: var(--ent-text-3);
+}
+.fin-rail-item.is-active .fin-rail-count { color: var(--ent-text-2); }
+
+/* ── The section toolbar ────────────────────────────────────────────────────────────────────── */
+/*
+  Search, filters and the section's primary action, on one line.
+
+  It is `fin-bar` and NOT `ins-bar`: `.ins-bar` on the shared inspector sheet is a 6px progress
+  meter with `overflow: hidden`, so a toolbar built on it is clipped to a sliver and every control
+  inside it — the search box, the status filters, "New line" — becomes invisible while remaining in
+  the DOM and in the accessibility tree. That is exactly what had happened to all nine finance
+  toolbars: present, focusable, and impossible to see.
+*/
+.fin-bar {
+  display: flex; align-items: center; gap: var(--ent-s2);
+  flex-wrap: wrap; margin: 0;
+}
+.fin-bar > .ins-search { flex: 1 1 14rem; min-width: 10rem; }
+.fin-bar > .ins-input, .fin-bar > .ins-field { flex: 0 1 auto; }
+.fin-bar > .ins-field { display: flex; flex-direction: column; gap: var(--ent-s1); }
+
+/* ── Tables ─────────────────────────────────────────────────────────────────────────────────── */
+.fin-table-wrap { overflow-x: auto; border-radius: var(--ent-r-sm); }
+.fin-table { width: 100%; border-collapse: collapse; font-size: var(--ent-fs-sm); }
+.fin-table caption {
+  caption-side: top; text-align: left; padding: 0 0 var(--ent-s2);
+  font-size: var(--ent-fs-xs); color: var(--ent-text-3);
+}
+.fin-table th, .fin-table td {
+  padding: var(--ent-s2) var(--ent-s3);
+  border-bottom: 1px solid var(--ent-line);
+  text-align: left; vertical-align: top;
+}
+.fin-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--ent-surface-2);
+  font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--ent-text-3);
+  white-space: nowrap;
+}
+.fin-table tbody tr:hover { background: var(--ent-surface-2); }
+.fin-table tbody tr:last-child td { border-bottom: 0; }
+.fin-table .num {
+  text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--ent-font-mono); font-size: 0.95em;
+}
+.fin-table th.num { text-align: right; }
+.fin-table .ccy {
+  width: 1%; white-space: nowrap;
+  font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.04em; color: var(--ent-text-3);
+}
+/*
+  A wide table's actions stay reachable.
+
+  The budget and project tables carry eleven columns of figures and a column of acts, which is
+  wider than the console's content pane: the pane scrolls, but what scrolls out of sight first is
+  the column holding Edit, Submit and Approve — the one an officer came to the table to use.
+  Pinning that column to the right keeps the acts on screen while the figures scroll under them.
+  It is opt-in, because a table narrow enough to fit needs no pinned column and would only get a
+  spurious seam down its right-hand side.
+*/
+.fin-table.sticky-actions th:last-child,
+.fin-table.sticky-actions td:last-child {
+  position: sticky; right: 0;
+  background: var(--ent-surface);
+  box-shadow: inset 1px 0 0 var(--ent-line);
+}
+.fin-table.sticky-actions thead th:last-child { background: var(--ent-surface-2); z-index: 2; }
+.fin-table.sticky-actions tbody tr:hover td:last-child { background: var(--ent-surface-2); }
+
+/* A figure that is not defined, rather than zero. */
+.fin-table .undefined-value { color: var(--ent-text-3); font-style: italic; font-family: var(--ent-font); }
+.fin-table .emphasis { font-weight: var(--ent-fw-semibold); color: var(--ent-text); }
+.fin-table button.fin-link {
+  border: 0; background: none; padding: 0; font: inherit;
+  color: var(--ent-accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.fin-table button.fin-link:focus-visible { outline: var(--ent-focus-ring); outline-offset: 2px; }
+
+/* ── Currency grouping ──────────────────────────────────────────────────────────────────────── */
+/*
+  Where a screen must show two currencies it shows two blocks, each with its own heading. There is
+  no combined row anywhere, and this is the shape that makes writing one awkward.
+*/
+.fin-ccy-group { margin-top: var(--ent-s4); }
+.fin-ccy-group:first-child { margin-top: 0; }
+.fin-ccy-head {
+  display: flex; align-items: baseline; gap: var(--ent-s2);
+  margin: 0 0 var(--ent-s2);
+  font-size: var(--ent-fs-md); font-weight: var(--ent-fw-semibold); color: var(--ent-text);
+}
+.fin-ccy-head small { font-weight: var(--ent-fw-medium); font-size: var(--ent-fs-xs); color: var(--ent-text-3); }
+.fin-ccy-note {
+  margin: var(--ent-s2) 0 0; padding: var(--ent-s2) var(--ent-s3);
+  border-left: 2px solid var(--ent-line-strong); border-radius: 0 var(--ent-r-sm) var(--ent-r-sm) 0;
+  background: var(--ent-surface-2);
+  font-size: var(--ent-fs-xs); color: var(--ent-text-2); line-height: var(--ent-lh);
+}
+
+/* ── Figure pairs ───────────────────────────────────────────────────────────────────────────── */
+/* Original beside revised, so a reader never has to be told which one they are looking at. */
+.fin-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--ent-s3); }
+.fin-figure {
+  padding: var(--ent-s3); border: 1px solid var(--ent-line);
+  border-radius: var(--ent-r-sm); background: var(--ent-surface);
+  min-width: 0;
+}
+.fin-figure dt {
+  font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--ent-text-3);
+}
+.fin-figure dd {
+  margin: var(--ent-s1) 0 0;
+  font-family: var(--ent-font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--ent-fs-lg); font-weight: var(--ent-fw-semibold); color: var(--ent-text);
+  overflow-wrap: anywhere;
+}
+.fin-figure .fin-figure-note { display: block; margin-top: 2px; font-family: var(--ent-font); font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-medium); color: var(--ent-text-3); }
+.fin-figure.is-negative dd { color: var(--ent-danger); }
+
+/* ── Status pills ───────────────────────────────────────────────────────────────────────────── */
+.fin-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px var(--ent-s2); border-radius: var(--ent-r-pill);
+  border: 1px solid var(--ent-tone-neutral-line); background: var(--ent-tone-neutral-bg);
+  font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-semibold);
+  letter-spacing: 0.03em; white-space: nowrap; color: var(--ent-text-2);
+}
+.fin-pill.tone-positive { border-color: var(--ent-tone-positive-line); background: var(--ent-tone-positive-bg); }
+.fin-pill.tone-warning  { border-color: var(--ent-tone-warning-line);  background: var(--ent-tone-warning-bg); }
+.fin-pill.tone-negative { border-color: var(--ent-tone-negative-line); background: var(--ent-tone-negative-bg); }
+.fin-pill.tone-info     { border-color: var(--ent-tone-info-line);     background: var(--ent-tone-info-bg); }
+
+/* ── Progress ───────────────────────────────────────────────────────────────────────────────── */
+/* A bar is a reading aid beside the figure, never instead of it. */
+.fin-meter { display: block; height: 4px; border-radius: 2px; background: var(--ent-surface-sunken); overflow: hidden; }
+.fin-meter > span { display: block; height: 100%; background: var(--ent-accent); }
+.fin-meter.over > span { background: var(--ent-danger); }
+.fin-meter.near > span { background: var(--ent-warning); }
+
+/* ── The import stepper ─────────────────────────────────────────────────────────────────────── */
+.fin-steps { display: flex; flex-wrap: wrap; gap: var(--ent-s2); margin: 0; padding: 0; list-style: none; }
+.fin-step {
+  display: flex; align-items: center; gap: var(--ent-s2);
+  padding: var(--ent-s2) var(--ent-s3);
+  border: 1px solid var(--ent-line); border-radius: var(--ent-r-pill);
+  background: var(--ent-surface); font-size: var(--ent-fs-xs); color: var(--ent-text-3);
+}
+.fin-step.is-done { border-color: var(--ent-tone-positive-line); background: var(--ent-tone-positive-bg); color: var(--ent-text-2); }
+.fin-step.is-current { border-color: var(--ent-accent-line); background: var(--ent-accent-soft); color: var(--ent-text); font-weight: var(--ent-fw-semibold); }
+.fin-step-index {
+  display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem;
+  border-radius: 50%; background: var(--ent-surface-sunken);
+  font-size: var(--ent-fs-micro); font-weight: var(--ent-fw-bold);
+}
+.fin-step.is-done .fin-step-index { background: var(--ent-success); color: #fff; }
+.fin-step.is-current .fin-step-index { background: var(--ent-accent); color: #fff; }
+
+/* ── Mapping grid ───────────────────────────────────────────────────────────────────────────── */
+.fin-map { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); gap: var(--ent-s2) var(--ent-s3); align-items: center; }
+.fin-map dt { font-size: var(--ent-fs-xs); font-weight: var(--ent-fw-semibold); color: var(--ent-text-2); }
+.fin-map dd { margin: 0; font-size: var(--ent-fs-sm); }
+.fin-map .unmapped { color: var(--ent-text-3); font-style: italic; }
+
+/* ── Read-only banner ───────────────────────────────────────────────────────────────────────── */
+.fin-readonly {
+  display: flex; align-items: flex-start; gap: var(--ent-s2);
+  padding: var(--ent-s3); border: 1px solid var(--ent-tone-warning-line);
+  border-radius: var(--ent-r-sm); background: var(--ent-tone-warning-bg);
+  font-size: var(--ent-fs-sm); color: var(--ent-text); line-height: var(--ent-lh);
+}
+.fin-readonly strong { font-weight: var(--ent-fw-semibold); }
+
+/* ── Buttons ────────────────────────────────────────────────────────────────────────────────── */
+.fin-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--ent-s2);
+  min-height: var(--ent-control-h); padding: 0 var(--ent-s3);
+  border: 1px solid var(--ent-line-strong); border-radius: var(--ent-r-sm);
+  background: var(--ent-surface); color: var(--ent-text);
+  font: inherit; font-size: var(--ent-fs-sm); font-weight: var(--ent-fw-medium);
+  cursor: pointer; white-space: nowrap;
+  transition: background var(--ent-dur) var(--ent-ease), border-color var(--ent-dur) var(--ent-ease);
+}
+.fin-btn:hover:not(:disabled) { background: var(--ent-surface-2); }
+.fin-btn:focus-visible { outline: var(--ent-focus-ring); outline-offset: 2px; }
+.fin-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.fin-btn.primary { background: var(--ent-accent); border-color: var(--ent-accent); color: #fff; }
+.fin-btn.primary:hover:not(:disabled) { filter: brightness(0.94); }
+.fin-btn.danger { border-color: var(--ent-danger); color: var(--ent-danger); }
+.fin-btn.danger:hover:not(:disabled) { background: var(--ent-danger-soft); }
+.fin-btn.small { min-height: 1.75rem; padding: 0 var(--ent-s2); font-size: var(--ent-fs-xs); }
+
+/* ── Empty and loading ──────────────────────────────────────────────────────────────────────── */
+.fin-empty {
+  display: flex; flex-direction: column; gap: var(--ent-s2);
+  padding: var(--ent-s5); border: 1px dashed var(--ent-line-strong);
+  border-radius: var(--ent-r-sm); background: var(--ent-surface-2);
+  font-size: var(--ent-fs-sm); color: var(--ent-text-2); line-height: var(--ent-lh);
+}
+.fin-empty strong { color: var(--ent-text); font-weight: var(--ent-fw-semibold); }
+.fin-empty p { margin: 0; max-width: 70ch; }
+
+@media (max-width: 767px) {
+  .fin-table thead th { position: static; }
+  .fin-figures { grid-template-columns: 1fr 1fr; }
+}

@@ -81,16 +81,29 @@ const APPLICANT_TYPES = new Set([
 const INVITABLE_ROLES = new Set([
   'admin', 'planner',
   'eo', 'env_officer', 'building_inspector', 'planning_clerk',
-  'surveyor', 'gis_officer', 'finance_officer',
+  'surveyor', 'gis_officer',
   // GIS Branch (migration 132)
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
+  // Finance (migration 188). Seven roles whose duties are deliberately separated.
+  'finance_admin', 'finance_officer', 'budget_officer', 'dept_head',
+  'finance_committee', 'publisher', 'auditor',
+  // Finance (migration 207): the cash office, the book-keeper, revenue and the executive.
+  'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
+  // Migration 208: the senior cashier who supervises the tills.
+  'cash_supervisor',
 ])
 
 const VALID_USER_ROLES = new Set([
   'public', 'registered', 'viewer',
   'admin', 'planner', 'eo', 'env_officer', 'building_inspector',
-  'planning_clerk', 'surveyor', 'gis_officer', 'finance_officer',
+  'planning_clerk', 'surveyor', 'gis_officer',
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
+  'finance_admin', 'finance_officer', 'budget_officer', 'dept_head',
+  'finance_committee', 'publisher', 'auditor',
+  // Finance (migration 207): the cash office, the book-keeper, revenue and the executive.
+  'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
+  // Migration 208: the senior cashier who supervises the tills.
+  'cash_supervisor',
 ])
 
 // Council staff = employees. Identical to INVITABLE_ROLES today, but named

@@ -3,9 +3,9 @@
      DO NOT EDIT BY HAND -- published styles are immutable.
      layer         : country
      style version : v1
-     style id      : 33ef2eb4-4b92-4ddd-97e9-9777ff5961e3
+     style id      : 24aa4af5-e355-4b2d-b0f2-807e8d11d30c
      checksum      : sha256:6512bb52a1949ac9ca35a26c2d04a96256d2a820606bdde8e1c11256453ce7f0
-     published     : Tue Sep 01 2026 16:05:26 GMT+0200 (Central Africa Time)
+     published     : Mon Nov 02 2026 12:02:19 GMT+0200 (Central Africa Time)
      To change it: create a new version in the GIS admin area, have it
      approved, publish it, then reload this style in QGIS. -->
 <qgis version="3.40" styleCategories="Symbology|Labeling">
