@@ -97,7 +97,7 @@ SELECT s.stand_no, ':township', aw.ward_code,
        'Lo29 (Hartebeesthoek94, EPSG:2053) to WGS84; drawing x/y are easting/northing, Lo29 axes are westing/southing',
        round(s.area_m2::numeric, 2), ':sg_ref', gp.import_id,
        CASE s.basis WHEN 'general_plan' THEN 'C' ELSE 'D' END, s.basis,
-       ':source', 'current', 'stand', 'scratch.township_dxf_raw', s.stand_no
+       ':source', 'current', 'stand', 'dxf:' || ':township', s.stand_no
   FROM scratch.td_final s
   JOIN land.general_plan gp ON gp.sg_ref = ':sg_ref'
   LEFT JOIN LATERAL (

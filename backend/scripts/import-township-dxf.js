@@ -24,6 +24,11 @@ function arg(name, fallback) {
   return i > -1 ? process.argv[i + 1] : fallback
 }
 
+function fail(msg) {
+  console.error(msg)
+  process.exit(1)
+}
+
 const dxf = arg('dxf')
 const township = arg('township')
 const srid = Number(arg('srid', 2053)) // 2053 = Hartebeesthoek94 / Lo29
@@ -35,10 +40,10 @@ if (!dxf || !township) {
   console.error('Usage: node scripts/import-township-dxf.js --dxf <file.dxf> --township <CODE> [--srid 2053] [--tol 0.1] [--max-stand-m2 20000] [--report out.csv]')
   process.exit(1)
 }
-if (!/^[A-Z0-9_-]{2,16}$/.test(township)) throw new Error('--township must be 2-16 chars of A-Z, 0-9, _ or -')
-if (![2053, 22289].includes(srid)) throw new Error('--srid must be 2053 (Hartebeesthoek94 Lo29) or 22289 (Cape Lo29)')
-if (!fs.existsSync(dxf)) throw new Error(`DXF not found: ${dxf}`)
-if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set')
+if (!/^[A-Z0-9_-]{2,16}$/.test(township)) fail('--township must be 2-16 chars of A-Z, 0-9, _ or -')
+if (![2053, 22289].includes(srid)) fail('--srid must be 2053 (Hartebeesthoek94 Lo29) or 22289 (Cape Lo29)')
+if (!fs.existsSync(dxf)) fail(`DXF not found: ${dxf}`)
+if (!process.env.DATABASE_URL) fail('DATABASE_URL is not set')
 
 const dbUrl = new URL(process.env.DATABASE_URL)
 const sgRef = `DXF-${township}`
