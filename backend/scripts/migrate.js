@@ -327,6 +327,17 @@ const MIGRATIONS = [
   // commit if any changed. Policy values (abandon threshold, assignment required) are provisional,
   // decision D29. Rollback: migrations/rollback/208_cash_session_lifecycle.down.sql.
   '208_cash_session_lifecycle.sql',
+  // 209-214 were applied to dev databases by hand and never added here, so a database built from
+  // this chain 500s on the cashier's service queue, the auditor's dashboard (finance.audit_finding),
+  // the cut-over, bank reconciliation, creditors and the fixed-asset register, whose routes read
+  // them; the CEO's Executive dashboard reads the audit findings. Each has its rollback in
+  // migrations/rollback/ and depends on nothing later than 208.
+  '209_cash_service_queue.sql',
+  '210_finance_internal_audit.sql',
+  '211_finance_cutover.sql',
+  '212_finance_bank_reconciliation.sql',
+  '213_finance_creditors.sql',
+  '214_finance_fixed_assets.sql',
 ]
 
 function createPool(env = process.env) {

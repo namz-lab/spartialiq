@@ -179,6 +179,12 @@ describe('migration plan', () => {
       '206_finance_rates_operations.sql',
       '207_finance_cash_office.sql',
       '208_cash_session_lifecycle.sql',
+      '209_cash_service_queue.sql',
+      '210_finance_internal_audit.sql',
+      '211_finance_cutover.sql',
+      '212_finance_bank_reconciliation.sql',
+      '213_finance_creditors.sql',
+      '214_finance_fixed_assets.sql',
     ])
 
     for (const filename of MIGRATIONS) {

@@ -158,7 +158,9 @@ BEGIN
                     THEN left(s.raw, 16) || '-' || s.fid::text
                     ELSE s.raw END AS stand_no
           FROM (
-            SELECT p.fid, NULLIF(btrim(p.gid), '') AS gid,
+            -- gid::text: the GeoPackage import (setup-spatial) loads gid as an integer, and btrim
+            -- of an integer fails; on a database where it is already text the cast changes nothing.
+            SELECT p.fid, NULLIF(btrim(p.gid::text), '') AS gid,
                    ST_Multi(ST_CollectionExtract(ST_MakeValid(p.geom), 3)) AS geom,
                    round(ST_Area(p.geom::geography)::numeric, 2) AS area_m2,
                    left(COALESCE(NULLIF(btrim(p.name), ''), NULLIF(btrim(p.name_cfu), ''), 'GID-' || p.gid), 24) AS raw

@@ -127,11 +127,33 @@ Stand **HDR-105**, account **VRDC-LAYOUT-HDR-105**, parcel **P-0000746**, is the
 
 ## Run it locally
 
-PostgreSQL with PostGIS, then the API and the portal:
+You need Node 22, and PostgreSQL 17 with PostGIS (the migrations use settings that older versions reject). Docker is the quickest way to get one:
 
 ```
-cd backend && npm install && node server.js
+docker run -d --name lamis-db -p 5433:5432 -e POSTGRES_PASSWORD=lamis_dev -e POSTGRES_DB=vungu_master_db_v1 postgis/postgis:17-3.5
+```
+
+Copy `backend/.env.example` to `backend/.env`, set `DATABASE_URL` (for the container above:
+`postgresql://postgres:lamis_dev@localhost:5433/vungu_master_db_v1`) and `JWT_SECRET`, then build the demonstration in one command:
+
+```
+cd backend && npm install
+npm run demo:setup
+```
+
+`demo:setup` runs the migrations, loads the master-plan layers and the parcel register, and seeds an account and a populated desk for every role. The master-plan step needs `ogr2ogr` (a QGIS or GDAL install, or Docker, which it uses if `ogr2ogr` is not found); `--skip-spatial` leaves it out. To add a township from a Lo29 drawing:
+
+```
+npm run demo:setup -- --township-dxf "path/to/township.dxf" --township HERTS
+```
+
+Then start the API and the portal:
+
+```
+cd backend && npm start
 cd frontend && npm install && npm run dev
 ```
 
-The API listens on port 3000. The portal listens on port 5174 and proxies `/api`.
+The API listens on port 3000. The portal listens on port 5174 and proxies `/api`. Every `demo.*` account signs in with `demo1234`. The seeded finance figures are synthetic and labelled so on screen. The national basemap (roads, buildings, land use) is a separate 1.5 GB download and is not part of `demo:setup`; without it the maps show the council's own layers on a plain background.
+
+`demo:setup` refuses to run in production or against a database on another machine. `node scripts/seed-all-demo.js --undo` takes the seeded desk data back out (the accounts stay).

@@ -69,13 +69,16 @@ async function ensureInspector(client, hash) {
 
   const existing = await client.query('SELECT id FROM public.users WHERE email = $1', [INSPECTOR.email]);
   if (existing.rows[0]) {
+    // Only the columns this database has: public.users carries no updated_at.
+    const sets = [
+      "role = 'building_inspector'",
+      'password_hash = $2',
+      cols.has('active') ? 'active = TRUE' : null,
+      cols.has('status') ? "status = 'active'" : null,
+      cols.has('updated_at') ? 'updated_at = NOW()' : null,
+    ].filter(Boolean)
     await client.query(
-      `UPDATE public.users
-          SET role = 'building_inspector', password_hash = $2,
-              ${cols.has('active') ? 'active = TRUE,' : ''}
-              ${cols.has('status') ? "status = 'active'," : ''}
-              updated_at = NOW()
-        WHERE email = $1`,
+      `UPDATE public.users SET ${sets.join(', ')} WHERE email = $1`,
       [INSPECTOR.email, hash],
     );
     return existing.rows[0].id;

@@ -39,12 +39,36 @@ async function userId (db, email) {
   return rows[0].id
 }
 
-/** An existing permit_application, looked up by its tpd_reference — never created here. */
+/**
+ * The permit_application with this tpd_reference. On the developers' own database these four
+ * already exist, so they are used as they are. On a database built from the migrations alone they
+ * do not, and the register data below has nothing to hang from: a stand-in approved permit is
+ * created (tagged, so --undo removes it) rather than leaving the inspector's console empty.
+ */
 async function permitByReference (db, reference) {
   const { rows } = await db.query(
     'SELECT id FROM spatial_planning.permit_application WHERE tpd_reference = $1', [reference])
-  if (!rows.length) throw new Error(`No permit_application with tpd_reference ${reference}`)
-  return rows[0].id
+  if (rows.length) return rows[0].id
+  const n = reference.split('/').pop()
+  return ensure(db, TAG, 'spatial_planning.permit_application', {
+    tpd_reference: reference,
+    dev_register_no: `DR/2026/${n}`,
+    stand_number: `ST-${n}`,
+    suburb_ward: 'Ward 12',
+    street_address: `Stand ST-${n}, Vungu`,
+    applicant_name: `Demo applicant ${n}`,
+    applicant_phone: '+263 77 000 0000',
+    applicant_email: `applicant${n}@example.co.zw`,
+    development_type: 'new_building',
+    description: 'Demonstration permit: a dwelling approved so the inspection register has a file to attach to.',
+    status: 'approved_with_conditions',
+    received_at: daysAgo(120),
+    acknowledged_at: daysAgo(116),
+    decision_at: daysAgo(60),
+    decision_conditions: 'Standard conditions apply.',
+    classification: 'residential',
+    clock_state: 'stopped',
+  }, 'tpd_reference = $1', [reference])
 }
 
 async function seed (db) {
