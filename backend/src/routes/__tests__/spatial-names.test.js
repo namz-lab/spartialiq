@@ -108,3 +108,35 @@ describe('the road network and the planning boundary (migration 221)', () => {
     expect(r.invented).toBe(0)
   })
 })
+
+describe('water sources (migration 224)', () => {
+  const kind = async (rel) => (await q('SELECT relkind::text AS k FROM pg_class WHERE oid = to_regclass($1)', [rel]))[0]?.k
+
+  test('basemap.waterbody is the table and public.water_areas a view with the columns the tile config reads', async () => {
+    expect(await kind('basemap.waterbody')).toBe('r')
+    expect(await kind('public.water_areas')).toBe('v')
+    const [a] = await q('SELECT count(*)::int AS n FROM basemap.waterbody')
+    const [b] = await q('SELECT count(*)::int AS n FROM public.water_areas')
+    expect(b.n).toBe(a.n)
+    const cols = (await q(`SELECT attname FROM pg_attribute WHERE attrelid = 'public.water_areas'::regclass AND attnum > 0 AND NOT attisdropped`)).map((r) => r.attname)
+    for (const c of ['fid', 'name', 'fclass', 'geom']) expect(cols).toContain(c)
+  })
+
+  test('no dam is named "Unknown": a missing name is NULL, never a placeholder', async () => {
+    const [r] = await q(`SELECT count(*)::int AS n FROM basemap.waterbody WHERE lower(name) = 'unknown'`)
+    expect(r.n).toBe(0)
+  })
+
+  test('the boreholes from the council GIS carry no working state: unknown and unverified, never working', async () => {
+    const [r] = await q(`SELECT count(*)::int AS n, count(*) FILTER (WHERE operational <> 'unknown')::int AS stated,
+                                count(*) FILTER (WHERE data_quality <> 'unverified')::int AS verified
+                           FROM council_ops.wash_asset WHERE source LIKE 'Council GIS boreholes.geojson%'`)
+    expect(r.stated).toBe(0)
+    expect(r.verified).toBe(0)
+  })
+
+  test('the two water-point measures count water sources only', async () => {
+    const rows = await q(`SELECT measure_key, source_note FROM spatial_engine.measure WHERE measure_key IN ('water_points_working', 'water_points_per_voters')`)
+    for (const r of rows) expect(r.source_note).toMatch(/borehole, well, water point, tank/)
+  })
+})

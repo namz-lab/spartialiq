@@ -42,7 +42,12 @@ export interface EngineeringSection extends SectionState {
   national_roads?: number
   national_road_km?: number
   water_points?: number
+  /** Water points whose state (working, broken, seasonal) is recorded; the rest are 'unknown', never counted as broken. */
+  water_points_state_known?: number
   water_points_working?: number
+  /** Dams mapped (basemap.waterbody) and the water they cover, in hectares. */
+  dams?: number
+  dam_area_ha?: number
   /** False while the council has said its water-point register is incomplete: the figures are what is recorded, not what exists. */
   water_points_register_complete?: boolean
   water_points_expected?: number | null

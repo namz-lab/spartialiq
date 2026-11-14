@@ -53,12 +53,21 @@ export function engineeringGroup(en: EngineeringSection | undefined, fail: () =>
   if ((en.national_roads ?? 0) > 0) {
     stats.push({ label: "National roads (not the council's)", value: `${n(en.national_roads)} (${km(en.national_road_km)} km)` })
   }
+  // Water sources: how many are recorded, and for how many the state of repair is known. An unknown state is not shown as broken.
+  const known = en.water_points_state_known ?? en.water_points ?? 0
+  stats.push({ label: incomplete ? 'Water points recorded' : 'Water points', value: n(en.water_points) })
+  if ((en.water_points ?? 0) > 0 && known < (en.water_points ?? 0)) {
+    stats.push({ label: 'State of repair recorded for', value: `${n(known)} of ${n(en.water_points)}`, tone: 'warn' })
+  }
+  if (known > 0) {
+    stats.push({
+      label: 'Working, of those with a recorded state',
+      value: `${n(en.water_points_working)} of ${n(known)}`,
+      tone: !incomplete && en.water_points_working! < known ? 'warn' : undefined,
+    })
+  }
+  if ((en.dams ?? 0) > 0) stats.push({ label: 'Dams mapped', value: `${n(en.dams)} (${km(en.dam_area_ha)} ha of water)` })
   stats.push(
-    {
-      label: incomplete ? 'Water points recorded working' : 'Water points working',
-      value: incomplete ? `${n(en.water_points_working)} of ${n(en.water_points)} recorded` : `${n(en.water_points_working)} of ${n(en.water_points)}`,
-      tone: !incomplete && en.water_points && en.water_points_working! < en.water_points ? 'warn' : undefined,
-    },
     { label: 'Council assets', value: n(en.council_assets) },
     { label: 'Capital projects in progress', value: n(en.projects_in_progress) },
   )

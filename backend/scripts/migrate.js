@@ -364,6 +364,9 @@ const MIGRATIONS = [
   // An incomplete register does not say zero: spatial_engine.register_status, and refresh() reads a ward with nothing recorded as no data.
   // Rollback: migrations/rollback/223_register_completeness.down.sql.
   '223_register_completeness.sql',
+  // Water sources: dams as basemap.waterbody, and water-point measures that count water sources only and do not guess a state.
+  // Rollback: migrations/rollback/224_water_sources.down.sql.
+  '224_water_sources.sql',
 ]
 
 function createPool(env = process.env) {

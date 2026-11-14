@@ -74,7 +74,10 @@ async function seed (db) {
     ['DEMO-WP-005', 'tank', 'Ruby storage tank (demo)', '19', 'working'],
     ['DEMO-WP-006', 'borehole', 'Mangwande borehole (demo)', '5', 'seasonal'],
   ]
-  for (const [code, type, name, ward, operational] of water) {
+  // Real boreholes (scripts/load-reference-layers.js) supersede the demonstration water points: with them in the register the demo adds none.
+  const { rows: [realWater] } = await db.query("SELECT count(*)::int AS n FROM council_ops.wash_asset WHERE asset_code NOT LIKE 'DEMO-WP-%'")
+  if (realWater.n > 0) console.log(`[executive-demo] ${realWater.n} real water points are loaded; no demonstration water points added`)
+  for (const [code, type, name, ward, operational] of (realWater.n > 0 ? [] : water)) {
     await ensure(db, TAG, 'council_ops.wash_asset', {
       asset_code: code, asset_type: type, name, ward, operational,
       responsible_party: 'Vungu RDC', data_quality: 'unverified',

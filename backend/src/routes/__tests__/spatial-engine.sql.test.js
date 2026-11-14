@@ -267,11 +267,13 @@ describe('an incomplete register (migration 223)', () => {
      ON CONFLICT (authority_id, register) DO UPDATE SET complete = $1`, [complete])
 
   beforeAll(async () => {
-    // Ward A: a working point and a broken one recorded; ward B: one recorded point, broken; ward C: nothing recorded.
-    for (const [code, x, state] of [['JEST-IR-1', 10.02, 'working'], ['JEST-IR-2', 10.03, 'broken'], ['JEST-IR-3', 11.02, 'broken']]) {
+    // Ward A: a working point, a broken one and one with no recorded state; ward B: one recorded point, broken; ward C: nothing
+    // recorded but a toilet, which is not a water source.
+    for (const [code, x, state, type] of [['JEST-IR-1', 10.02, 'working', 'borehole'], ['JEST-IR-2', 10.03, 'broken', 'borehole'],
+      ['JEST-IR-4', 10.04, 'unknown', 'borehole'], ['JEST-IR-3', 11.02, 'broken', 'well'], ['JEST-IR-5', 12.02, 'working', 'toilet']]) {
       await client.query(
         `INSERT INTO council_ops.wash_asset (asset_code, asset_type, name, operational, geom)
-         VALUES ($1::varchar, 'borehole', $1::text, $2, ST_SetSRID(ST_MakePoint($3, 50.05), 4326))`, [code, state, x])
+         VALUES ($1::varchar, $4, $1::text, $2, ST_SetSRID(ST_MakePoint($3, 50.05), 4326))`, [code, state, x, type])
     }
     await client.query(`INSERT INTO spatial_engine.ward_denominator (ward_code, kind, as_of_year, value, source)
                          VALUES ('ZJEST001', 'registered_voters', 2023, 2000, 'jest'), ('ZJEST002', 'registered_voters', 2023, 2000, 'jest'),
@@ -282,11 +284,21 @@ describe('an incomplete register (migration 223)', () => {
     await setComplete(false)
     await q('SELECT spatial_engine.refresh()')
     const v = await valuesOf('water_points_per_voters')
-    expect(Number(v.ZJEST001.value)).toBeGreaterThan(0) // one working point recorded
-    expect(Number(v.ZJEST002.value)).toBe(0) // a point is recorded and does not work: a real zero
-    expect(v.ZJEST002.reliability).toBe('ok')
-    expect(v.ZJEST003.value).toBeNull() // nothing recorded: not zero
+    // The access measure counts every recorded source, whatever its state: in ward A the three added here and the two working
+    // points the voter-rate tests above put there; in ward B one, broken.
+    expect(Number(v.ZJEST001.numerator)).toBe(5)
+    expect(Number(v.ZJEST002.numerator)).toBe(1)
+    expect(Number(v.ZJEST002.value)).toBeGreaterThan(0)
+    expect(v.ZJEST003.value).toBeNull() // a toilet is not a water source, so nothing is recorded: not zero
     expect(v.ZJEST003.reliability).toBe('no_data')
+  })
+
+  test('the working share counts only points whose state is recorded: an unknown state is neither working nor broken', async () => {
+    const v = await valuesOf('water_points_working')
+    expect(Number(v.ZJEST001.numerator)).toBe(3) // working: one added here and the two above
+    expect(Number(v.ZJEST001.denominator)).toBe(4) // working and broken; the unknown one is not in the base
+    expect(Number(v.ZJEST002.numerator)).toBe(0) // a recorded, broken point: a real 0 of 1
+    expect(Number(v.ZJEST002.denominator)).toBe(1)
   })
 
   test('once the register is complete, the same ward is a true zero', async () => {
