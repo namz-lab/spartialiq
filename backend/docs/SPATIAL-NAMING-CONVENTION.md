@@ -172,5 +172,15 @@ authority: 1,059 VUNGU, 106 RIDA, 42 MOTID). `public.roads` is a view over it wi
 read. The 1,059 roads tagged VUNGU also fill the council's inventory, `council_ops.road_asset`, flagged unverified with no surface or condition
 (they are map geometry, not a survey); the five demonstration roads gave way to them.
 `admin.planning_boundary` holds the planning boundary as supplied (Gweru Rural, ZW1704, the city cut out); `public.gweru_rural_planning_boundary` is a
-view over it. It is not the union of the wards (`admin.authority_area`): its area is within 0.1% of it (583,644 ha against 584,012 ha), which
-corroborates the provisional wards without confirming them.
+view over it.
+
+## One outline: the planning boundary is the authority area (migration 222)
+
+`admin.authority_area` and `admin.planning_boundary` are one thing. The area of an authority is its planning boundary (`outline = 'planning_boundary'`;
+an authority without one keeps the union of its wards, `outline = 'ward_union'`), and its wards are the pieces inside it. The supplied boundary and the
+Electoral Commission's wards differed by slivers (471 ha of wards outside the boundary, 111 ha of boundary in no ward, 0.1% of 583,000 ha), so
+`admin.conform_authority_wards(authority_id)` conforms the council's wards to the boundary: each ward is clipped to it and the uncovered slivers go to
+the nearest ward. The result is stored in `admin.authority_ward.geom` and read by the spatial engine and the council's ward maps
+(`spatial_engine.v_authority_ward`); the custodian's polygons in `admin.ward` are untouched. The function refuses, changing nothing, unless the wards
+then cover the boundary to 1 part in 100,000 (they cover it to 4 parts in 10 million). The loaders (`load-reference-layers.js`, `load-wards.js`) run it.
+Areas must be compared in an equal-area projection: the geography area of a polygon this large is only good to about 1 part in 100,000.

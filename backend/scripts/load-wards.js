@@ -135,6 +135,9 @@ async function main() {
     console.log(`\nWards written to admin.ward : ${loaded.rowCount}`)
     console.log(`Newly linked to ${authorityCode}      : ${linked.rowCount} (basis interim, provisional)`)
     console.log(`Live memberships for ${authorityCode}  : ${live.n}`)
+    // If the council has a planning boundary, its wards are conformed to it again (migration 222).
+    const { rows: [conf] } = await client.query('SELECT admin.conform_authority_wards($1) AS r', [auth.id]).catch(() => ({ rows: [{ r: null }] }))
+    if (conf.r) console.log(`Wards conformed to the planning boundary: ${JSON.stringify(conf.r)}`)
     if (live.n !== 19) console.log('Note: Vungu RDC has 19 wards on its website; check the file and --parent if that is not what you expected.')
     if (live.n > loaded.rowCount) console.log('Note: more wards are linked than this file wrote, so an earlier ward list may still be linked. Check with scripts/set-authority-wards.js --list.')
   } catch (err) {
