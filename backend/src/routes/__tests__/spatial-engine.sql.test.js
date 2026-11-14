@@ -212,3 +212,46 @@ describe('unit measures (migration 216)', () => {
     expect(v.ZJEST002.reliability).toBe('no_data')
   })
 })
+
+// Migration 218: a rate over registered voters (not population).
+describe('rate over registered voters (migration 218)', () => {
+  beforeAll(async () => {
+    // Ward A: two working water points and 2,000 registered voters; ward B: voters but no water point; ward C: no voters loaded.
+    for (const [code, x] of [['JEST-WP-1', 10.02], ['JEST-WP-2', 10.04]]) {
+      await client.query(
+        `INSERT INTO council_ops.wash_asset (asset_code, asset_type, name, operational, geom)
+         VALUES ($1::varchar, 'borehole', $1::text, 'working', ST_SetSRID(ST_MakePoint($2, 50.05), 4326))`, [code, x])
+    }
+    await client.query(
+      `INSERT INTO spatial_engine.ward_denominator (ward_code, kind, as_of_year, value, source)
+       VALUES ('ZJEST001', 'registered_voters', 2023, 2000, 'jest'), ('ZJEST002', 'registered_voters', 2023, 3000, 'jest')`)
+    await q('SELECT spatial_engine.refresh()')
+  })
+
+  test('the database accepts a registered-voter denominator and refuses an unknown kind', async () => {
+    await client.query('SAVEPOINT s')
+    await expect(client.query(
+      `INSERT INTO spatial_engine.ward_denominator (ward_code, kind, as_of_year, value, source) VALUES ('ZJEST003', 'residents', 2023, 5, 'jest')`))
+      .rejects.toThrow(/ward_denominator_kind_known/)
+    await client.query('ROLLBACK TO SAVEPOINT s')
+  })
+
+  test('scales the count to 10,000 voters', async () => {
+    const v = await valuesOf('water_points_per_voters')
+    expect(Number(v.ZJEST001.numerator)).toBe(2)
+    expect(Number(v.ZJEST001.denominator)).toBe(2000)
+    expect(Number(v.ZJEST001.value)).toBeCloseTo(10, 3)
+  })
+
+  test('a ward with voters and no working water point is a true zero', async () => {
+    const v = await valuesOf('water_points_per_voters')
+    expect(Number(v.ZJEST002.value)).toBe(0)
+    expect(v.ZJEST002.reliability).toBe('ok')
+  })
+
+  test('a ward with no voters loaded is no_data, never 0', async () => {
+    const v = await valuesOf('water_points_per_voters')
+    expect(v.ZJEST003.value).toBeNull()
+    expect(v.ZJEST003.reliability).toBe('no_data')
+  })
+})

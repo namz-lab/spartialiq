@@ -346,6 +346,9 @@ const MIGRATIONS = [
   '216_executive_units.sql',
   // Road density by segment midpoint (GEOS 3.9 returned an empty ST_Intersection for real ward polygons).
   '217_road_density_segments.sql',
+  // Reference layers for Vungu (polling areas and stations, chiefdoms, business centres, rivers) and a registered-voter
+  // denominator for the spatial engine. Rollback: migrations/rollback/218_vungu_reference_layers.down.sql.
+  '218_vungu_reference_layers.sql',
 ]
 
 function createPool(env = process.env) {
