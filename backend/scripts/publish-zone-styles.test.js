@@ -42,6 +42,10 @@ describe('zone styles', () => {
     expect(Object.keys(colours(styled(peri)))).not.toContain('Cemetry')
   })
 
+  test('no QGIS label is published: the portal serves no Segoe UI, and a missing font breaks the whole tile', () => {
+    for (const layer of LAYERS) expect(styled(layer).labels).toBeNull()
+  })
+
   test('the colours are the council GIS\'s own: renaming changes values and labels, never a colour', () => {
     const before = qgisImport.importQml(path.join(QML_DIR, beyond.qml), { layerId: beyond.layerId, geometry: 'polygon' }).doc
     const after = styled(beyond)
