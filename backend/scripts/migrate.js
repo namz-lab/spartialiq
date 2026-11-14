@@ -349,6 +349,9 @@ const MIGRATIONS = [
   // Reference layers for Vungu (polling areas and stations, chiefdoms, business centres, rivers) and a registered-voter
   // denominator for the spatial engine. Rollback: migrations/rollback/218_vungu_reference_layers.down.sql.
   '218_vungu_reference_layers.sql',
+  // One zones table: the beyond layer reads it, spatial_planning.zone, and the public-preview switch for a draft plan.
+  // Rollback: migrations/rollback/219_zones_one_table.down.sql.
+  '219_zones_one_table.sql',
 ]
 
 function createPool(env = process.env) {

@@ -128,6 +128,13 @@ the master-plan loader fills only the raw import copies (`vungu_proposed_peri_ur
 category and a land-use code rather than a planning zone, so each category is loaded as the zone the council named for it
 (FLSCF as Large Scale Commercial Farms, FLSCF_A2 as Model A2, SSCF as Small Scale Commercial Farms, FLSCF_SSCF_A1 as
 Model A1; Communal and Resettlement Area unchanged), marked `scale_category = 'Beyond the peri-urban area'`. One table, 77 zones, all filed under Vungu's plan; the trigger creates a
-(unreviewed) zone type for each of the 18 names. Not yet done: renaming to `spatial_planning.zone`, pointing the
-`vungu_beyond_peri_urban_zones` tile layer at the canonical table (it still draws the raw copy, and is public while the canonical
-zones are hidden until the plan is gazetted), and retiring the two raw copies.
+(unreviewed) zone type for each of the 18 names. Migration 219 (same day) took the next steps: `zones_master` shows the peri-urban zones only; the old name
+`vungu_beyond_peri_urban_zones` is now a VIEW over the one table (so the tile config, the QGIS project and the catalogue keep
+working, and the raw table is kept as `..._retired`); `spatial_planning.zone` exists as a compatibility view; and
+`plan_instrument.public_preview` is an explicit, off-by-default switch that `scripts/publish-zones-preview.js --on` uses to show a
+DRAFT plan's zones to the public for a demonstration (it also sets the zone layers' `layer_publication` to public, on the record).
+
+Still to do: switch the remaining readers (the 44 backend files, the tile id and QGIS layer names) from
+`proposed_peri_urban_zones` to `spatial_planning.zone`, make that a real table, retire `vungu_proposed_peri_urban_zones` (still
+loaded by `load-master-plan.js`, no longer read by tiles or QGIS) and the retired beyond copy, and refresh the QGIS style of the
+beyond layer (it is categorised on the old FLSCF/SSCF values).

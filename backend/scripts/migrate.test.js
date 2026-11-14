@@ -189,6 +189,7 @@ describe('migration plan', () => {
       '216_executive_units.sql',
       '217_road_density_segments.sql',
       '218_vungu_reference_layers.sql',
+      '219_zones_one_table.sql',
     ])
 
     for (const filename of MIGRATIONS) {
