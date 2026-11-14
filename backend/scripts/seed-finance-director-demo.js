@@ -52,8 +52,14 @@ if (/prod|live/i.test(dbName)) {
 const YEAR_LABEL = 'DD 2026/27 (synthetic demo — July to June, not a Council year)'
 const SOURCE = 'DDDEMO'
 
-/** Vungu's own ward codes, so ward reporting has something real to join to (admin.ward). */
+/**
+ * The four ward codes the demo lines are written against. They are placeholders: when the council's wards are loaded
+ * and linked (scripts/load-wards.js), wardOf() swaps each for the real ward in the same position (ward 1, 2, 3, 4 by
+ * number), so ward reporting and the Chief Executive's ward maps join to wards that exist. With no wards linked they
+ * stay as they are and the ward figures report as unlocated, which is the honest state.
+ */
 const WARDS = ['ZW102101', 'ZW102102', 'ZW102103', 'ZW102104']
+let wardOf = (code) => code
 
 const DEPARTMENTS = [
   { code: 'DD-ENG', name: 'Engineering and Works (demo)', vote: 30 },
@@ -192,6 +198,11 @@ async function main() {
     }
 
     const authorityId = 1
+    const linkedWards = (await db.query(
+      `SELECT w.ward_code FROM admin.authority_ward aw JOIN admin.ward w ON w.ward_code = aw.ward_code
+        WHERE aw.authority_id = $1 AND aw.valid_to IS NULL
+        ORDER BY NULLIF(regexp_replace(w.name, '\\D', '', 'g'), '')::int NULLS LAST, w.ward_code LIMIT 4`, [authorityId])).rows
+    wardOf = (code) => { const i = WARDS.indexOf(code); return i >= 0 && linkedWards[i] ? linkedWards[i].ward_code : code }
     // The three actors are three DIFFERENT people on purpose. Separation of duties is enforced by
     // the permission catalogue, by the routes and by a CHECK constraint on finance.budget_revision
     // (decided_by <> requested_by); a dataset in which one account both prepared and approved
@@ -257,7 +268,7 @@ async function main() {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'approved',now(),$13,now(),$14,$13)
          RETURNING id`,
         [authorityId, yearId, dept[l.dept], l.prog ? prog[l.prog] : null, l.act ? act[l.act] : null,
-          acct[l.acct], l.ward, l.fund ? acct[l.fund] : null, l.code, l.descr, l.ccy, l.amount,
+          acct[l.acct], wardOf(l.ward), l.fund ? acct[l.fund] : null, l.code, l.descr, l.ccy, l.amount,
           preparer, approver])
       line[l.code] = rows[0].id
     }
@@ -324,7 +335,7 @@ async function main() {
            FROM generate_series(0, $16::int - 1) AS n`,
         [authorityId, yearId, acct[meta.acct], dept[meta.dept],
           meta.prog ? prog[meta.prog] : null, meta.act ? act[meta.act] : null,
-          p.ward, line[p.code], p.perMonth, meta.ccy, meta.descr, p.code,
+          wardOf(p.ward), line[p.code], p.perMonth, meta.ccy, meta.descr, p.code,
           ACCOUNTS.find((a) => a.code === meta.acct).kind, SOURCE, officer, p.months])
     }
 
@@ -409,7 +420,7 @@ async function main() {
                  now(),$14,$13)
          RETURNING id`,
         [authorityId, p.ref, p.name, 'Synthetic demonstration project. Not a Council project.',
-          dept[p.dept], p.ward, `Ward ${p.ward} (demo)`, acct['DD-1300'], p.status, p.ccy,
+          dept[p.dept], wardOf(p.ward), `Ward ${wardOf(p.ward)} (demo)`, acct['DD-1300'], p.status, p.ccy,
           p.budget, p.progress, officer, approver])
       const projectId = rows[0].id
       await db.query(

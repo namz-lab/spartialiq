@@ -19,6 +19,34 @@ ward measures. A map is a read of `spatial_engine.ward_value`; nothing is comput
    GeoJSON with value, rank, class and reliability, plus the classification method and breaks, the ward register's
    basis, and what could not be placed.
 
+## Loading the wards
+
+`scripts/load-wards.js` reads a council-supplied file. Two shapes are handled.
+
+**A file with ward codes and a parent code** (OCHA COD-AB): `npm run demo:setup -- --wards <file>` or
+`node scripts/load-wards.js --file <file> --parent ZW1704`.
+
+**A file with only a ward number** (the ZEC delimitation files, which carry `WARDNUMBER` and `LOCAL_AUTH`).
+This is how the council's `vungu_wards_zec_2023.geojson` (19 wards, ZEC 2023) was loaded:
+
+```
+node scripts/load-wards.js --file vungu_wards_zec_2023.geojson --number-field WARDNUMBER \
+  --code-prefix ZEC23-VUNGU- --parent VUNGU \
+  --source "ZEC 2023 delimitation (council-supplied file vungu_wards_zec_2023.geojson)" --delimitation "ZEC 2023" \
+  --instrument "PROVISIONAL-D11-2026-11-14: provisional ward list for Vungu RDC, loaded from the ZEC 2023 delimitation file supplied by the council. UNCONFIRMED - pending a Council resolution. Not evidence of a Council act." \
+  --valid-from 2026-11-14
+```
+
+The wards get codes `ZEC23-VUNGU-01` to `-19` (the prefix plus the ward number), so they do not pretend to belong
+to a national code scheme, and the name is the ward number, which is how the registers label a ward
+(`spatial_engine.ward_of_label()`). They are linked as basis `interim`: the Council has not confirmed its ward list
+(decision D11), and every screen says so. The instrument text must start with `PROVISIONAL-D11-`, the handle a
+confirming migration searches for. When the Council confirms a list, end these memberships and load the confirmed one;
+no feature code changes. The finance demo seed follows whichever wards are linked (wards 1 to 4 by number).
+
+Check a loaded file against what the council states: the 19 ZEC wards total about 584,000 ha against the 609,589 ha on
+the council's website, with no overlaps.
+
 ## Rules that are in the data, not left to the screen
 
 - A ward with no figure is `NULL` / `no_data`. It is never 0 and never in a class (a database constraint

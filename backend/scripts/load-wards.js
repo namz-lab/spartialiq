@@ -6,6 +6,16 @@
  *        [--code-field ADM3_PCODE] [--name-field ADM3_EN] [--parent-field ADM2_PCODE]
  *        [--source "COD-AB"] [--delimitation "pre-2023 (COD-AB)"] [--authority VUNGU]
  *
+ * A file with no ward code of its own, only a ward number (the ZEC delimitation files), is loaded by number:
+ *
+ *   node scripts/load-wards.js --file vungu_wards_zec_2023.geojson --number-field WARDNUMBER \
+ *        --code-prefix ZEC23-VUNGU- --parent VUNGU --source "ZEC 2023 delimitation (council-supplied file)" \
+ *        --delimitation "ZEC 2023" --instrument "PROVISIONAL-D11-...: ..." --valid-from 2026-11-14
+ *
+ * The code is the prefix plus the ward number padded to two digits (ZEC23-VUNGU-01), the name is the ward number,
+ * and there is no parent filter (the file is the council's wards). The codes name their source on purpose: they
+ * are not claimed to belong to a national code scheme.
+ *
  * The file is whatever the council supplies: OCHA's COD-AB set, ZIMSTAT's 2022 boundaries, or its own. The
  * field names default to COD-AB's. Wards whose parent code equals --parent (the district) are written to
  * admin.ward, then linked to the authority in admin.authority_ward as basis 'interim', exactly as migration 201
@@ -36,10 +46,19 @@ const fail = (msg) => { console.error(msg); process.exit(1) }
 
 const file = arg('file')
 const layer = arg('layer')
-const parent = arg('parent', 'ZW1704')
+const numberField = arg('number-field')
+const codePrefix = arg('code-prefix', '')
+// With a number field the parent is a label we give, so it must be named, not defaulted.
+const parent = arg('parent', numberField ? null : 'ZW1704')
 const codeField = arg('code-field', 'ADM3_PCODE')
+const nameGiven = process.argv.includes('--name-field')
 const nameField = arg('name-field', 'ADM3_EN')
-const parentField = arg('parent-field', 'ADM2_PCODE')
+// A by-number file has no parent column; 'none' says so explicitly for any file.
+const parentFieldArg = arg('parent-field', numberField ? 'none' : 'ADM2_PCODE')
+const parentField = parentFieldArg === 'none' ? null : parentFieldArg
+const instrument = arg('instrument', INSTRUMENT)
+const customInstrument = process.argv.includes('--instrument')
+const validFrom = arg('valid-from', VALID_FROM)
 const source = arg('source', 'COD-AB')
 const delimitation = arg('delimitation', 'pre-2023 (COD-AB)')
 const authorityCode = arg('authority', 'VUNGU')
@@ -47,10 +66,14 @@ const authorityCode = arg('authority', 'VUNGU')
 if (!file) fail('Usage: node scripts/load-wards.js --file <wards file> [--layer name] [--parent ZW1704] [--authority VUNGU]')
 if (!fs.existsSync(file)) fail(`Ward file not found: ${file}`)
 if (!process.env.DATABASE_URL) fail('DATABASE_URL is not set')
-if (!/^[A-Z0-9]{3,12}$/.test(parent)) fail('--parent must be a district code such as ZW1704')
-for (const [name, v] of [['code-field', codeField], ['name-field', nameField], ['parent-field', parentField]]) {
-  if (!/^[A-Za-z0-9_]{1,40}$/.test(v)) fail(`--${name} must be a plain column name`)
+if (!parent) fail('--parent is required with --number-field: the label the wards are filed under (for example VUNGU)')
+if (!/^[A-Z0-9]{3,12}$/.test(parent)) fail('--parent must be a district or council code such as ZW1704 or VUNGU')
+for (const [name, v] of [['code-field', codeField], ['name-field', nameField], ['parent-field', parentField], ['number-field', numberField]]) {
+  if (v !== null && v !== undefined && !/^[A-Za-z0-9_]{1,40}$/.test(v)) fail(`--${name} must be a plain column name`)
 }
+if (numberField && !/^[A-Za-z0-9_-]{1,20}$/.test(codePrefix)) fail('--code-prefix is required with --number-field (for example ZEC23-VUNGU-)')
+if (!/^\d{4}-\d{2}-\d{2}$/.test(validFrom)) fail('--valid-from must be a date, YYYY-MM-DD')
+if (customInstrument && !/^PROVISIONAL-D11-/.test(instrument)) fail('--instrument must start with PROVISIONAL-D11-, the handle a confirming migration searches for')
 if (!/^[A-Z0-9_]{2,16}$/.test(authorityCode)) fail('--authority must be an authority code such as VUNGU')
 
 async function main() {
@@ -58,10 +81,10 @@ async function main() {
   await client.connect()
   try {
     await client.query('CREATE SCHEMA IF NOT EXISTS scratch')
-    console.log(`Loading ${file} (wards under ${parent}) ...`)
+    console.log(`Loading ${file} (wards filed under ${parent}) ...`)
     // ogr2ogr lower-cases column names (LAUNDER), so the filter and the SQL below use lower-case names.
     const how = loadFile(process.env.DATABASE_URL, file, {
-      layer, table: 'scratch.ward_import', where: `${parentField} = '${parent}'`,
+      layer, table: 'scratch.ward_import', where: parentField ? `${parentField} = '${parent}'` : undefined,
     })
     console.log(`  read with ${how}`)
 
@@ -69,22 +92,28 @@ async function main() {
     // stop here rather than report success and leave the council with no wards.
     const { rows: [found] } = await client.query('SELECT count(*)::int AS n FROM scratch.ward_import')
     if (found.n === 0) {
-      throw new Error(`No features in the file have ${parentField} = '${parent}'. Check --parent (the district code), ` +
-        '--parent-field, and --layer if the file has more than one layer.')
+      throw new Error(parentField
+        ? `No features in the file have ${parentField} = '${parent}'. Check --parent (the district code), --parent-field, and --layer if the file has more than one layer.`
+        : 'The file has no features. Check the file and --layer.')
     }
-    console.log(`  ${found.n} ward features under ${parent}`)
+    console.log(`  ${found.n} ward features`)
 
-    const cols = { code: codeField.toLowerCase(), name: nameField.toLowerCase(), parent: parentField.toLowerCase() }
+    // The code, the name and the parent, from the file's columns or, for a by-number file, built from the ward number.
+    const n = numberField ? numberField.toLowerCase() : null
+    const codeExpr = n ? `$3::text || lpad(btrim(${n}::text), 2, '0')` : `btrim(${codeField.toLowerCase()}::text)`
+    const nameExpr = n && !nameGiven ? `btrim(${n}::text)` : `btrim(${nameField.toLowerCase()}::text)`
+    const parentExpr = parentField ? `btrim(${parentField.toLowerCase()}::text)` : '$4::text'
+    const present = n ?? codeField.toLowerCase()
     await client.query('BEGIN')
     const loaded = await client.query(
       `INSERT INTO admin.ward (ward_code, name, source, parent_pcode, delimitation, geom)
-       SELECT btrim(${cols.code}::text), btrim(${cols.name}::text), $1, btrim(${cols.parent}::text), $2,
+       SELECT ${codeExpr}, ${nameExpr}, $1, ${parentExpr}, $2,
               ST_Multi(ST_CollectionExtract(ST_MakeValid(geom), 3))
          FROM scratch.ward_import
-        WHERE ${cols.code} IS NOT NULL AND geom IS NOT NULL
+        WHERE ${present} IS NOT NULL AND geom IS NOT NULL
        ON CONFLICT (ward_code) DO UPDATE
          SET name = EXCLUDED.name, source = EXCLUDED.source, parent_pcode = EXCLUDED.parent_pcode,
-             delimitation = EXCLUDED.delimitation, geom = EXCLUDED.geom`, [source, delimitation])
+             delimitation = EXCLUDED.delimitation, geom = EXCLUDED.geom`, [source, delimitation, codePrefix, parent])
 
     const { rows: [auth] } = await client.query('SELECT id FROM public.local_authorities WHERE code = $1', [authorityCode])
     if (!auth) throw new Error(`local authority ${authorityCode} not found; run the migrations first`)
@@ -92,11 +121,13 @@ async function main() {
     const linked = await client.query(
       `INSERT INTO admin.authority_ward (authority_id, ward_code, valid_from, valid_to, basis, instrument_ref, note)
        SELECT $1, w.ward_code, $2::date, NULL, 'interim', $3,
-              'Provisional: COD-AB district ' || $4 || ' ward list, unconfirmed by Council.'
+              $5::text
          FROM admin.ward w
         WHERE w.parent_pcode = $4
           AND NOT EXISTS (SELECT 1 FROM admin.authority_ward aw WHERE aw.ward_code = w.ward_code AND aw.valid_to IS NULL)
-       ON CONFLICT (authority_id, ward_code, valid_from) DO NOTHING`, [auth.id, VALID_FROM, INSTRUMENT, parent])
+       ON CONFLICT (authority_id, ward_code, valid_from) DO NOTHING`,
+      [auth.id, validFrom, instrument, parent,
+        customInstrument ? `Provisional: ${source}, unconfirmed by Council.` : `Provisional: COD-AB district ${parent} ward list, unconfirmed by Council.`])
     const { rows: [live] } = await client.query(
       'SELECT count(*)::int AS n FROM admin.authority_ward WHERE authority_id = $1 AND valid_to IS NULL', [auth.id])
     await client.query('COMMIT')
@@ -105,6 +136,7 @@ async function main() {
     console.log(`Newly linked to ${authorityCode}      : ${linked.rowCount} (basis interim, provisional)`)
     console.log(`Live memberships for ${authorityCode}  : ${live.n}`)
     if (live.n !== 19) console.log('Note: Vungu RDC has 19 wards on its website; check the file and --parent if that is not what you expected.')
+    if (live.n > loaded.rowCount) console.log('Note: more wards are linked than this file wrote, so an earlier ward list may still be linked. Check with scripts/set-authority-wards.js --list.')
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
     throw err
