@@ -1,0 +1,435 @@
+eo_code,eo_name,eo_zone,control,footnote,raw
+A,Detached Dwelling House,Zone 1B(iii) Mixed,P,,P
+A,Detached Dwelling House,Central Business District,X,,X
+A,Detached Dwelling House,Local Shopping Centre,X,,X
+A,Detached Dwelling House,Neighbourhood Shopping,X,,X
+A,Detached Dwelling House,Markets,X,,X
+A,Detached Dwelling House,High Density Residential,P,,P
+A,Detached Dwelling House,Medium Density,P,,P
+A,Detached Dwelling House,Low Density Residential,P,,P
+A,Detached Dwelling House,Flats,P,,P
+A,Detached Dwelling House,Zone 4 Public,X,,X
+A,Detached Dwelling House,Light and,X,,X
+A,Detached Dwelling House,General Industry,P,,P
+A,Detached Dwelling House,Resettlement,P,,P
+A,Detached Dwelling House,Communal,P,,P
+A1,Attached/Semi-Detached Dwelling House,Zone 1B(iii) Mixed,P,,P
+A1,Attached/Semi-Detached Dwelling House,Central Business District,X,,X
+A1,Attached/Semi-Detached Dwelling House,Local Shopping Centre,X,,X
+A1,Attached/Semi-Detached Dwelling House,Neighbourhood Shopping,X,,X
+A1,Attached/Semi-Detached Dwelling House,Markets,X,,X
+A1,Attached/Semi-Detached Dwelling House,High Density Residential,P,,P
+A1,Attached/Semi-Detached Dwelling House,Medium Density,P,,P
+A1,Attached/Semi-Detached Dwelling House,Low Density Residential,P,,P
+A1,Attached/Semi-Detached Dwelling House,Flats,P,,P
+A1,Attached/Semi-Detached Dwelling House,Zone 4 Public,X,,X
+A1,Attached/Semi-Detached Dwelling House,Light and,X,,X
+A1,Attached/Semi-Detached Dwelling House,General Industry,P,,P
+A1,Attached/Semi-Detached Dwelling House,Resettlement,P,,P
+A1,Attached/Semi-Detached Dwelling House,Communal,P,,P
+A2,Flats,Zone 1B(iii) Mixed,P,,P
+A2,Flats,Central Business District,P,1,P 1
+A2,Flats,Local Shopping Centre,P,1,P 1
+A2,Flats,Neighbourhood Shopping,P,1,P 1
+A2,Flats,Markets,X,,X
+A2,Flats,High Density Residential,SC,,S C
+A2,Flats,Medium Density,SC,,S C
+A2,Flats,Low Density Residential,SC,,S C
+A2,Flats,Flats,P,,P
+A2,Flats,Zone 4 Public,SC,1,S C 1
+A2,Flats,Light and,X,,X
+A2,Flats,General Industry,P,,P
+A2,Flats,Resettlement,P,,P
+A2,Flats,Communal,P,,P
+A3,Cluster House,Zone 1B(iii) Mixed,P,,P
+A3,Cluster House,Central Business District,X,,X
+A3,Cluster House,Local Shopping Centre,X,,X
+A3,Cluster House,Neighbourhood Shopping,X,,X
+A3,Cluster House,Markets,X,,X
+A3,Cluster House,High Density Residential,SC,,S C
+A3,Cluster House,Medium Density,SC,,S C
+A3,Cluster House,Low Density Residential,SC,,S C
+A3,Cluster House,Flats,P,,P
+A3,Cluster House,Zone 4 Public,X,,X
+A3,Cluster House,Light and,X,,X
+A3,Cluster House,General Industry,P,,P
+A3,Cluster House,Resettlement,P,,P
+A3,Cluster House,Communal,P,,P
+B,Residential Buildings,Zone 1B(iii) Mixed,P,,P
+B,Residential Buildings,Central Business District,P,1,P 1
+B,Residential Buildings,Local Shopping Centre,P,1,P 1
+B,Residential Buildings,Neighbourhood Shopping,P,1,P 1
+B,Residential Buildings,Markets,X,,X
+B,Residential Buildings,High Density Residential,SC,,S C
+B,Residential Buildings,Medium Density,SC,,S C
+B,Residential Buildings,Low Density Residential,SC,,S C
+B,Residential Buildings,Flats,SC,,S C
+B,Residential Buildings,Zone 4 Public,SC,1,S C 1
+B,Residential Buildings,Light and,X,,X
+B,Residential Buildings,General Industry,SC,,S C
+B,Residential Buildings,Resettlement,P,,P
+B,Residential Buildings,Communal,P,,P
+B1,Residential Buildings (Licensed),Zone 1B(iii) Mixed,P,,P
+B1,Residential Buildings (Licensed),Central Business District,P,1,P 1
+B1,Residential Buildings (Licensed),Local Shopping Centre,P,1,P 1
+B1,Residential Buildings (Licensed),Neighbourhood Shopping,P,1,P 1
+B1,Residential Buildings (Licensed),Markets,X,,X
+B1,Residential Buildings (Licensed),High Density Residential,SC,,S C
+B1,Residential Buildings (Licensed),Medium Density,SC,,S C
+B1,Residential Buildings (Licensed),Low Density Residential,SC,,S C
+B1,Residential Buildings (Licensed),Flats,SC,,S C
+B1,Residential Buildings (Licensed),Zone 4 Public,X,,X
+B1,Residential Buildings (Licensed),Light and,X,,X
+B1,Residential Buildings (Licensed),General Industry,SC,,S C
+B1,Residential Buildings (Licensed),Resettlement,P,,P
+B1,Residential Buildings (Licensed),Communal,P,,P
+B2,Residential Buildings (Institutional),Zone 1B(iii) Mixed,SC,,S C
+B2,Residential Buildings (Institutional),Central Business District,SC,,S C
+B2,Residential Buildings (Institutional),Local Shopping Centre,SC,,S C
+B2,Residential Buildings (Institutional),Neighbourhood Shopping,SC,,S C
+B2,Residential Buildings (Institutional),Markets,X,,X
+B2,Residential Buildings (Institutional),High Density Residential,SC,,S C
+B2,Residential Buildings (Institutional),Medium Density,SC,,S C
+B2,Residential Buildings (Institutional),Low Density Residential,SC,,S C
+B2,Residential Buildings (Institutional),Flats,SC,,S C
+B2,Residential Buildings (Institutional),Zone 4 Public,P,,P
+B2,Residential Buildings (Institutional),Light and,X,,X
+B2,Residential Buildings (Institutional),General Industry,SC,,S C
+B2,Residential Buildings (Institutional),Resettlement,P,,P
+B2,Residential Buildings (Institutional),Communal,P,,P
+C,Schools & / Residential Colleges,Zone 1B(iii) Mixed,SC,,S C
+C,Schools & / Residential Colleges,Central Business District,SC,,S C
+C,Schools & / Residential Colleges,Local Shopping Centre,SC,,S C
+C,Schools & / Residential Colleges,Neighbourhood Shopping,SC,,S C
+C,Schools & / Residential Colleges,Markets,X,,X
+C,Schools & / Residential Colleges,High Density Residential,SC,,S C
+C,Schools & / Residential Colleges,Medium Density,SC,,S C
+C,Schools & / Residential Colleges,Low Density Residential,SC,,S C
+C,Schools & / Residential Colleges,Flats,SC,,S C
+C,Schools & / Residential Colleges,Zone 4 Public,P,,P
+C,Schools & / Residential Colleges,Light and,X,,X
+C,Schools & / Residential Colleges,General Industry,SC,,S C
+C,Schools & / Residential Colleges,Resettlement,P,,P
+C,Schools & / Residential Colleges,Communal,P,,P
+C1,Crèches,Zone 1B(iii) Mixed,SC,,S C
+C1,Crèches,Central Business District,X,,X
+C1,Crèches,Local Shopping Centre,X,,X
+C1,Crèches,Neighbourhood Shopping,X,,X
+C1,Crèches,Markets,X,,X
+C1,Crèches,High Density Residential,SC,,S C
+C1,Crèches,Medium Density,SC,,S C
+C1,Crèches,Low Density Residential,SC,,S C
+C1,Crèches,Flats,SC,,S C
+C1,Crèches,Zone 4 Public,P,,P
+C1,Crèches,Light and,X,,X
+C1,Crèches,General Industry,P,,P
+C1,Crèches,Resettlement,P,,P
+C1,Crèches,Communal,P,,P
+D,Shops,Zone 1B(iii) Mixed,X,,X
+D,Shops,Central Business District,P,,P
+D,Shops,Local Shopping Centre,P,,P
+D,Shops,Neighbourhood Shopping,P,,P
+D,Shops,Markets,P,,P
+D,Shops,High Density Residential,X,,X
+D,Shops,Medium Density,X,,X
+D,Shops,Low Density Residential,X,,X
+D,Shops,Flats,X,,X
+D,Shops,Zone 4 Public,X,,X
+D,Shops,Light and,SC,,SC
+D,Shops,General Industry,SC,,S C
+D,Shops,Resettlement,P,,P
+D,Shops,Communal,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",Zone 1B(iii) Mixed,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",Central Business District,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",Local Shopping Centre,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",Neighbourhood Shopping,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",Markets,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",High Density Residential,X,,X
+D1,"Equipment, Furniture & ICT Showrooms",Medium Density,X,,X
+D1,"Equipment, Furniture & ICT Showrooms",Low Density Residential,X,,X
+D1,"Equipment, Furniture & ICT Showrooms",Flats,X,,X
+D1,"Equipment, Furniture & ICT Showrooms",Zone 4 Public,X,,X
+D1,"Equipment, Furniture & ICT Showrooms",Light and,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",General Industry,SC,,S C
+D1,"Equipment, Furniture & ICT Showrooms",Resettlement,P,,P
+D1,"Equipment, Furniture & ICT Showrooms",Communal,P,,P
+D2,Restaurants,Zone 1B(iii) Mixed,SC,,S C
+D2,Restaurants,Central Business District,P,,P
+D2,Restaurants,Local Shopping Centre,P,,P
+D2,Restaurants,Neighbourhood Shopping,P,,P
+D2,Restaurants,Markets,P,,P
+D2,Restaurants,High Density Residential,SC,,S C
+D2,Restaurants,Medium Density,SC,,S C
+D2,Restaurants,Low Density Residential,SC,,S C
+D2,Restaurants,Flats,SC,,S C
+D2,Restaurants,Zone 4 Public,SC,,S C
+D2,Restaurants,Light and,SC,,SC
+D2,Restaurants,General Industry,SC,,S C
+D2,Restaurants,Resettlement,P,,P
+D2,Restaurants,Communal,P,,P
+E,Offices,Zone 1B(iii) Mixed,P,,P
+E,Offices,Central Business District,P,,P
+E,Offices,Local Shopping Centre,P,,P
+E,Offices,Neighbourhood Shopping,P,,P
+E,Offices,Markets,SC,,S C
+E,Offices,High Density Residential,X,,X
+E,Offices,Medium Density,X,,X
+E,Offices,Low Density Residential,X,,X
+E,Offices,Flats,X,,X
+E,Offices,Zone 4 Public,X,,X
+E,Offices,Light and,SC,,SC
+E,Offices,General Industry,SC,,S C
+E,Offices,Resettlement,P,,P
+E,Offices,Communal,P,,P
+E1,Corporate Offices,Zone 1B(iii) Mixed,P,,P
+E1,Corporate Offices,Central Business District,P,,P
+E1,Corporate Offices,Local Shopping Centre,P,,P
+E1,Corporate Offices,Neighbourhood Shopping,P,,P
+E1,Corporate Offices,Markets,SC,,S C
+E1,Corporate Offices,High Density Residential,X,,X
+E1,Corporate Offices,Medium Density,X,,X
+E1,Corporate Offices,Low Density Residential,X,,X
+E1,Corporate Offices,Flats,X,,X
+E1,Corporate Offices,Zone 4 Public,X,,X
+E1,Corporate Offices,Light and,SC,,SC
+E1,Corporate Offices,General Industry,SC,,S C
+E1,Corporate Offices,Resettlement,P,,P
+E1,Corporate Offices,Communal,P,,P
+E2,Surgeries & Medical Chambers,Zone 1B(iii) Mixed,SC,,S C
+E2,Surgeries & Medical Chambers,Central Business District,P,,P
+E2,Surgeries & Medical Chambers,Local Shopping Centre,P,,P
+E2,Surgeries & Medical Chambers,Neighbourhood Shopping,P,,P
+E2,Surgeries & Medical Chambers,Markets,SC,,S C
+E2,Surgeries & Medical Chambers,High Density Residential,SC,,S C
+E2,Surgeries & Medical Chambers,Medium Density,SC,,S C
+E2,Surgeries & Medical Chambers,Low Density Residential,SC,,S C
+E2,Surgeries & Medical Chambers,Flats,SC,,S C
+E2,Surgeries & Medical Chambers,Zone 4 Public,SC,,S C
+E2,Surgeries & Medical Chambers,Light and,SC,,SC
+E2,Surgeries & Medical Chambers,General Industry,SC,,S C
+E2,Surgeries & Medical Chambers,Resettlement,P,,P
+E2,Surgeries & Medical Chambers,Communal,P,,P
+F,Wholesale Warehouse,Zone 1B(iii) Mixed,X,,X
+F,Wholesale Warehouse,Central Business District,SC,,S C
+F,Wholesale Warehouse,Local Shopping Centre,P,,P
+F,Wholesale Warehouse,Neighbourhood Shopping,P,,P
+F,Wholesale Warehouse,Markets,P,,P
+F,Wholesale Warehouse,High Density Residential,X,,X
+F,Wholesale Warehouse,Medium Density,X,,X
+F,Wholesale Warehouse,Low Density Residential,X,,X
+F,Wholesale Warehouse,Flats,X,,X
+F,Wholesale Warehouse,Zone 4 Public,X,,X
+F,Wholesale Warehouse,Light and,SC,,SC
+F,Wholesale Warehouse,General Industry,SC,,S C
+F,Wholesale Warehouse,Resettlement,P,,P
+F,Wholesale Warehouse,Communal,P,,P
+G,Storage Warehouse,Zone 1B(iii) Mixed,X,,X
+G,Storage Warehouse,Central Business District,X,,X
+G,Storage Warehouse,Local Shopping Centre,X,,X
+G,Storage Warehouse,Neighbourhood Shopping,X,,X
+G,Storage Warehouse,Markets,X,,X
+G,Storage Warehouse,High Density Residential,X,,X
+G,Storage Warehouse,Medium Density,X,,X
+G,Storage Warehouse,Low Density Residential,X,,X
+G,Storage Warehouse,Flats,X,,X
+G,Storage Warehouse,Zone 4 Public,X,,X
+G,Storage Warehouse,Light and,P,,P
+G,Storage Warehouse,General Industry,SC,,S C
+G,Storage Warehouse,Resettlement,P,,P
+G,Storage Warehouse,Communal,P,,P
+H,Public Buildings,Zone 1B(iii) Mixed,SC,,S C
+H,Public Buildings,Central Business District,SC,,S C
+H,Public Buildings,Local Shopping Centre,SC,,S C
+H,Public Buildings,Neighbourhood Shopping,SC,,S C
+H,Public Buildings,Markets,SC,,S C
+H,Public Buildings,High Density Residential,X,,X
+H,Public Buildings,Medium Density,X,,X
+H,Public Buildings,Low Density Residential,X,,X
+H,Public Buildings,Flats,X,,X
+H,Public Buildings,Zone 4 Public,P,,P
+H,Public Buildings,Light and,SC,,SC
+H,Public Buildings,General Industry,SC,,S C
+H,Public Buildings,Resettlement,P,,P
+H,Public Buildings,Communal,P,,P
+I,Places of Public Worship,Zone 1B(iii) Mixed,SC,,S C
+I,Places of Public Worship,Central Business District,SC,1,S C 1
+I,Places of Public Worship,Local Shopping Centre,SC,,S C
+I,Places of Public Worship,Neighbourhood Shopping,SC,,S C
+I,Places of Public Worship,Markets,X,,X
+I,Places of Public Worship,High Density Residential,X,,X
+I,Places of Public Worship,Medium Density,X,,X
+I,Places of Public Worship,Low Density Residential,X,,X
+I,Places of Public Worship,Flats,X,,X
+I,Places of Public Worship,Zone 4 Public,P,,P
+I,Places of Public Worship,Light and,X,,X
+I,Places of Public Worship,General Industry,X,,X
+I,Places of Public Worship,Resettlement,P,,P
+I,Places of Public Worship,Communal,P,,P
+K,Places of Assembly,Zone 1B(iii) Mixed,SC,,S C
+K,Places of Assembly,Central Business District,SC,,S C
+K,Places of Assembly,Local Shopping Centre,SC,,S C
+K,Places of Assembly,Neighbourhood Shopping,SC,,S C
+K,Places of Assembly,Markets,X,,X
+K,Places of Assembly,High Density Residential,X,,X
+K,Places of Assembly,Medium Density,X,,X
+K,Places of Assembly,Low Density Residential,X,,X
+K,Places of Assembly,Flats,X,,X
+K,Places of Assembly,Zone 4 Public,P,,P
+K,Places of Assembly,Light and,SC,,SC
+K,Places of Assembly,General Industry,SC,,S C
+K,Places of Assembly,Resettlement,P,,P
+K,Places of Assembly,Communal,P,,P
+K1,Special Places of Assembly,Zone 1B(iii) Mixed,SC,,S C
+K1,Special Places of Assembly,Central Business District,X,,X
+K1,Special Places of Assembly,Local Shopping Centre,X,,X
+K1,Special Places of Assembly,Neighbourhood Shopping,X,,X
+K1,Special Places of Assembly,Markets,X,,X
+K1,Special Places of Assembly,High Density Residential,X,,X
+K1,Special Places of Assembly,Medium Density,X,,X
+K1,Special Places of Assembly,Low Density Residential,X,,X
+K1,Special Places of Assembly,Flats,X,,X
+K1,Special Places of Assembly,Zone 4 Public,P,,P
+K1,Special Places of Assembly,Light and,X,,X
+K1,Special Places of Assembly,General Industry,SC,,S C
+K1,Special Places of Assembly,Resettlement,P,,P
+K1,Special Places of Assembly,Communal,P,,P
+L,Industrial,Zone 1B(iii) Mixed,X,,X
+L,Industrial,Central Business District,X,,X
+L,Industrial,Local Shopping Centre,X,,X
+L,Industrial,Neighbourhood Shopping,X,,X
+L,Industrial,Markets,SC,2,S C 2
+L,Industrial,High Density Residential,X,,X
+L,Industrial,Medium Density,X,,X
+L,Industrial,Low Density Residential,X,,X
+L,Industrial,Flats,X,,X
+L,Industrial,Zone 4 Public,X,,X
+L,Industrial,Light and,P,,P
+L,Industrial,General Industry,P,,P
+L,Industrial,Resettlement,P,,P
+L,Industrial,Communal,P,,P
+L1,Service Industrial Building,Zone 1B(iii) Mixed,X,,X
+L1,Service Industrial Building,Central Business District,SC,,S C
+L1,Service Industrial Building,Local Shopping Centre,X,,X
+L1,Service Industrial Building,Neighbourhood Shopping,X,,X
+L1,Service Industrial Building,Markets,SC,,S C
+L1,Service Industrial Building,High Density Residential,X,,X
+L1,Service Industrial Building,Medium Density,X,,X
+L1,Service Industrial Building,Low Density Residential,X,,X
+L1,Service Industrial Building,Flats,X,,X
+L1,Service Industrial Building,Zone 4 Public,X,,X
+L1,Service Industrial Building,Light and,P,,P
+L1,Service Industrial Building,General Industry,P,,P
+L1,Service Industrial Building,Resettlement,P,,P
+L1,Service Industrial Building,Communal,P,,P
+N,Agricultural Buildings,Zone 1B(iii) Mixed,X,,X
+N,Agricultural Buildings,Central Business District,X,,X
+N,Agricultural Buildings,Local Shopping Centre,X,,X
+N,Agricultural Buildings,Neighbourhood Shopping,X,,X
+N,Agricultural Buildings,Markets,X,,X
+N,Agricultural Buildings,High Density Residential,X,,X / *
+N,Agricultural Buildings,Medium Density,X,,X / *
+N,Agricultural Buildings,Low Density Residential,X,,X
+N,Agricultural Buildings,Flats,X,,X
+N,Agricultural Buildings,Zone 4 Public,X,,X
+N,Agricultural Buildings,Light and,X,,X
+N,Agricultural Buildings,General Industry,P,,P
+N,Agricultural Buildings,Resettlement,P,,P
+N,Agricultural Buildings,Communal,P,,P
+P,Petrol Filling Station,Zone 1B(iii) Mixed,SC,,S C
+P,Petrol Filling Station,Central Business District,SC,,S C
+P,Petrol Filling Station,Local Shopping Centre,SC,,S C
+P,Petrol Filling Station,Neighbourhood Shopping,SC,,S C
+P,Petrol Filling Station,Markets,X,,X
+P,Petrol Filling Station,High Density Residential,X,,X
+P,Petrol Filling Station,Medium Density,X,,X
+P,Petrol Filling Station,Low Density Residential,X,,X
+P,Petrol Filling Station,Flats,X,,X
+P,Petrol Filling Station,Zone 4 Public,X,,X
+P,Petrol Filling Station,Light and,SC,,SC
+P,Petrol Filling Station,General Industry,SC,,S C
+P,Petrol Filling Station,Resettlement,P,,P
+P,Petrol Filling Station,Communal,P,,P
+R,Newspaper Offices,Zone 1B(iii) Mixed,P,,P
+R,Newspaper Offices,Central Business District,P,,P
+R,Newspaper Offices,Local Shopping Centre,X,,X
+R,Newspaper Offices,Neighbourhood Shopping,X,,X
+R,Newspaper Offices,Markets,X,,X
+R,Newspaper Offices,High Density Residential,X,,X
+R,Newspaper Offices,Medium Density,X,,X
+R,Newspaper Offices,Low Density Residential,X,,X
+R,Newspaper Offices,Flats,X,,X
+R,Newspaper Offices,Zone 4 Public,P,,P
+R,Newspaper Offices,Light and,P,,P
+R,Newspaper Offices,General Industry,P,,P
+R,Newspaper Offices,Resettlement,P,,P
+R,Newspaper Offices,Communal,P,,P
+S,Special Buildings & Uses,Zone 1B(iii) Mixed,SC,,S C
+S,Special Buildings & Uses,Central Business District,SC,,S C
+S,Special Buildings & Uses,Local Shopping Centre,SC,,S C
+S,Special Buildings & Uses,Neighbourhood Shopping,SC,,S C
+S,Special Buildings & Uses,Markets,SC,,S C
+S,Special Buildings & Uses,High Density Residential,SC,,S C
+S,Special Buildings & Uses,Medium Density,SC,,S C
+S,Special Buildings & Uses,Low Density Residential,SC,,S C
+S,Special Buildings & Uses,Flats,SC,,S C
+S,Special Buildings & Uses,Zone 4 Public,SC,,S C
+S,Special Buildings & Uses,Light and,SC,,SC
+S,Special Buildings & Uses,General Industry,SC,,S C
+S,Special Buildings & Uses,Resettlement,P,,P
+S,Special Buildings & Uses,Communal,P,,P
+T,Parking Garage,Zone 1B(iii) Mixed,SC,,S C
+T,Parking Garage,Central Business District,X,,X
+T,Parking Garage,Local Shopping Centre,X,,X
+T,Parking Garage,Neighbourhood Shopping,X,,X
+T,Parking Garage,Markets,X,,X
+T,Parking Garage,High Density Residential,X,,X
+T,Parking Garage,Medium Density,X,,X
+T,Parking Garage,Low Density Residential,X,,X
+T,Parking Garage,Flats,X,,X
+T,Parking Garage,Zone 4 Public,X,,X
+T,Parking Garage,Light and,P,,P
+T,Parking Garage,General Industry,SC,,S C
+T,Parking Garage,Resettlement,P,,P
+T,Parking Garage,Communal,P,,P
+T1,Surface Car Park,Zone 1B(iii) Mixed,SC,,S C
+T1,Surface Car Park,Central Business District,SC,,S C
+T1,Surface Car Park,Local Shopping Centre,SC,,S C
+T1,Surface Car Park,Neighbourhood Shopping,SC,,S C
+T1,Surface Car Park,Markets,SC,,S C
+T1,Surface Car Park,High Density Residential,SC,,S C
+T1,Surface Car Park,Medium Density,X,,X
+T1,Surface Car Park,Low Density Residential,X,,X
+T1,Surface Car Park,Flats,X,,X
+T1,Surface Car Park,Zone 4 Public,X,,X
+T1,Surface Car Park,Light and,P,,P
+T1,Surface Car Park,General Industry,SC,,S C
+T1,Surface Car Park,Resettlement,P,,P
+T1,Surface Car Park,Communal,P,,P
+T2,Lorry Parking & Rest House,Zone 1B(iii) Mixed,X,,X
+T2,Lorry Parking & Rest House,Central Business District,X,,X
+T2,Lorry Parking & Rest House,Local Shopping Centre,X,,X
+T2,Lorry Parking & Rest House,Neighbourhood Shopping,X,,X
+T2,Lorry Parking & Rest House,Markets,X,,X
+T2,Lorry Parking & Rest House,High Density Residential,X,,X
+T2,Lorry Parking & Rest House,Medium Density,X,,X
+T2,Lorry Parking & Rest House,Low Density Residential,X,,X
+T2,Lorry Parking & Rest House,Flats,X,,X
+T2,Lorry Parking & Rest House,Zone 4 Public,X,,X
+T2,Lorry Parking & Rest House,Light and,P,,P
+T2,Lorry Parking & Rest House,General Industry,SC,,S C
+T2,Lorry Parking & Rest House,Resettlement,P,,P
+T2,Lorry Parking & Rest House,Communal,P,,P
+U,Funeral Parlour,Zone 1B(iii) Mixed,SC,,S C
+U,Funeral Parlour,Central Business District,SC,,S C
+U,Funeral Parlour,Local Shopping Centre,SC,,S C
+U,Funeral Parlour,Neighbourhood Shopping,SC,,S C
+U,Funeral Parlour,Markets,X,,X
+U,Funeral Parlour,High Density Residential,X,,X
+U,Funeral Parlour,Medium Density,X,,X
+U,Funeral Parlour,Low Density Residential,X,,X
+U,Funeral Parlour,Flats,X,,X
+U,Funeral Parlour,Zone 4 Public,SC,,S C
+U,Funeral Parlour,Light and,P,,P
+U,Funeral Parlour,General Industry,SC,,S C
+U,Funeral Parlour,Resettlement,P,,P
+U,Funeral Parlour,Communal,P,,P
