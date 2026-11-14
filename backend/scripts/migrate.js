@@ -358,6 +358,9 @@ const MIGRATIONS = [
   // The road network (basemap.road) and the planning boundary (admin.planning_boundary), with compatibility views.
   // Rollback: migrations/rollback/221_roads_and_planning_boundary.down.sql.
   '221_roads_and_planning_boundary.sql',
+  // One outline: the planning boundary is the outside figure of the authority area, and the wards are conformed to it.
+  // Rollback: migrations/rollback/222_authority_area_one_outline.down.sql.
+  '222_authority_area_one_outline.sql',
 ]
 
 function createPool(env = process.env) {

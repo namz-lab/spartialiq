@@ -140,6 +140,10 @@ async function main() {
         'The polygon as supplied: the Gweru Rural district (ZW1704) with the city of Gweru cut out. Not the union of the wards of the council, and not a Council act.',
         JSON.stringify(boundary[0].geometry)])
     report.planning_boundary = 1
+    // The planning boundary is the outside figure of the authority area: make the council's wards fill it exactly (migration 222).
+    // Needs the wards to be loaded; without them there is nothing to conform and the function says so.
+    const { rows: [conformed] } = await db.query('SELECT admin.conform_authority_wards($1) AS r', [auth.id])
+    report.wards_conformed = conformed.r
 
     report.polling_areas = await replaceLayer(db, 'admin.polling_area',
       ['polling_code', 'name', 'ward_number', 'voters', 'integrity', 'old_name', 'address', 'assembly', 'modified', 'source'],

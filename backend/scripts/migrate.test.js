@@ -192,6 +192,7 @@ describe('migration plan', () => {
       '219_zones_one_table.sql',
       '220_spatial_table_names.sql',
       '221_roads_and_planning_boundary.sql',
+      '222_authority_area_one_outline.sql',
     ])
 
     for (const filename of MIGRATIONS) {
