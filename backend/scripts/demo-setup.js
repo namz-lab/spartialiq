@@ -63,6 +63,8 @@ else {
   step('2/6 Master-plan layers and parcel register', 'load-master-plan.js')
   // The council's zones (peri-urban and beyond) into the one zones table the plan model reads.
   step('2/6 Zones: peri-urban and beyond, under the Vungu plan', 'load-zones.js', ['--if-empty'])
+  // A demonstration shows the draft plan's zones on the public map; the plan stays a draft (publish-zones-preview.js --off reverses it).
+  step('2/6 Zones: public preview of the draft plan', 'publish-zones-preview.js', ['--on'])
 }
 if (wards) {
   step('3/6 Wards, linked provisionally', 'load-wards.js', ['--file', wards, '--parent', wardsParent])

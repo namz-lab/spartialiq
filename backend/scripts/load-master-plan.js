@@ -34,7 +34,8 @@ const LAYERS = [
   ['Zim_national_farm_cadastre_wgs_84', 'vungu_farm_cadastre'],
   ['parcels', 'vungu_parcels'],
   ['proposed_peri_urban_zones', 'vungu_proposed_peri_urban_zones'],
-  ['beyond_peri_urban_zones', 'vungu_beyond_peri_urban_zones'],
+  // beyond_peri_urban_zones is not loaded here: the council's file goes into the one zones table (scripts/load-zones.js,
+  // migration 219), and public.vungu_beyond_peri_urban_zones is a view over it.
 ]
 
 function fail(msg) { console.error(msg); process.exit(1) }
