@@ -14,6 +14,10 @@
  *                                 FLSCF_SSCF_A1 -> Model A1, SSCF -> Small Scale Commercial Farms
  *                                 (Communal and Resettlement Area are unchanged)
  *
+ * The QGIS label of the peri-urban layer is NOT published. It asks for the font "Segoe UI" at 34 px, which the portal does not serve
+ * (it serves Noto Sans and Open Sans); the glyph request fails, and MapLibre then drops the WHOLE tile, so the zones were not drawn
+ * at all ("Unimplemented type: 4"). The portal draws its own centroid labels for these layers (vunguBasemap.ts, `-master-label`).
+ *
  * A zone with no category in the QGIS style ("Densification Zone [MDR]", added by the council's newer file) is drawn with
  * the style's own "other" colour, not a colour chosen here.
  *
@@ -62,11 +66,12 @@ const NEXT = { draft: 'review', review: 'approved', approved: 'published' }
 const dryRun = process.argv.includes('--dry-run')
 
 function renamed(doc, renames) {
+  // Colours only: see the header on why the QGIS label is dropped.
   const categories = doc.renderer.categories.map((c) => {
     const to = renames[c.value]
     return to ? { ...c, value: to, label: to } : c
   })
-  return { ...doc, renderer: { ...doc.renderer, categories } }
+  return { ...doc, labels: null, renderer: { ...doc.renderer, categories } }
 }
 
 async function main() {
