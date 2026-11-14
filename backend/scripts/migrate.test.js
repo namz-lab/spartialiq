@@ -188,6 +188,7 @@ describe('migration plan', () => {
       '215_spatial_engine.sql',
       '216_executive_units.sql',
       '217_road_density_segments.sql',
+      '218_vungu_reference_layers.sql',
     ])
 
     for (const filename of MIGRATIONS) {

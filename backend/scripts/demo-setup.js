@@ -9,7 +9,8 @@
  * Steps, each of which can be run on its own:
  *   1. migrations            node scripts/migrate.js                 the schema, permissions, finance, tenancy
  *   2. master-plan layers    node scripts/load-master-plan.js        farm cadastre and zones, parcel register
- *   3. (optional) wards      node scripts/load-wards.js              the council's wards, linked provisionally
+ *   3. (optional) wards      node scripts/load-wards.js              the council's wards, linked provisionally,
+ *                            then scripts/load-reference-layers.js   polling areas (with voters), chiefdoms, centres, rivers
  *   4. demo data             node scripts/seed-all-demo.js           accounts and a populated desk for each role
  *   5. (optional) a township node scripts/import-township-dxf.js + seed-township-owners.js
  *   6. ward measures         node scripts/refresh-spatial-engine.js  the Chief Executive's ward maps
@@ -59,7 +60,11 @@ function step(title, script, args = [], env = {}) {
 step('1/6 Migrations', 'migrate.js')
 if (has('skip-spatial')) console.log('\n── 2/6 Master-plan layers: skipped (--skip-spatial) ──')
 else step('2/6 Master-plan layers and parcel register', 'load-master-plan.js')
-if (wards) step('3/6 Wards, linked provisionally', 'load-wards.js', ['--file', wards, '--parent', wardsParent])
+if (wards) {
+  step('3/6 Wards, linked provisionally', 'load-wards.js', ['--file', wards, '--parent', wardsParent])
+  // Polling areas place into the wards just loaded, and give each its registered voters (a denominator, not population).
+  step('3/6 Reference layers: polling areas, chiefdoms, business centres, rivers', 'load-reference-layers.js')
+}
 else console.log('\n── 3/6 Wards: skipped (give --wards <file> to load the council\'s ward boundaries) ──')
 step('4/6 Demo accounts and data', 'seed-all-demo.js')
 if (dxf) {
