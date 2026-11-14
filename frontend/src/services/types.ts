@@ -59,6 +59,9 @@ export type Role =
   | 'accounting_officer'
   // Backend migration 208: the senior cashier who supervises the tills.
   | 'cash_supervisor'
+  // Backend migration 216: heads of the Executive Arm's other units. Each lands on their own unit dashboard.
+  | 'engineer'
+  | 'hr_social_officer'
   | 'viewer'
   | 'registered'
   | 'public'

@@ -3,144 +3,42 @@
  *
  *   GET  /api/executive/maps            accounting_officer   the measures, the ward register's state, the last run
  *   GET  /api/executive/maps/:measure   accounting_officer   one measure as GeoJSON over the council's wards
+ *   GET  /api/executive/wards/:code     accounting_officer   one ward across every measure, grouped by unit
  *   POST /api/spatial-engine/refresh    admin, gis_officer, gis_head   recompute every measure
  *
- * The values are computed by spatial_engine.refresh() (migration 215); this file only reads them and says,
- * with every map, how the colours were decided and what they stand on:
- *   - `classes` carries the method and the breaks, so the legend and the paint cannot disagree.
- *   - `ward_register` carries linked/basis/instrument_ref. While decision D11 is open the basis is 'interim'
- *     and the screen must say the wards are provisional.
- *   - `run` carries when the numbers were computed and how many facts could not be placed in a ward.
- *   - An unlinked ward register returns NO features and a reason: a blank grey district reads as "nothing
- *     here", which is the misreading the council's own spatial rules exist to prevent.
+ * A unit head reads their own unit's measures through GET /api/units/:key/maps (src/routes/units.js); both use
+ * src/lib/wardMaps.js, which also documents how a map says what its colours stand on.
  *
  * fastify.pg is request-scoped (src/lib/dbContext.js), so row-level security confines every query to the
  * caller's council; the system plane is not used.
  */
 const { requireRole } = require('../middleware/jwtAuth')
-const { classify, rankWards } = require('../lib/spatialClassify')
+const { createWardMaps } = require('../lib/wardMaps')
 const { EXECUTIVE_ROLES } = require('./executive-overview')
 
 // The GIS Branch is the custodian of the engine; the chief executive reads, and does not run it.
 const REFRESH_ROLES = ['admin', 'gis_officer', 'gis_head']
 
-const MEASURE_KEY = /^[a-z][a-z0-9_]{2,60}$/
-const num = (v) => (v === null || v === undefined ? null : Number(v))
+const WARD_CODE = /^[A-Za-z0-9_.\-]{1,64}$/
 
 async function spatialEngineRoutes(fastify) {
   const pg = fastify.pg
+  const maps = createWardMaps(pg)
 
-  const wardRegister = async () => {
-    const { rows: [r] } = await pg.query(`
-      SELECT count(*)::int AS wards,
-             CASE WHEN count(DISTINCT basis) = 1 THEN min(basis) WHEN count(*) = 0 THEN NULL ELSE 'mixed' END AS basis,
-             CASE WHEN count(DISTINCT instrument_ref) = 1 THEN min(instrument_ref) END AS instrument_ref
-        FROM spatial_engine.v_authority_ward`)
-    return { linked: r.wards > 0, wards: r.wards, basis: r.basis, instrument_ref: r.instrument_ref }
-  }
+  const send = (reply, result) =>
+    result.status
+      ? reply.code(result.status).send({ success: false, error: result.error, message: result.message })
+      : reply.send({ success: true, data: result.data })
 
-  const lastRun = async () => {
-    const { rows } = await pg.query(`
-      SELECT id, status, started_at, finished_at, ward_register_basis, wards, detail
-        FROM spatial_engine.run WHERE status = 'completed' AND authority_id = app.authority_id()
-       ORDER BY started_at DESC LIMIT 1`)
-    return rows[0] ?? null
-  }
+  fastify.get('/executive/maps', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (_request, reply) =>
+    reply.send({ success: true, data: await maps.index() }))
 
-  fastify.get('/executive/maps', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (_request, reply) => {
-    const [register, run, measures] = await Promise.all([
-      wardRegister(),
-      lastRun(),
-      pg.query(`
-        SELECT measure_key, label, description, unit, kind, direction, ramp, owner_dept, source_note
-          FROM spatial_engine.measure WHERE enabled ORDER BY sort_order, measure_key`),
-    ])
-    return reply.send({
-      success: true,
-      data: {
-        ward_register: register,
-        run: run && { id: run.id, computed_at: run.finished_at, wards: run.wards, ward_register_basis: run.ward_register_basis },
-        measures: measures.rows,
-      },
-    })
-  })
+  fastify.get('/executive/maps/:measure', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (request, reply) =>
+    send(reply, await maps.map(request.params.measure)))
 
-  fastify.get('/executive/maps/:measure', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (request, reply) => {
-    const key = request.params.measure
-    if (!MEASURE_KEY.test(key)) return reply.code(400).send({ success: false, error: 'bad_measure', message: 'Not a measure key.' })
-
-    const { rows: [m] } = await pg.query(
-      `SELECT measure_key, label, description, unit, kind, direction, classes, break_method, fixed_breaks, ramp,
-              min_denominator, owner_dept, source_note
-         FROM spatial_engine.measure WHERE measure_key = $1 AND enabled`, [key])
-    if (!m) return reply.code(404).send({ success: false, error: 'not_found', message: 'No such measure.' })
-
-    const register = await wardRegister()
-    const measure = {
-      key: m.measure_key, label: m.label, description: m.description, unit: m.unit, kind: m.kind,
-      direction: m.direction, ramp: m.ramp, owner_dept: m.owner_dept, source_note: m.source_note,
-      min_denominator: num(m.min_denominator),
-    }
-    if (!register.linked) {
-      return reply.send({
-        success: true,
-        data: { measure, ward_register: register, reason: 'ward_register_empty', features: [], classes: null, run: null },
-      })
-    }
-
-    const { rows } = await pg.query(`
-      SELECT w.ward_code, w.name,
-             ST_AsGeoJSON(ST_SimplifyPreserveTopology(w.geom, 0.001))::json AS geometry,
-             v.value, v.numerator, v.denominator, v.reliability, v.computed_at
-        FROM spatial_engine.v_authority_ward w
-        LEFT JOIN spatial_engine.ward_value v
-               ON v.ward_code = w.ward_code AND v.measure_key = $1 AND v.period = 'current' AND v.authority_id = w.authority_id
-       ORDER BY w.ward_code`, [key])
-
-    const computed = rows.some((r) => r.reliability !== null)
-    const wards = rows.map((r) => ({
-      ward_code: r.ward_code, name: r.name, geometry: r.geometry,
-      value: num(r.value), numerator: num(r.numerator), denominator: num(r.denominator),
-      reliability: r.reliability ?? 'no_data',
-    }))
-
-    // Breaks come from the wards that have a reliable value; the rest are drawn "no data".
-    const classes = classify(
-      wards.filter((w) => w.reliability === 'ok' && w.value !== null).map((w) => w.value),
-      { method: m.break_method, classes: m.classes, fixed: m.fixed_breaks ? m.fixed_breaks.map(Number) : null },
-    )
-    const ranks = rankWards(wards, m.direction)
-    const classIndex = (v) => (v === null || classes.breaks.length === 0 ? null : classes.breaks.filter((b) => v >= b).length)
-
-    const run = await lastRun()
-    const features = wards.map((w) => ({
-      type: 'Feature',
-      geometry: w.geometry,
-      properties: {
-        ward_code: w.ward_code, name: w.name, value: w.reliability === 'ok' ? w.value : null,
-        raw_value: w.value, numerator: w.numerator, denominator: w.denominator, reliability: w.reliability,
-        rank: ranks.get(w.ward_code) ?? null,
-        class_index: w.reliability === 'ok' ? classIndex(w.value) : null,
-      },
-    }))
-
-    return reply.send({
-      success: true,
-      data: {
-        measure,
-        ward_register: register,
-        reason: computed ? null : 'not_computed',
-        classes,
-        ranked: features.filter((f) => f.properties.rank !== null).length,
-        run: run && {
-          computed_at: run.finished_at,
-          unlocated: run.detail?.[key]?.unlocated ?? null,
-          facts: run.detail?.[key]?.facts ?? null,
-        },
-        type: 'FeatureCollection',
-        features,
-      },
-    })
+  fastify.get('/executive/wards/:code', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (request, reply) => {
+    if (!WARD_CODE.test(request.params.code)) return reply.code(400).send({ success: false, error: 'bad_ward', message: 'Not a ward code.' })
+    return send(reply, await maps.wardProfile(request.params.code))
   })
 
   fastify.post('/spatial-engine/refresh', { preHandler: requireRole(fastify, REFRESH_ROLES) }, async (request, reply) => {

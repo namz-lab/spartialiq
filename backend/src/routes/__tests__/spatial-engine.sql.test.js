@@ -169,3 +169,46 @@ describe('ward_value constraints', () => {
     await client.query('ROLLBACK TO SAVEPOINT c2')
   })
 })
+
+// Migration 216: the two measures that belong to Engineering and to Social Services.
+describe('unit measures (migration 216)', () => {
+  const premises = (ref, x, y, expiry) => client.query(
+    `INSERT INTO spatial_planning.health_premises (reference, name, premises_type, location, fitness_certificate_expiry)
+     VALUES ($1, $1, 'tea_room', ST_SetSRID(ST_MakePoint($2, $3), 4326), $4)`, [ref, x, y, expiry])
+
+  beforeAll(async () => {
+    // A road that runs through wards A and B, cut at their edges; a road with no geometry, which is not counted.
+    await client.query(
+      `INSERT INTO council_ops.road_asset (asset_code, name, status, geom)
+       VALUES ('JEST-RD-1', 'Jest road', 'active', ST_Multi(ST_SetSRID(ST_MakeLine(ST_MakePoint(10.05, 50.05), ST_MakePoint(11.05, 50.05)), 4326)))`)
+    await client.query(`INSERT INTO council_ops.road_asset (asset_code, name, status) VALUES ('JEST-RD-2', 'Jest road, no geometry', 'active')`)
+    // Ward A: two certified and one expired premises. Ward B: none.
+    await premises('JEST-HP-1', 10.02, 50.02, '2099-01-01')
+    await premises('JEST-HP-2', 10.03, 50.03, '2099-01-01')
+    await premises('JEST-HP-3', 10.04, 50.04, '2000-01-01')
+    await q('SELECT spatial_engine.refresh()')
+  })
+
+  test('each measure belongs to a unit', async () => {
+    const rows = await q(`SELECT measure_key, unit_key FROM spatial_engine.measure WHERE measure_key IN ('road_density', 'premises_certified')`)
+    expect(Object.fromEntries(rows.map((r) => [r.measure_key, r.unit_key]))).toEqual({ road_density: 'engineering', premises_certified: 'social_admin' })
+  })
+
+  test('road density shares a road between the wards it crosses, and counts nothing without geometry', async () => {
+    const v = await valuesOf('road_density')
+    expect(Number(v.ZJEST001.numerator)).toBeGreaterThan(0)
+    expect(Number(v.ZJEST002.numerator)).toBeGreaterThan(0)
+    expect(Number(v.ZJEST003.numerator)).toBe(0) // a ward the road does not reach: a true zero for a count
+    expect(Math.abs(Number(v.ZJEST001.numerator) - Number(v.ZJEST002.numerator))).toBeLessThan(0.01)
+    expect(v.ZJEST001.reliability).toBe('ok')
+  })
+
+  test('premises certified is a share over the premises placed in the ward, and no_data where there are none', async () => {
+    const v = await valuesOf('premises_certified')
+    expect(Number(v.ZJEST001.numerator)).toBe(2)
+    expect(Number(v.ZJEST001.denominator)).toBe(3)
+    expect(Number(v.ZJEST001.value)).toBeCloseTo(66.6667, 3)
+    expect(v.ZJEST002.value).toBeNull() // never 0: no premises, no figure
+    expect(v.ZJEST002.reliability).toBe('no_data')
+  })
+})

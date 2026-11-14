@@ -2,6 +2,7 @@
 // The server computes the values and the classification; the map only draws what it is told, so the colours, the
 // legend and the ranked list cannot disagree. See backend/src/routes/spatial-engine.js.
 import api from './api'
+import type { WardProfile } from './units'
 
 export interface WardRegisterState {
   linked: boolean
@@ -20,6 +21,8 @@ export interface MeasureInfo {
   direction: 'higher_is_better' | 'lower_is_better' | 'neutral'
   ramp: 'sequential' | 'diverging'
   owner_dept: string
+  /** The Executive Arm unit that owns the measure (migration 216); null for a measure no unit owns. */
+  unit_key?: string | null
   source_note: string
 }
 
@@ -75,6 +78,11 @@ export const spatialEngineApi = {
   },
   async map(measureKey: string): Promise<WardMap> {
     const res = await api.get<{ success: boolean; data: WardMap }>(`/executive/maps/${encodeURIComponent(measureKey)}`)
+    return res.data.data
+  },
+  /** One ward across every measure, grouped by the unit that owns each: the Chief Executive's drill-down. */
+  async wardProfile(wardCode: string): Promise<WardProfile> {
+    const res = await api.get<{ success: boolean; data: WardProfile }>(`/executive/wards/${encodeURIComponent(wardCode)}`)
     return res.data.data
   },
 }

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import type { Role } from '../services/types'
+import { UNIT_OF_ROLE } from '../views/units/unitCatalogue'
 import { FINANCE_ROLES } from '../services/types'
 import { financeEntry, guardUnknownWorkspace } from '../modules/finance/shell/workspaceGuard'
 import { financeWorkspaceRoutes } from '../modules/finance/workspaces'
@@ -112,6 +113,7 @@ const SurveyorConsoleView = () => import('../views/SurveyorView.vue')  // map co
 // Survey Task Manager child routes, all lazy.
 const GISOfficerPortalView = () => import('../views/GISOfficerPortalView.vue')
 const ExecutiveOverviewView = () => import('../views/ExecutiveOverviewView.vue')
+const UnitDashboardView = () => import('../views/units/UnitDashboardView.vue')
 
 // Citizen surfaces wired in this round (Turn C/D follow-up).
 const PaymentsView    = () => import('../views/PaymentsView.vue')
@@ -730,6 +732,26 @@ const router = createRouter({
         roles: ['accounting_officer'],
       }
     },
+    // A unit's dashboard (migration 216): the chief executive opens any of the five; a unit's head opens only their own.
+    // The API enforces the same rule (backend src/config/units.js canSeeUnit); this guard saves a head the refused screen.
+    {
+      path: '/units/:unit',
+      name: 'unit-dashboard',
+      component: UnitDashboardView,
+      props: true,
+      beforeEnter: (to) => {
+        const unit = String(to.params.unit)
+        const role = useAuthStore().user?.role
+        if (!role || role === 'accounting_officer') return true
+        const own = UNIT_OF_ROLE[role]
+        return own && own !== unit ? { path: `/units/${own}`, replace: true } : true
+      },
+      meta: {
+        title: 'Unit dashboard - Vungu RDC',
+        requiresAuth: true,
+        roles: ['accounting_officer', 'eo', 'finance_admin', 'engineer', 'hr_social_officer', 'auditor'],
+      }
+    },
     { path: '/gis-officer', redirect: '/gis-officer-portal' },
     {
       path: '/gis-officer-portal',
@@ -932,6 +954,9 @@ const ROLE_HOME: Record<Role, string> = {
   // The chief executive lands on the cross-department overview; Executive Finance is one click away from it.
   accounting_officer: '/executive',
   cash_supervisor:    '/finance',
+  // Migration 216: the heads of Engineering and of HR, Social Services and Administration open their own unit's dashboard.
+  engineer:           '/units/engineering',
+  hr_social_officer:  '/units/social_admin',
   viewer:             '/citizen',
   registered:         '/citizen',
   public:             '/citizen',

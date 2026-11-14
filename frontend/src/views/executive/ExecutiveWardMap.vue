@@ -13,11 +13,18 @@
 //     it and the list scrolls itself to its row; clicking (or pressing Enter on) a row selects it and the map zooms to
 //     the ward. A detail panel pinned above the list always shows the selected ward's figures.
 //   - Wards differ greatly in size, so the page says to compare values, not areas.
+//   - With a `unitKey` the map shows only that unit's measures (a unit dashboard). Without one it is the Chief
+//     Executive's, and selecting a ward also reads that ward across every unit, with a link into each unit.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { Info, TriangleAlert } from 'lucide-vue-next'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { RouterLink } from 'vue-router'
 import { FINANCE_CHOROPLETH, FINANCE_NO_DATA } from '@/map/vunguBasemapStyle'
 import { spatialEngineApi, type MapsIndex, type WardMap, type WardFeature } from '@/services/spatialEngine'
+import { unitsApi, type UnitKey, type WardProfile, type WardProfileEntry } from '@/services/units'
+import { UNIT_LABEL } from '@/views/units/unitCatalogue'
+
+const props = defineProps<{ unitKey?: UnitKey }>()
 
 const index = ref<MapsIndex | null>(null)
 const indexError = ref<string | null>(null)
@@ -37,7 +44,7 @@ async function loadIndex() {
   loading.value = true
   indexError.value = null
   try {
-    index.value = await spatialEngineApi.index()
+    index.value = props.unitKey ? await unitsApi.mapsIndex(props.unitKey) : await spatialEngineApi.index()
     key.value = index.value.measures[0]?.measure_key ?? ''
     if (key.value) await loadMap()
   } catch {
@@ -50,7 +57,7 @@ async function loadIndex() {
 async function loadMap() {
   mapError.value = null
   try {
-    wardMap.value = await spatialEngineApi.map(key.value)
+    wardMap.value = props.unitKey ? await unitsApi.map(props.unitKey, key.value) : await spatialEngineApi.map(key.value)
   } catch {
     wardMap.value = null
     mapError.value = 'This map could not be read. Try again in a moment.'
@@ -270,6 +277,33 @@ async function scrollRowIntoView(code: string) {
   else list.scrollTop = Math.max(0, top)
 }
 
+// ── One ward across every unit (the Chief Executive's drill-down) ──────────
+const profile = ref<WardProfile | null>(null)
+const profileError = ref(false)
+let profileFor = ''
+async function loadProfile(code: string | null) {
+  profile.value = null
+  profileError.value = false
+  if (!code || props.unitKey) return
+  profileFor = code
+  try {
+    const p = await spatialEngineApi.wardProfile(code)
+    if (profileFor === code) profile.value = p
+  } catch {
+    if (profileFor === code) profileError.value = true
+  }
+}
+watch(selected, (code) => { void loadProfile(code) })
+
+const profileGroups = computed(() => Object.entries(profile.value?.units ?? {})
+  .map(([unit, entries]) => ({ unit, label: UNIT_LABEL[unit as UnitKey] ?? 'Other', entries }))
+  .sort((a, b) => a.label.localeCompare(b.label, 'en')))
+const entryValue = (e: WardProfileEntry) => {
+  if (e.reliability === 'no_data' || e.raw_value === null) return 'no data'
+  const v = e.kind === 'share' ? `${new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(e.raw_value)}%` : fmt(e.raw_value)
+  return e.reliability === 'small_base' ? `${v} (small base)` : v
+}
+
 const rankedCount = computed(() => features.value.filter((f) => f.properties.rank !== null).length)
 
 /** Everything about the selected ward, in words, for the panel pinned above the list. */
@@ -340,6 +374,25 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
               <li><span class="wm-swatch wm-swatch--none" />No data or small base</li>
             </ul>
             <button v-if="selected" type="button" class="wm-reset" @click="showAll">Show all wards</button>
+
+            <section v-if="!unitKey && selected" class="wm-profile" aria-live="polite" aria-labelledby="wm-profile-title">
+              <h3 id="wm-profile-title" class="wm-profile-title">Ward {{ selectedFeature?.properties.name }}: every unit</h3>
+              <p v-if="profileError" class="wm-quiet">This ward's other measures could not be read just now.</p>
+              <p v-else-if="!profile" class="wm-quiet">Reading this ward across the units…</p>
+              <div v-else v-for="g in profileGroups" :key="g.unit" class="wm-profile-unit">
+                <p class="wm-profile-unit-name">
+                  <RouterLink v-if="g.unit !== 'other'" :to="`/units/${g.unit}`">{{ g.label }}</RouterLink>
+                  <template v-else>{{ g.label }}</template>
+                </p>
+                <ul class="wm-profile-list">
+                  <li v-for="e in g.entries" :key="e.measure_key">
+                    <span>{{ e.label }}</span>
+                    <span class="wm-profile-val">{{ entryValue(e) }}<template v-if="e.rank !== null"> · rank {{ e.rank }} of {{ e.ranked }}</template></span>
+                  </li>
+                </ul>
+              </div>
+              <p v-if="profile && profileGroups.length === 0" class="wm-quiet">No measures are defined yet.</p>
+            </section>
           </div>
 
           <div class="wm-list-col">
@@ -424,6 +477,15 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
 .wm-reset { margin-top: 0.5rem; padding: 0.3125rem 0.75rem; border: 1px solid var(--ent-line-strong); border-radius: 6px; background: var(--ent-surface); color: var(--ent-text); font-size: 0.8125rem; cursor: pointer; }
 .wm-reset:hover { background: var(--ent-surface-2); }
 
+.wm-profile { margin-top: 0.75rem; padding: 0.625rem 0.75rem; border: 1px solid var(--ent-line); border-radius: 6px; background: var(--ent-surface); }
+.wm-profile-title { margin: 0 0 0.375rem; font-size: 0.875rem; font-weight: 600; }
+.wm-profile-unit + .wm-profile-unit { margin-top: 0.5rem; }
+.wm-profile-unit-name { margin: 0; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); }
+.wm-profile-unit-name a { color: var(--ent-accent); text-decoration: none; }
+.wm-profile-unit-name a:hover { text-decoration: underline; }
+.wm-profile-list { list-style: none; margin: 0.125rem 0 0; padding: 0; font-size: 0.8125rem; }
+.wm-profile-list li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.1875rem 0; border-bottom: 1px solid var(--ent-surface-2); }
+.wm-profile-val { font-variant-numeric: tabular-nums; color: var(--ent-text-2); text-align: right; }
 .wm-list-col { display: flex; flex-direction: column; max-height: 30rem; border: 1px solid var(--ent-line); border-radius: 6px; }
 .wm-detail { flex: none; padding: 0.625rem 0.75rem; background: var(--ent-accent-soft); border-bottom: 1px solid var(--ent-accent-line); min-height: 6.5rem; }
 .wm-detail p { margin: 0; }

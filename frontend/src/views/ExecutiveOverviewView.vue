@@ -13,6 +13,8 @@ import { Banknote, Building2, HardHat, HeartPulse, Users, ShieldCheck, Info, Tri
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
 import { useAuthStore } from '@/stores/auth'
+import type { UnitKey } from '@/services/units'
+import { auditGroup, engineeringGroup, hrGroup, landGroup, missing, planningGroup, socialGroup, type Group } from '@/views/units/unitStats'
 import { executiveApi, type ExecutiveOverview } from '@/services/executiveOverview'
 import { executiveDash } from '@/modules/finance/workspaces/executive/dashboard'
 import { byCurrency, pctText } from '@/modules/finance/workspaces/shared/useDashboard'
@@ -44,15 +46,13 @@ function handleLogout() {
 }
 
 // ── Cards ──────────────────────────────────────────────────────────────
-type Tone = 'warn' | 'bad' | 'good'
-interface Stat { label: string; value: string; tone?: Tone }
-interface Group { heading?: string; loaded: boolean; unavailable?: boolean; note?: string; stats: Stat[] }
-interface Card { key: string; title: string; post: string; icon: Component; groups: Group[]; link?: { to: string; label: string } }
-
-const n = (v: number | undefined) => (v ?? 0).toLocaleString('en-GB')
-const share = (part: number | undefined, whole: number | undefined) =>
-  whole ? `${Math.round(((part ?? 0) * 100) / whole)}%` : '—'
-const flag = (v: number | undefined, tone: Tone): Tone | undefined => ((v ?? 0) > 0 ? tone : undefined)
+// The figures themselves are built in views/units/unitStats.ts, so a card and its unit dashboard show the same words.
+interface Card {
+  key: string; title: string; post: string; icon: Component; groups: Group[]
+  /** The Executive Arm unit whose dashboard this card opens: the drill-down from this page. */
+  unit: UnitKey
+  link?: { to: string; label: string }
+}
 
 const fd = computed(() => executiveDash.state.data)
 const ccy = computed<Currency>(() => fd.value?.year.reporting_currency ?? 'USD')
@@ -84,81 +84,36 @@ const financeGroup = computed<Group>(() => {
 
 const cards = computed<Card[]>(() => {
   const o = overview.value
-  const missing = (note: string): Group => ({ loaded: false, unavailable: !!overviewError.value, note: overviewError.value ?? note, stats: [] })
-  const pl = o?.planning
-  const ld = o?.land
-  const en = o?.engineering
-  const ss = o?.social_services
-  const au = o?.audit
-  const hr = o?.hr
+  const miss = (note: string, heading?: string) => () => missing(overviewError.value ?? note, !!overviewError.value, heading)
 
   return [
     {
-      key: 'finance', title: 'Finance', post: 'Executive Officer, Finance', icon: Banknote,
+      key: 'finance', unit: 'finance', title: 'Finance', post: 'Executive Officer, Finance', icon: Banknote,
       groups: [financeGroup.value],
       link: { to: '/finance/accounting', label: 'Finance in detail' },
     },
     {
-      key: 'planning', title: 'Planning and Environment', post: 'Executive Officer, Planner', icon: Building2,
+      key: 'planning', unit: 'planning', title: 'Planning and Environment', post: 'Executive Officer, Planner', icon: Building2,
       groups: [
-        pl ? {
-          heading: 'Development control', loaded: pl.loaded, unavailable: pl.unavailable, note: pl.note,
-          stats: [
-            { label: 'Applications in progress', value: n(pl.in_progress) },
-            { label: 'Past statutory due date', value: n(pl.overdue), tone: flag(pl.overdue, 'bad') },
-            { label: 'Awaiting a decision', value: n(pl.awaiting_decision), tone: flag(pl.awaiting_decision, 'warn') },
-            { label: 'Approved this year', value: n(pl.approved_this_year) },
-            { label: 'Open building complaints', value: n(pl.open_building_complaints), tone: flag(pl.open_building_complaints, 'warn') },
-          ],
-        } : { heading: 'Development control', ...missing('Development control could not be read.') },
-        ld ? {
-          heading: 'Land register', loaded: ld.loaded, unavailable: ld.unavailable, note: ld.note,
-          stats: [
-            { label: 'Parcels on the register', value: n(ld.parcels) },
-            { label: 'With a rates account', value: share(ld.parcels_with_account, ld.parcels) },
-            { label: 'Outlines estimated, not surveyed', value: n(ld.estimated_boundaries), tone: flag(ld.estimated_boundaries, 'warn') },
-          ],
-        } : { heading: 'Land register', ...missing('The land register could not be read.') },
+        planningGroup(o?.planning, miss('Development control could not be read.', 'Development control')),
+        landGroup(o?.land, miss('The land register could not be read.', 'Land register')),
       ],
     },
     {
-      key: 'engineering', title: 'Engineering and Works', post: 'Engineer', icon: HardHat,
-      groups: [en ? {
-        loaded: en.loaded, unavailable: en.unavailable, note: en.note,
-        stats: [
-          { label: 'District roads', value: `${n(en.roads)} (${(en.road_km ?? 0).toLocaleString('en-GB')} km)` },
-          { label: 'Water points working', value: `${n(en.water_points_working)} of ${n(en.water_points)}`, tone: en.water_points && en.water_points_working! < en.water_points ? 'warn' : undefined },
-          { label: 'Council assets', value: n(en.council_assets) },
-          { label: 'Capital projects in progress', value: n(en.projects_in_progress) },
-        ],
-      } : missing('Engineering could not be read.')],
+      key: 'engineering', unit: 'engineering', title: 'Engineering and Works', post: 'Engineer', icon: HardHat,
+      groups: [engineeringGroup(o?.engineering, miss('Engineering could not be read.'))],
     },
     {
-      key: 'social', title: 'Social Services', post: 'Human Resources, Social Services and Administration Officer', icon: HeartPulse,
-      groups: [ss ? {
-        loaded: ss.loaded, unavailable: ss.unavailable, note: ss.note,
-        stats: [
-          { label: 'Health premises registered', value: n(ss.premises) },
-          { label: 'Fitness certificates due or expired', value: n(ss.certificates_due_or_expired), tone: flag(ss.certificates_due_or_expired, 'warn') },
-          { label: 'Open nuisance complaints', value: n(ss.open_nuisance_complaints), tone: flag(ss.open_nuisance_complaints, 'warn') },
-        ],
-      } : missing('Social services could not be read.')],
+      key: 'social', unit: 'social_admin', title: 'Social Services', post: 'Human Resources, Social Services and Administration Officer', icon: HeartPulse,
+      groups: [socialGroup(o?.social_services, miss('Social services could not be read.'))],
     },
     {
-      key: 'hr', title: 'Human Resources and Administration', post: 'Human Resources, Social Services and Administration Officer', icon: Users,
-      groups: [hr ? { loaded: hr.loaded, unavailable: hr.unavailable, note: hr.note, stats: [] } : missing('Human resources could not be read.')],
+      key: 'hr', unit: 'social_admin', title: 'Human Resources and Administration', post: 'Human Resources, Social Services and Administration Officer', icon: Users,
+      groups: [hrGroup(o?.hr, miss('Human resources could not be read.'))],
     },
     {
-      key: 'audit', title: 'Internal Audit', post: 'Internal Auditor', icon: ShieldCheck,
-      groups: [au ? {
-        loaded: au.loaded, unavailable: au.unavailable, note: au.note,
-        stats: [
-          { label: 'Engagements open', value: `${n(au.engagements_open)} of ${n(au.engagements)}` },
-          { label: 'Findings open', value: n(au.findings_open), tone: flag(au.findings_open, 'warn') },
-          { label: 'High-risk findings', value: n(au.findings_high_risk), tone: flag(au.findings_high_risk, 'bad') },
-          { label: 'Actions past their date', value: n(au.actions_overdue), tone: flag(au.actions_overdue, 'bad') },
-        ],
-      } : missing('Internal audit could not be read.')],
+      key: 'audit', unit: 'audit', title: 'Internal Audit', post: 'Internal Auditor', icon: ShieldCheck,
+      groups: [auditGroup(o?.audit, miss('Internal audit could not be read.'))],
     },
   ]
 })
@@ -214,9 +169,14 @@ const asOf = computed(() => {
             </p>
           </div>
 
-          <RouterLink v-if="c.link" :to="c.link.to" class="xo-link">
-            {{ c.link.label }} <ArrowRight :size="14" aria-hidden="true" />
-          </RouterLink>
+          <div class="xo-links">
+            <RouterLink :to="`/units/${c.unit}`" class="xo-link">
+              Unit dashboard <ArrowRight :size="14" aria-hidden="true" />
+            </RouterLink>
+            <RouterLink v-if="c.link" :to="c.link.to" class="xo-link">
+              {{ c.link.label }} <ArrowRight :size="14" aria-hidden="true" />
+            </RouterLink>
+          </div>
         </section>
       </div>
 
@@ -266,6 +226,7 @@ const asOf = computed(() => {
 .xo-missing svg { flex: none; margin-top: 0.125rem; }
 .xo-missing.is-error { background: var(--ent-warning-soft); color: var(--ent-warning); }
 
-.xo-link { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.875rem; color: var(--ent-accent); font-size: 0.875rem; text-decoration: none; }
+.xo-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin-top: 0.875rem; }
+.xo-link { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--ent-accent); font-size: 0.875rem; text-decoration: none; }
 .xo-link:hover { text-decoration: underline; }
 </style>

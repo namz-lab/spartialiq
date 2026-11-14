@@ -91,6 +91,8 @@ const INVITABLE_ROLES = new Set([
   'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
   // Migration 208: the senior cashier who supervises the tills.
   'cash_supervisor',
+  // Migration 216: heads of the Executive Arm's other units.
+  'engineer', 'hr_social_officer',
 ])
 
 const VALID_USER_ROLES = new Set([
@@ -104,6 +106,8 @@ const VALID_USER_ROLES = new Set([
   'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
   // Migration 208: the senior cashier who supervises the tills.
   'cash_supervisor',
+  // Migration 216: heads of the Executive Arm's other units.
+  'engineer', 'hr_social_officer',
 ])
 
 // Council staff = employees. Identical to INVITABLE_ROLES today, but named
