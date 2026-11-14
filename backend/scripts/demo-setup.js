@@ -59,7 +59,11 @@ function step(title, script, args = [], env = {}) {
 
 step('1/6 Migrations', 'migrate.js')
 if (has('skip-spatial')) console.log('\n── 2/6 Master-plan layers: skipped (--skip-spatial) ──')
-else step('2/6 Master-plan layers and parcel register', 'load-master-plan.js')
+else {
+  step('2/6 Master-plan layers and parcel register', 'load-master-plan.js')
+  // The council's zones (peri-urban and beyond) into the one zones table the plan model reads.
+  step('2/6 Zones: peri-urban and beyond, under the Vungu plan', 'load-zones.js', ['--if-empty'])
+}
 if (wards) {
   step('3/6 Wards, linked provisionally', 'load-wards.js', ['--file', wards, '--parent', wardsParent])
   // Polling areas place into the wards just loaded, and give each its registered voters (a denominator, not population).

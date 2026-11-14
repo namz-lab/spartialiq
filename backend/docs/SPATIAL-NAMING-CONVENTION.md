@@ -118,3 +118,15 @@ What is in place: the `origin`, `source_relation`, `custodian_dept` and validity
 conflict detection, and the Surveyor-General platform as the intended custodian (per-dataset API keys and an audit log). What
 is missing is the **submission and reconciliation path**: a record of a proposed change to custodian data, its evidence and its
 outcome. It should be built with the Surveyor-General platform, because that is where a submission would be received.
+
+## Progress on `planning_zone` (14 November 2026)
+
+The canonical zones table `public.proposed_peri_urban_zones` was empty in a database built with `npm run demo:setup`, because
+the master-plan loader fills only the raw import copies (`vungu_proposed_peri_urban_zones`, `vungu_beyond_peri_urban_zones`).
+`scripts/load-zones.js` now fills the canonical table from the two files the council's GIS supplied
+(`data/reference/vungu/zones/`): 61 peri-urban polygons in 12 zones, and the 16 polygons beyond them, which carry a settlement
+category and a land-use code rather than a planning zone, so they are loaded under that category and marked
+`scale_category = 'Beyond the peri-urban area'`. One table, 77 zones, all filed under Vungu's plan; the trigger creates a
+(unreviewed) zone type for each of the 18 names. Not yet done: renaming to `spatial_planning.zone`, pointing the
+`vungu_beyond_peri_urban_zones` tile layer at the canonical table (it still draws the raw copy, and is public while the canonical
+zones are hidden until the plan is gazetted), and retiring the two raw copies.
