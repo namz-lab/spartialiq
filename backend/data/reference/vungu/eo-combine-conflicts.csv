@@ -1,0 +1,18 @@
+eo_code,our_code,use,light,general,chosen
+A,A,Detached Dwelling House,prohibited,permitted,prohibited
+A1,A2,Attached/Semi-Detached Dwelling House,prohibited,permitted,prohibited
+A2,A3,Flats,prohibited,permitted,prohibited
+A3,A1,Cluster House,prohibited,permitted,prohibited
+B,B,Residential Buildings,prohibited,special_consent,prohibited
+B1,B1,Residential Buildings (Licensed),prohibited,special_consent,prohibited
+B2,B2,Residential Buildings (Institutional),prohibited,special_consent,prohibited
+C,C,Schools & Residential Colleges,prohibited,special_consent,prohibited
+C1,C1,Crèches,prohibited,permitted,prohibited
+D1,D2,"Equipment, Furniture & ICT Showrooms",permitted,special_consent,special_consent
+G,H,Storage Warehouse,permitted,special_consent,special_consent
+K1,J1,Special Places of Assembly,prohibited,special_consent,prohibited
+N,Q,Agricultural Buildings,prohibited,permitted,prohibited
+T,U,Parking Garage,permitted,special_consent,special_consent
+T1,U1,Surface Car Park,permitted,special_consent,special_consent
+T2,S,Lorry Parking & Rest House,permitted,special_consent,special_consent
+U,V,Funeral Parlour,permitted,special_consent,special_consent
