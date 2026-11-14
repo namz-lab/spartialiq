@@ -163,7 +163,8 @@ const asOf = computed(() => {
                 <dd :class="s.tone ? `is-${s.tone}` : undefined">{{ s.value }}</dd>
               </div>
             </dl>
-            <p v-else class="xo-missing" :class="{ 'is-error': g.unavailable }">
+            <p v-if="g.loaded && g.footnote" class="xo-foot">{{ g.footnote }}</p>
+            <p v-else-if="!g.loaded" class="xo-missing" :class="{ 'is-error': g.unavailable }">
               <component :is="g.unavailable ? TriangleAlert : Info" :size="16" aria-hidden="true" />
               <span>{{ g.note }}</span>
             </p>
@@ -227,6 +228,7 @@ const asOf = computed(() => {
 .xo-missing.is-error { background: var(--ent-warning-soft); color: var(--ent-warning); }
 
 .xo-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin-top: 0.875rem; }
+.xo-foot { margin: 0.375rem 0 0; font-size: 0.8125rem; color: var(--ent-text-3); }
 .xo-link { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--ent-accent); font-size: 0.875rem; text-decoration: none; }
 .xo-link:hover { text-decoration: underline; }
 </style>

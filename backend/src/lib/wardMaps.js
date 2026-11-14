@@ -65,16 +65,24 @@ function createWardMaps(pg) {
 
     const { rows: [m] } = await pg.query(
       `SELECT measure_key, label, description, unit, kind, direction, classes, break_method, fixed_breaks, ramp,
-              min_denominator, owner_dept, unit_key, source_note
+              min_denominator, owner_dept, unit_key, source_note, register_key
          FROM spatial_engine.measure
         WHERE measure_key = $1 AND enabled AND ($2::text IS NULL OR unit_key = $2)`, [key, unitKey])
     if (!m) return { status: 404, error: 'not_found', message: 'No such measure.' }
 
     const register = await wardRegister()
+    // If the measure counts a register the council has said is incomplete, the map must say so.
+    let completeness = null
+    if (m.register_key) {
+      const { rows: [rs] } = await pg.query(
+        'SELECT register, complete, expected_count, note, source FROM spatial_engine.register_status WHERE register = $1', [m.register_key])
+      if (rs && !rs.complete) completeness = { register: rs.register, complete: false, expected_count: rs.expected_count, note: rs.note, source: rs.source }
+    }
     const measure = {
       key: m.measure_key, label: m.label, description: m.description, unit: m.unit, kind: m.kind,
       direction: m.direction, ramp: m.ramp, owner_dept: m.owner_dept, unit_key: m.unit_key, source_note: m.source_note,
       min_denominator: num(m.min_denominator),
+      incomplete_register: completeness,
     }
     if (!register.linked) {
       return { data: { measure, ward_register: register, reason: 'ward_register_empty', features: [], classes: null, run: null } }

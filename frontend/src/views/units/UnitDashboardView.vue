@@ -137,7 +137,8 @@ const desks = computed(() => dash.value?.unit.desks ?? [])
                   <dd :class="s.tone ? `is-${s.tone}` : undefined">{{ s.value }}</dd>
                 </div>
               </dl>
-              <p v-else class="ud-missing" :class="{ 'is-error': g.unavailable }">
+              <p v-if="g.loaded && g.footnote" class="ud-foot">{{ g.footnote }}</p>
+              <p v-else-if="!g.loaded" class="ud-missing" :class="{ 'is-error': g.unavailable }">
                 <component :is="g.unavailable ? TriangleAlert : Info" :size="16" aria-hidden="true" />
                 <span>{{ g.note }}</span>
               </p>
@@ -218,6 +219,7 @@ const desks = computed(() => dash.value?.unit.desks ?? [])
 .ud-stat dd.is-bad { color: var(--ent-danger); }
 .ud-stat dd.is-good { color: var(--ent-success); }
 
+.ud-foot { margin: 0.375rem 0 0; font-size: 0.8125rem; color: var(--ent-text-3); }
 .ud-missing { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0; padding: 0.625rem 0.75rem; background: var(--ent-surface-2); border-radius: 6px; color: var(--ent-text-2); font-size: 0.875rem; }
 .ud-missing svg { flex: none; margin-top: 0.125rem; }
 .ud-missing.is-error { background: var(--ent-warning-soft); color: var(--ent-warning); }

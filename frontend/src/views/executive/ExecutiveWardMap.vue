@@ -364,6 +364,12 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
       <template v-else-if="wardMap">
         <p class="wm-desc">{{ wardMap.measure.description }} <span class="wm-unit">Unit: {{ wardMap.measure.unit }}.</span></p>
 
+        <!-- A rate over a register the council has said is incomplete: say so, and say what a blank ward means. -->
+        <p v-if="wardMap.measure.incomplete_register" class="wm-note wm-note--incomplete" role="note">
+          <Info :size="16" aria-hidden="true" />
+          <span>This map counts an incomplete register. {{ wardMap.measure.incomplete_register.note }} A ward with nothing recorded is shown as no data, not zero; a ward with something recorded shows what is recorded, at least that much.</span>
+        </p>
+
         <p v-if="reasonText" class="wm-quiet wm-reason"><Info :size="16" aria-hidden="true" />{{ reasonText }}</p>
 
         <div v-else class="wm-body">
@@ -451,7 +457,7 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
 .wm-asof { margin: 0; color: var(--ent-text-3); font-size: 0.8125rem; }
 
 .wm-note { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.875rem; }
-.wm-note--provisional { background: var(--ent-warning-soft); color: var(--ent-warning); }
+.wm-note--provisional, .wm-note--incomplete { background: var(--ent-warning-soft); color: var(--ent-warning); }
 .wm-note svg, .wm-reason svg { flex: none; margin-top: 0.125rem; }
 .wm-alert { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; background: var(--ent-danger-soft); color: var(--ent-danger); border-radius: 6px; }
 .wm-retry { margin-left: auto; padding: 0.25rem 0.625rem; border: 1px solid var(--ent-danger); background: var(--ent-surface); color: var(--ent-danger); border-radius: 4px; cursor: pointer; }

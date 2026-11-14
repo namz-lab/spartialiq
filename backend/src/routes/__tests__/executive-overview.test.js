@@ -82,6 +82,18 @@ describe('GET /api/executive/overview', () => {
     expect(Number.isNaN(Date.parse(data.as_of))).toBe(false)
   })
 
+  test("the engineering section separates the council's roads from the national ones and says whether they are verified", async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/executive/overview', headers: headersOf('accounting_officer') })
+    const eng = res.json().data.engineering
+    if (!eng.loaded) return
+    for (const k of ['roads', 'road_km', 'roads_unverified', 'national_roads', 'national_road_km']) expect(typeof eng[k]).toBe('number')
+    expect(eng.roads_unverified).toBeLessThanOrEqual(eng.roads)
+    // The national roads must really be read: a query that failed quietly would leave them at 0.
+    const { rows: [db] } = await dbContext.systemOf(app.pg).query(
+      "SELECT count(*)::int AS n FROM basemap.road WHERE road_authority IS NOT NULL AND road_authority <> 'VUNGU'")
+    expect(eng.national_roads).toBe(db.n)
+  })
+
   test('never reports a section as not loaded without saying why', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/executive/overview', headers: headersOf('accounting_officer') })
     const { as_of: _asOf, ...sections } = res.json().data

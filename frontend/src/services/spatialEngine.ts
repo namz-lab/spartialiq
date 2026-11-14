@@ -60,6 +60,8 @@ export interface WardMap {
     key: string; label: string; description: string; unit: string; kind: MeasureInfo['kind']
     direction: MeasureInfo['direction']; ramp: MeasureInfo['ramp']; owner_dept: string; source_note: string
     min_denominator: number | null
+    /** Set when the measure counts a register the council has said is incomplete: a ward with nothing recorded is then no data, not zero. */
+    incomplete_register?: { register: string; complete: false; expected_count: number | null; note: string; source: string } | null
   }
   ward_register: WardRegisterState
   /** 'ward_register_empty' (no wards linked) or 'not_computed' (the engine has not run); null when there is a map. */

@@ -36,8 +36,17 @@ export interface LandSection extends SectionState {
 export interface EngineeringSection extends SectionState {
   roads?: number
   road_km?: number
+  /** Of the council's active roads, how many are map geometry only: not surveyed, no surface or condition. */
+  roads_unverified?: number
+  /** Roads that are not the council's (RIDA, the Ministry of Transport): shown apart, never added to the council's. */
+  national_roads?: number
+  national_road_km?: number
   water_points?: number
   water_points_working?: number
+  /** False while the council has said its water-point register is incomplete: the figures are what is recorded, not what exists. */
+  water_points_register_complete?: boolean
+  water_points_expected?: number | null
+  water_points_register_note?: string
   council_assets?: number
   fixed_assets?: number
   projects_in_progress?: number

@@ -347,3 +347,29 @@ describe('the unit drill-down', () => {
     expect(wrapper.find('.wm-profile').exists()).toBe(false)
   })
 })
+
+describe('a measure over an incomplete register', () => {
+  it('says so, and says what a blank ward means', async () => {
+    api.map.mockResolvedValue({
+      ...MAP,
+      measure: {
+        ...MAP.measure,
+        incomplete_register: {
+          register: 'water_points', complete: false, expected_count: 360, source: 'website',
+          note: 'The register holds only a few demonstration points; the council website lists about 360 water points.',
+        },
+      },
+    })
+    const wrapper = await mountPage()
+    const note = wrapper.find('.wm-note--incomplete')
+    expect(note.exists()).toBe(true)
+    expect(note.text()).toContain('incomplete register')
+    expect(note.text()).toContain('about 360 water points')
+    expect(note.text()).toContain('no data, not zero')
+  })
+
+  it('shows no such note for a complete register', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('.wm-note--incomplete').exists()).toBe(false)
+  })
+})

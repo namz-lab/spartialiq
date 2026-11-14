@@ -68,13 +68,29 @@ function createUnitSections(pg, log) {
         SELECT (SELECT count(*) FROM council_ops.road_asset WHERE status = 'active')::int AS roads,
                (SELECT COALESCE(round(sum(length_m) FILTER (WHERE status = 'active') / 1000.0, 1), 0)
                   FROM council_ops.road_asset)::float AS road_km,
+               (SELECT count(*) FROM council_ops.road_asset WHERE status = 'active' AND data_quality = 'unverified')::int AS roads_unverified,
                (SELECT count(*) FROM council_ops.wash_asset)::int AS water_points,
                (SELECT count(*) FROM council_ops.wash_asset WHERE operational = 'working')::int AS water_points_working,
                (SELECT count(*) FROM council_ops.council_asset)::int AS council_assets,
                (SELECT count(*) FROM finance.fixed_asset)::int AS fixed_assets,
                (SELECT count(*) FROM finance.v_project_performance WHERE status = 'in_progress')::int AS projects_in_progress`)
+      // Roads that are not the council's (the Rural Infrastructure Development Agency's and the Ministry of Transport's), from the road
+      // network layer. They are shown apart and never added to the council's figures. A database without that layer has none to show.
+      let national = { national_roads: 0, national_road_km: 0 }
+      try {
+        const r = await one(`
+          SELECT count(*)::int AS national_roads, COALESCE(round((sum(ST_Length(geom::geography)) / 1000.0)::numeric, 1), 0)::float AS national_road_km
+            FROM basemap.road WHERE road_authority IS NOT NULL AND road_authority <> 'VUNGU'`)
+        national = r
+      } catch (_err) { /* no road network layer yet */ }
+      // A register the council has said is incomplete: its figures are what is recorded, not what exists.
+      let register = {}
+      try {
+        const w = await one(`SELECT complete, expected_count, note FROM spatial_engine.register_status WHERE register = 'water_points'`)
+        if (w) register = { water_points_register_complete: w.complete, water_points_expected: w.expected_count, water_points_register_note: w.note }
+      } catch (_err) { /* no register status yet */ }
       const loaded = g.roads + g.water_points + g.council_assets + g.fixed_assets > 0
-      return { loaded, ...(loaded ? {} : { note: 'The road, water and asset registers have not been loaded yet.' }), ...g }
+      return { loaded, ...(loaded ? {} : { note: 'The road, water and asset registers have not been loaded yet.' }), ...g, ...national, ...register }
     },
 
     social_services: async () => {
