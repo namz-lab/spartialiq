@@ -80,6 +80,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useSpatialStore } from '@/stores/spatial'
 import { addVunguBasemap, setBasemapLayerVisible as _setBasemapLayerVisible } from '@/map/vunguBasemap'
+import { getPublishedStylesheet, peekPublishedStyle } from '@/services/gisStyles'
 import { prefetchTileLayerCatalog, tileUrlTemplate } from '@/services/vectorTiles'
 import MapLayerFilters from '@/components/MapLayerFilters.vue'
 import QgisLayerPanel from '@/components/QgisLayerPanel.vue'
@@ -621,6 +622,36 @@ const addLayerToMap = async (layerId: string) => {
           'fill-opacity': 0.6,
           'fill-outline-color': '#2c3e50'
         }
+      }
+    }
+
+    // The zones are coloured by zone type from the published style in the GIS symbology registry (the same style the
+    // vector-tile maps use), not by a colour chosen here. Without a published style the layer keeps the fill chosen above.
+    if (layerId === 'proposed_peri_urban_zones' || layerInfo?.name === 'proposed_peri_urban_zones') {
+      await getPublishedStylesheet().catch(() => null)
+      const fillOf = (id: string) => peekPublishedStyle(id)?.maplibre.find((l) => l.type === 'fill')
+      const published = fillOf('vungu_proposed_peri_urban_zones')
+      if (published) {
+        // This layer holds the peri-urban zones AND the areas beyond them (one zones table), so the beyond layer's published
+        // categories are added to the peri-urban ones: ['match', input, v1, c1, ..., fallback].
+        const beyond = fillOf('vungu_beyond_peri_urban_zones')
+        const merge = (a: unknown, b: unknown) => {
+          if (!Array.isArray(a) || !Array.isArray(b) || a[0] !== 'match' || b[0] !== 'match') return a
+          const seen = new Set<unknown>()
+          const pairs: unknown[] = []
+          for (const src of [a, b]) {
+            for (let i = 2; i < src.length - 1; i += 2) {
+              if (!seen.has(src[i])) { seen.add(src[i]); pairs.push(src[i], src[i + 1]) }
+            }
+          }
+          return [a[0], a[1], ...pairs, a[a.length - 1]]
+        }
+        const paint = { ...published.paint }
+        if (beyond) {
+          paint['fill-color'] = merge(paint['fill-color'], beyond.paint['fill-color'])
+          paint['fill-opacity'] = merge(paint['fill-opacity'], beyond.paint['fill-opacity'])
+        }
+        layerConfig = { type: 'fill', layout: {}, paint }
       }
     }
     

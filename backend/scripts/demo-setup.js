@@ -65,6 +65,8 @@ else {
   step('2/6 Zones: peri-urban and beyond, under the Vungu plan', 'load-zones.js', ['--if-empty'])
   // A demonstration shows the draft plan's zones on the public map; the plan stays a draft (publish-zones-preview.js --off reverses it).
   step('2/6 Zones: public preview of the draft plan', 'publish-zones-preview.js', ['--on'])
+  // Colour the zones by type, from the council GIS's QGIS styles, through the GIS symbology registry.
+  step('2/6 Zones: colours by type', 'publish-zone-styles.js')
 }
 if (wards) {
   step('3/6 Wards, linked provisionally', 'load-wards.js', ['--file', wards, '--parent', wardsParent])
