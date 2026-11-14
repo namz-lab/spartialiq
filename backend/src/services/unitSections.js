@@ -69,8 +69,14 @@ function createUnitSections(pg, log) {
                (SELECT COALESCE(round(sum(length_m) FILTER (WHERE status = 'active') / 1000.0, 1), 0)
                   FROM council_ops.road_asset)::float AS road_km,
                (SELECT count(*) FROM council_ops.road_asset WHERE status = 'active' AND data_quality = 'unverified')::int AS roads_unverified,
-               (SELECT count(*) FROM council_ops.wash_asset)::int AS water_points,
-               (SELECT count(*) FROM council_ops.wash_asset WHERE operational = 'working')::int AS water_points_working,
+               -- Water sources only (not toilets, pipelines or waste sites), not decommissioned. A point with no recorded state is
+               -- 'unknown': it counts as recorded, never as working and never as broken.
+               (SELECT count(*) FROM council_ops.wash_asset WHERE asset_type IN ('borehole', 'well', 'water_point', 'tank')
+                  AND operational IS DISTINCT FROM 'decommissioned')::int AS water_points,
+               (SELECT count(*) FROM council_ops.wash_asset WHERE asset_type IN ('borehole', 'well', 'water_point', 'tank')
+                  AND operational IN ('working', 'broken', 'seasonal'))::int AS water_points_state_known,
+               (SELECT count(*) FROM council_ops.wash_asset WHERE asset_type IN ('borehole', 'well', 'water_point', 'tank')
+                  AND operational = 'working')::int AS water_points_working,
                (SELECT count(*) FROM council_ops.council_asset)::int AS council_assets,
                (SELECT count(*) FROM finance.fixed_asset)::int AS fixed_assets,
                (SELECT count(*) FROM finance.v_project_performance WHERE status = 'in_progress')::int AS projects_in_progress`)
@@ -83,6 +89,13 @@ function createUnitSections(pg, log) {
             FROM basemap.road WHERE road_authority IS NOT NULL AND road_authority <> 'VUNGU'`)
         national = r
       } catch (_err) { /* no road network layer yet */ }
+      // Surface water: the dams mapped, and the water they cover (computed from the polygons). None where the layer is not loaded.
+      let dams = { dams: 0, dam_area_ha: 0 }
+      try {
+        dams = await one(`
+          SELECT count(*)::int AS dams, COALESCE(round((sum(ST_Area(ST_Transform(geom, 6933))) / 10000.0)::numeric, 0), 0)::float AS dam_area_ha
+            FROM basemap.waterbody WHERE kind = 'dam'`)
+      } catch (_err) { /* no surface-water layer yet */ }
       // A register the council has said is incomplete: its figures are what is recorded, not what exists.
       let register = {}
       try {
@@ -90,7 +103,7 @@ function createUnitSections(pg, log) {
         if (w) register = { water_points_register_complete: w.complete, water_points_expected: w.expected_count, water_points_register_note: w.note }
       } catch (_err) { /* no register status yet */ }
       const loaded = g.roads + g.water_points + g.council_assets + g.fixed_assets > 0
-      return { loaded, ...(loaded ? {} : { note: 'The road, water and asset registers have not been loaded yet.' }), ...g, ...national, ...register }
+      return { loaded, ...(loaded ? {} : { note: 'The road, water and asset registers have not been loaded yet.' }), ...g, ...national, ...dams, ...register }
     },
 
     social_services: async () => {

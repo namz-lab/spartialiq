@@ -184,3 +184,12 @@ the nearest ward. The result is stored in `admin.authority_ward.geom` and read b
 (`spatial_engine.v_authority_ward`); the custodian's polygons in `admin.ward` are untouched. The function refuses, changing nothing, unless the wards
 then cover the boundary to 1 part in 100,000 (they cover it to 4 parts in 10 million). The loaders (`load-reference-layers.js`, `load-wards.js`) run it.
 Areas must be compared in an equal-area projection: the geography area of a polygon this large is only good to about 1 part in 100,000.
+
+## Water sources (migration 224)
+
+The council's GIS supplied 149 boreholes (a position only: no name, depth, yield or working state) and 138 dams (polygons; a name for 14, no use).
+Boreholes go to the water-point register (`council_ops.wash_asset`, asset type borehole), always with state `unknown` and `unverified`; an exact repeat of
+a position is skipped (15) and one outside the planning boundary is left out (1), so 133 are loaded. Dams go to `basemap.waterbody` (kind `dam`; 134 inside
+the boundary; `public.water_areas` is the compatibility view the tile layer reads). The two water-point measures now count water sources only (borehole, well,
+water point, tank: not toilets or pipelines) and do not read an unknown state as broken: *water points recorded per 10,000 registered voters* counts every
+recorded source; *water points working* is the share among points whose state is recorded.

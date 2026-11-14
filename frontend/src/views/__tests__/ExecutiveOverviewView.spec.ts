@@ -35,7 +35,8 @@ const FULL: ExecutiveOverview = {
   land: { loaded: true, parcels: 2320, parcels_with_account: 1589, estimated_boundaries: 1064 },
   engineering: {
     loaded: true, roads: 1059, road_km: 1676.5, roads_unverified: 1059, national_roads: 148, national_road_km: 577.1,
-    water_points: 6, water_points_working: 4, water_points_register_complete: false, water_points_expected: 360,
+    water_points: 133, water_points_state_known: 0, water_points_working: 0, dams: 134, dam_area_ha: 2797,
+    water_points_register_complete: false, water_points_expected: 360,
     water_points_register_note: 'The register holds only a few demonstration points; the council website lists about 360 water points in the district.',
     council_assets: 3, projects_in_progress: 3,
   },
@@ -146,14 +147,31 @@ describe('ExecutiveOverviewView', () => {
     expect(eng.text()).toContain('not a survey')
   })
 
-  it('says the water-point register is incomplete instead of reading 4 of 6 as the district', async () => {
+  it('says the water-point register is incomplete, and does not read an unknown state as broken', async () => {
     api.overview.mockResolvedValue(FULL)
     const wrapper = await mountPage()
     const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
-    expect(eng.find('.xo-stat dt').exists()).toBe(true)
-    expect(eng.text()).toContain('Water points recorded working')
-    expect(eng.text()).toContain('4 of 6 recorded')
+    const stat = (label: string) => eng.findAll('.xo-stat').find((s) => s.find('dt').text() === label)
+    expect(stat('Water points recorded')!.find('dd').text()).toBe('133')
+    expect(stat('State of repair recorded for')!.find('dd').text()).toBe('0 of 133')
+    // No point has a recorded state, so there is no "working" figure at all: not 0 of 133.
+    expect(stat('Working, of those with a recorded state')).toBeUndefined()
     expect(eng.find('.xo-foot').text()).toContain('about 360 water points')
+  })
+
+  it('shows the dams mapped, with the water they cover', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    expect(eng.findAll('.xo-stat').find((s) => s.find('dt').text() === 'Dams mapped')!.find('dd').text()).toBe('134 (2,797 ha of water)')
+  })
+
+  it('shows a working figure only for the points whose state is recorded', async () => {
+    api.overview.mockResolvedValue({ ...FULL, engineering: { ...FULL.engineering, water_points: 133, water_points_state_known: 6, water_points_working: 4 } })
+    const wrapper = await mountPage()
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const stat = (label: string) => eng.findAll('.xo-stat').find((s) => s.find('dt').text() === label)
+    expect(stat('Working, of those with a recorded state')!.find('dd').text()).toBe('4 of 6')
   })
 
   it('shows no roads caveat when the roads are not all unverified', async () => {

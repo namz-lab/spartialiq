@@ -21,6 +21,13 @@
  *                                 condition, none invented); planning_boundary -> admin.planning_boundary (as supplied: the
  *                                 Gweru Rural polygon, ZW1704, not the union of the wards).
  *
+ *   boreholes, dams          the council's GIS (boreholes.geojson, dams.geojson, supplied 14 November 2026):
+ *                                 boreholes -> council_ops.wash_asset (a position and nothing else: no name, depth, yield or working
+ *                                 state, so each is 'unknown' and unverified; a repeat of an exact position is skipped, as the
+ *                                 earlier VunGIS borehole loader did; one outside the planning boundary is not the council's and is
+ *                                 left out); dams -> basemap.waterbody (138 polygons, a name for 14, no use). The demonstration
+ *                                 water points give way to the real ones.
+ *
  * Voters become spatial_engine.ward_denominator rows of kind 'registered_voters' (as of 2023): the sum of the
  * polling areas whose point on surface lies in each of the council's current wards. Registered voters are adults on
  * the roll, not the population, and the source says so. A ward number that disagrees with the ward that holds the area
@@ -45,6 +52,8 @@ const ZEC = 'Zimbabwe Electoral Commission, Midlands polling areas and stations,
 const LEGACY = 'Earlier VunGIS legacy layer (gweru_legacy.sql), cut to Vungu'
 const ROADS = 'OpenStreetMap road centrelines, council-supplied roads.geojson (14 November 2026)'
 const BOUNDARY = 'Council GIS planning_boundary.geojson (14 November 2026), as supplied'
+const BOREHOLES = 'Council GIS boreholes.geojson (14 November 2026): a position only'
+const DAMS = 'Council GIS dams.geojson (14 November 2026)'
 
 const read = (name) => {
   const file = path.join(dir, `${name}.geojson`)
@@ -144,6 +153,48 @@ async function main() {
     // Needs the wards to be loaded; without them there is nothing to conform and the function says so.
     const { rows: [conformed] } = await db.query('SELECT admin.conform_authority_wards($1) AS r', [auth.id])
     report.wards_conformed = conformed.r
+
+    // ── Water sources ──
+    const holes = read('boreholes').map(feat)
+    for (const h of holes) {
+      if (h.geometry.type !== 'MultiPoint' || h.geometry.coordinates.length !== 1) throw new Error('a borehole that is not a single point was found; nothing was loaded.')
+    }
+    const { rowCount: demoWater } = await db.query("DELETE FROM council_ops.wash_asset WHERE asset_code LIKE 'DEMO-WP-%'")
+    await db.query('DELETE FROM council_ops.wash_asset WHERE source = $1', [BOREHOLES])
+    const seenAt = new Set()
+    let repeats = 0
+    let outside = 0
+    let loadedHoles = 0
+    for (const [i, h] of holes.entries()) {
+      const [x, y] = h.geometry.coordinates[0]
+      const key = `${x},${y}`
+      if (seenAt.has(key)) { repeats++; continue }
+      seenAt.add(key)
+      // The operational state is NOT in the file: it stays 'unknown'. Nothing here says a borehole works.
+      const { rowCount } = await db.query(
+        `INSERT INTO council_ops.wash_asset (asset_code, asset_type, operational, data_quality, source, geom)
+         SELECT $1, 'borehole', 'unknown', 'unverified', $2, pt.g
+           FROM (SELECT ST_SetSRID(ST_MakePoint($3, $4), 4326) AS g) pt
+          WHERE EXISTS (SELECT 1 FROM admin.planning_boundary b WHERE b.authority_id = $5 AND ST_Intersects(b.geom, pt.g))`,
+        [`BH-${String(i + 1).padStart(3, '0')}`, BOREHOLES, x, y, auth.id])
+      if (rowCount) loadedHoles++; else outside++
+    }
+    report.boreholes = { loaded: loadedHoles, repeats_skipped: repeats, outside_boundary: outside, in_file: holes.length }
+    if (demoWater) report.demo_water_points_replaced = demoWater
+
+    const dams = read('dams').map(feat)
+    await db.query('DELETE FROM basemap.waterbody WHERE source = $1', [DAMS])
+    let loadedDams = 0
+    for (const { p, geometry } of dams) {
+      const name = txt(p.Name)
+      const { rowCount } = await db.query(
+        `INSERT INTO basemap.waterbody (source, kind, name, geom)
+         SELECT $1, 'dam', $2, g.g FROM (SELECT ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($3), 4326)) AS g) g
+          WHERE EXISTS (SELECT 1 FROM admin.planning_boundary b WHERE b.authority_id = $4 AND ST_Intersects(b.geom, g.g))`,
+        [DAMS, name && name.toLowerCase() !== 'unknown' ? name : null, JSON.stringify(geometry), auth.id])
+      loadedDams += rowCount
+    }
+    report.dams = { loaded: loadedDams, outside_boundary: dams.length - loadedDams, in_file: dams.length }
 
     report.polling_areas = await replaceLayer(db, 'admin.polling_area',
       ['polling_code', 'name', 'ward_number', 'voters', 'integrity', 'old_name', 'address', 'assembly', 'modified', 'source'],

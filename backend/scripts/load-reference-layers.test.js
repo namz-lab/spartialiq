@@ -74,3 +74,44 @@ describe('data/reference/vungu: roads and the planning boundary', () => {
     for (const n of ['roads', 'planning_boundary']) for (const x of read(n)) expect(finite(x.geometry.coordinates)).toBe(true)
   })
 })
+
+describe('data/reference/vungu: boreholes and dams', () => {
+  test('boreholes: 149 single points, a position and nothing else (no state of repair is given)', () => {
+    const f = read('boreholes')
+    expect(f).toHaveLength(149)
+    for (const x of f) {
+      expect(x.geometry.type).toBe('MultiPoint')
+      expect(x.geometry.coordinates).toHaveLength(1)
+      expect(Object.keys(x.properties).sort()).toEqual(['LAT', 'LONG'])
+    }
+  })
+
+  test('boreholes: 134 distinct positions, 15 exact repeats that the loader skips', () => {
+    const at = f => f.geometry.coordinates[0].join(',')
+    const f = read('boreholes')
+    expect(new Set(f.map(at)).size).toBe(134)
+  })
+
+  test('boreholes: the coordinates agree with the point (LAT, LONG)', () => {
+    for (const x of read('boreholes')) {
+      expect(x.geometry.coordinates[0][0]).toBeCloseTo(x.properties.LONG, 6)
+      expect(x.geometry.coordinates[0][1]).toBeCloseTo(x.properties.LAT, 6)
+    }
+  })
+
+  test('dams: 138 polygons, a name for some, "Unknown" for five, and no use recorded', () => {
+    const f = read('dams')
+    expect(f).toHaveLength(138)
+    for (const x of f) {
+      expect(x.geometry.type).toBe('MultiPolygon')
+      expect(x.properties.Use).toBeNull()
+    }
+    expect(f.filter((x) => x.properties.Name === 'Unknown')).toHaveLength(5)
+    expect(f.filter((x) => x.properties.Name && x.properties.Name !== 'Unknown')).toHaveLength(14)
+  })
+
+  test('no coordinate is non-finite', () => {
+    const finite = (c) => (typeof c[0] === 'number' ? c.every(Number.isFinite) : c.every(finite))
+    for (const n of ['boreholes', 'dams']) for (const x of read(n)) expect(finite(x.geometry.coordinates)).toBe(true)
+  })
+})
