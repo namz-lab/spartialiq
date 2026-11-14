@@ -9,8 +9,11 @@
 //   - No canvas is drawn when there are no wards or no computed values: a blank grey district reads
 //     as "nothing here". The reason is written instead.
 //   - The ranked list beside the map carries the same figures, so the map is never the only way in.
+//   - Selection works both ways and nobody has to scroll to find a ward's figures: clicking a ward on the map selects
+//     it and the list scrolls itself to its row; clicking (or pressing Enter on) a row selects it and the map zooms to
+//     the ward. A detail panel pinned above the list always shows the selected ward's figures.
 //   - Wards differ greatly in size, so the page says to compare values, not areas.
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { Info, TriangleAlert } from 'lucide-vue-next'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { FINANCE_CHOROPLETH, FINANCE_NO_DATA } from '@/map/vunguBasemapStyle'
@@ -25,6 +28,7 @@ const loading = ref(true)
 const selected = ref<string | null>(null)
 
 const host = ref<HTMLElement | null>(null)
+const listEl = ref<HTMLElement | null>(null)
 const map = shallowRef<any>(null)
 let mapReady = false
 
@@ -45,7 +49,6 @@ async function loadIndex() {
 
 async function loadMap() {
   mapError.value = null
-  selected.value = null
   try {
     wardMap.value = await spatialEngineApi.map(key.value)
   } catch {
@@ -191,7 +194,9 @@ async function draw() {
       layout: { 'text-field': ['get', 'name'], 'text-size': 12, 'text-font': ['Noto Sans Regular'] },
       paint: { 'text-color': '#1f2937', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 },
     })
-    m.on('click', 'wards-fill', (e: any) => { const f = e.features?.[0]; if (f) selected.value = f.properties.ward_code })
+    // A click on a ward selects it (the list scrolls to its row); a click on empty map clears the selection.
+    m.on('click', 'wards-fill', (e: any) => { const f = e.features?.[0]; if (f) selectWard(f.properties.ward_code, { zoom: false }) })
+    m.on('click', (e: any) => { if (!m.queryRenderedFeatures(e.point, { layers: ['wards-fill'] }).length) selected.value = null })
     m.on('mouseenter', 'wards-fill', () => { m.getCanvas().style.cursor = 'pointer' })
     m.on('mouseleave', 'wards-fill', () => { m.getCanvas().style.cursor = '' })
     mapReady = true
@@ -218,10 +223,79 @@ watch([wardMap, canDraw, host], async () => {
 }, { flush: 'post' })
 watch(selected, (code) => {
   if (map.value && mapReady) map.value.setFilter('wards-selected', ['==', ['get', 'ward_code'], code ?? ''])
+  if (code) void scrollRowIntoView(code)
 })
+// A new measure keeps the selected ward (to compare one ward across measures): bring its row back into view.
+watch(wardMap, () => { if (selected.value) void scrollRowIntoView(selected.value) }, { flush: 'post' })
 onBeforeUnmount(() => { try { map.value?.remove() } catch { /* torn down */ } map.value = null; mapReady = false })
 
 const selectedFeature = computed(() => features.value.find((f) => f.properties.ward_code === selected.value) ?? null)
+
+/**
+ * Select a ward. `zoom` also takes the map to it: used by the list, where the user is not looking at the map. A map
+ * click does not zoom (the user is already looking at the ward), it only makes the list follow.
+ */
+function selectWard(code: string, { zoom }: { zoom: boolean }) {
+  selected.value = code
+  if (zoom) zoomToWard(code)
+}
+
+function zoomToWard(code: string) {
+  const f = features.value.find((x) => x.properties.ward_code === code)
+  const b = f ? boundsOf([f]) : null
+  if (map.value && mapReady && b) map.value.fitBounds(b, { padding: 48, maxZoom: 10, duration: reducedMotion() ? 0 : 500 })
+}
+
+/** The whole district again, with nothing selected. */
+function showAll() {
+  selected.value = null
+  const b = boundsOf(features.value)
+  if (map.value && mapReady && b) map.value.fitBounds(b, { padding: 24, duration: reducedMotion() ? 0 : 500 })
+}
+
+/**
+ * Scroll the LIST (not the page) so the ward's row sits in the middle of the visible rows. Done by hand because
+ * scrollIntoView would also move the page, and the point is that the reader stays where they are.
+ */
+async function scrollRowIntoView(code: string) {
+  await nextTick()
+  const list = listEl.value
+  const safe = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(code) : code.replace(/["\\]/g, '')
+  const row = list?.querySelector<HTMLElement>(`tr[data-ward="${safe}"]`)
+  if (!list || !row) return
+  const l = list.getBoundingClientRect()
+  const r = row.getBoundingClientRect()
+  const top = list.scrollTop + (r.top - l.top) - l.height / 2 + r.height / 2
+  if (typeof list.scrollTo === 'function') list.scrollTo({ top: Math.max(0, top), behavior: reducedMotion() ? 'auto' : 'smooth' })
+  else list.scrollTop = Math.max(0, top)
+}
+
+const rankedCount = computed(() => features.value.filter((f) => f.properties.rank !== null).length)
+
+/** Everything about the selected ward, in words, for the panel pinned above the list. */
+const detail = computed(() => {
+  const f = selectedFeature.value
+  const m = wardMap.value
+  if (!f || !m) return null
+  const p = f.properties
+  const num = p.numerator
+  const den = p.denominator
+  const base = num === null || den === null ? ''
+    : m.measure.kind === 'density' ? `${fmt(num)} counted over ${fmt(den)} km²`
+      : m.measure.kind === 'share' ? `${fmt(num)} of ${fmt(den)}`
+        : `${fmt(num)} / ${fmt(den)}`
+  const rank = p.rank !== null ? `Rank ${p.rank} of ${rankedCount.value}`
+    : p.reliability === 'small_base' ? 'Not ranked: the base is too small' : 'Not ranked: no data'
+  return {
+    name: p.name,
+    code: p.ward_code,
+    value: valueText(p.raw_value),
+    flag: reliabilityText(p.reliability),
+    rank,
+    base,
+    classLabel: p.class_index !== null ? (legend.value[p.class_index]?.label ?? '') : '',
+  }
+})
 const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not classified' : r === 'no_data' ? 'no data' : '')
 </script>
 
@@ -265,21 +339,34 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
               <li v-for="l in legend" :key="l.label"><span class="wm-swatch" :style="{ background: l.colour }" />{{ l.label }}</li>
               <li><span class="wm-swatch wm-swatch--none" />No data or small base</li>
             </ul>
-            <p v-if="selectedFeature" class="wm-selected" aria-live="polite">
-              <strong>Ward {{ selectedFeature.properties.name }}</strong>:
-              {{ valueText(selectedFeature.properties.raw_value) }}
-              <template v-if="reliabilityText(selectedFeature.properties.reliability)">({{ reliabilityText(selectedFeature.properties.reliability) }})</template>
-            </p>
+            <button v-if="selected" type="button" class="wm-reset" @click="showAll">Show all wards</button>
           </div>
 
           <div class="wm-list-col">
+            <!-- Pinned above the scrolling list, so the selected ward's figures are always in view. -->
+            <div class="wm-detail" aria-live="polite">
+              <template v-if="detail">
+                <p class="wm-detail-name">Ward {{ detail.name }}</p>
+                <p class="wm-detail-value">{{ detail.value }}<span v-if="detail.flag" class="wm-detail-flag"> ({{ detail.flag }})</span></p>
+                <p class="wm-detail-line">{{ detail.rank }}</p>
+                <p v-if="detail.base" class="wm-detail-line">{{ detail.base }}</p>
+                <p v-if="detail.classLabel" class="wm-detail-line">Shaded: {{ detail.classLabel }}</p>
+              </template>
+              <p v-else class="wm-detail-hint">Click a ward on the map or in the list to see its figures here.</p>
+            </div>
+            <div ref="listEl" class="wm-list-scroll">
             <table class="wm-table">
               <caption class="wm-caption">Wards, best first where the measure has a good direction</caption>
               <thead><tr><th scope="col">Rank</th><th scope="col">Ward</th><th scope="col" class="num">Value</th></tr></thead>
               <tbody>
                 <tr v-for="r in rows" :key="r.properties.ward_code"
+                    :data-ward="r.properties.ward_code"
+                    tabindex="0"
                     :class="{ 'is-selected': selected === r.properties.ward_code }"
-                    @click="selected = r.properties.ward_code">
+                    :aria-current="selected === r.properties.ward_code ? 'true' : undefined"
+                    @click="selectWard(r.properties.ward_code, { zoom: true })"
+                    @keydown.enter.prevent="selectWard(r.properties.ward_code, { zoom: true })"
+                    @keydown.space.prevent="selectWard(r.properties.ward_code, { zoom: true })">
                   <td>{{ r.properties.rank ?? '—' }}</td>
                   <th scope="row">{{ r.properties.name }}</th>
                   <td class="num">
@@ -289,6 +376,7 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         </div>
 
@@ -333,15 +421,26 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
 .wm-legend li { display: flex; align-items: center; gap: 0.375rem; }
 .wm-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.25); display: inline-block; }
 .wm-swatch--none { background: #e8e8e8; }
-.wm-selected { margin: 0.5rem 0 0; font-size: 0.875rem; }
+.wm-reset { margin-top: 0.5rem; padding: 0.3125rem 0.75rem; border: 1px solid var(--ent-line-strong); border-radius: 6px; background: var(--ent-surface); color: var(--ent-text); font-size: 0.8125rem; cursor: pointer; }
+.wm-reset:hover { background: var(--ent-surface-2); }
 
-.wm-list-col { max-height: 30rem; overflow: auto; border: 1px solid var(--ent-line); border-radius: 6px; }
+.wm-list-col { display: flex; flex-direction: column; max-height: 30rem; border: 1px solid var(--ent-line); border-radius: 6px; }
+.wm-detail { flex: none; padding: 0.625rem 0.75rem; background: var(--ent-accent-soft); border-bottom: 1px solid var(--ent-accent-line); min-height: 6.5rem; }
+.wm-detail p { margin: 0; }
+.wm-detail-name { font-weight: 600; font-size: 0.9375rem; }
+.wm-detail-value { font-size: 1.375rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wm-detail-flag { font-size: 0.8125rem; font-weight: 400; color: var(--ent-text-2); }
+.wm-detail-line { font-size: 0.8125rem; color: var(--ent-text-2); }
+.wm-detail-hint { font-size: 0.875rem; color: var(--ent-text-2); }
+.wm-list-scroll { flex: 1; min-height: 0; overflow: auto; }
 .wm-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .wm-caption { text-align: left; padding: 0.5rem 0.75rem; color: var(--ent-text-3); font-size: 0.75rem; }
 .wm-table th, .wm-table td { padding: 0.375rem 0.75rem; border-top: 1px solid var(--ent-surface-2); text-align: left; font-weight: 400; }
 .wm-table thead th { position: sticky; top: 0; background: var(--ent-surface-2); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); }
 .wm-table tbody tr { cursor: pointer; }
-.wm-table tbody tr:hover, .wm-table tbody tr.is-selected { background: var(--ent-accent-soft); }
+.wm-table tbody tr:hover { background: var(--ent-surface-2); }
+.wm-table tbody tr.is-selected { background: var(--ent-accent-soft); box-shadow: inset 3px 0 0 var(--ent-accent); }
+.wm-table tbody tr:focus-visible { outline: 2px solid var(--ent-accent-ring); outline-offset: -2px; }
 .wm-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .wm-tag { display: block; font-size: 0.6875rem; color: var(--ent-text-3); }
 

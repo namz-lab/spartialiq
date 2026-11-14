@@ -11,21 +11,29 @@ const api = vi.hoisted(() => ({ index: vi.fn(), map: vi.fn() }))
 vi.mock('@/services/spatialEngine', () => ({ spatialEngineApi: { index: api.index, map: api.map } }))
 
 // MapLibre needs WebGL, which happy-dom does not have; the component's own logic is what is under test.
-const created = vi.hoisted(() => ({ maps: [] as unknown[] }))
+type Handler = { event: string; layer: string | null; cb: (e: unknown) => void }
+const created = vi.hoisted(() => ({ maps: [] as any[], hit: [] as unknown[] }))
 vi.mock('maplibre-gl', () => {
   class Map {
     private container: unknown
+    handlers: Handler[] = []
+    fits: unknown[][] = []
+    filters: unknown[][] = []
     constructor(opts: { container: unknown }) { this.container = opts.container; created.maps.push(this) }
     loaded() { return true }
     once(_e: string, cb: () => void) { cb() }
-    on() {}
+    // map.on(event, cb) or map.on(event, layer, cb): kept so a test can fire a click.
+    on(event: string, a: string | ((e: unknown) => void), b?: (e: unknown) => void) {
+      this.handlers.push(typeof a === 'string' ? { event, layer: a, cb: b as (e: unknown) => void } : { event, layer: null, cb: a })
+    }
+    queryRenderedFeatures() { return created.hit }
     addControl() {}
     addSource() {}
     addLayer() {}
     getSource() { return { setData: () => {} } }
     setPaintProperty() {}
-    setFilter() {}
-    fitBounds() {}
+    setFilter(...a: unknown[]) { this.filters.push(a) }
+    fitBounds(...a: unknown[]) { this.fits.push(a) }
     getContainer() { return this.container }
     getCanvas() { return { style: {} } }
     remove() {}
@@ -74,7 +82,15 @@ async function mountPage() {
   return wrapper
 }
 
+const scrollTo = vi.fn()
+const lastMap = () => created.maps[created.maps.length - 1]
+const fire = (event: string, layer: string | null, e: unknown) =>
+  lastMap().handlers.filter((h: Handler) => h.event === event && h.layer === layer).forEach((h: Handler) => h.cb(e))
+
 beforeEach(() => {
+  scrollTo.mockReset()
+  ;(Element.prototype as unknown as { scrollTo: unknown }).scrollTo = scrollTo
+  created.hit = []
   api.index.mockReset()
   api.map.mockReset()
   created.maps.length = 0
@@ -171,5 +187,105 @@ describe('ExecutiveWardMap', () => {
     expect(wrapper.find('[role="radiogroup"]').attributes('aria-label')).toBe('Measure to map')
     expect(wrapper.find('caption').exists()).toBe(true)
     expect(wrapper.find('.wm-canvas').attributes('aria-label')).toContain('Map of 4 wards')
+  })
+})
+
+describe('ExecutiveWardMap selection', () => {
+  const rowOf = (w: ReturnType<typeof mount>, code: string) => w.find(`tr[data-ward="${code}"]`)
+
+  it('shows a prompt, not an empty panel, until a ward is chosen', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('.wm-detail').text()).toContain('Click a ward on the map or in the list')
+  })
+
+  it('pins the selected ward\'s figures above the list, outside the part that scrolls', async () => {
+    const wrapper = await mountPage()
+    await rowOf(wrapper, 'Z1').trigger('click')
+    expect(wrapper.find('.wm-list-col > .wm-detail').exists()).toBe(true)
+    expect(wrapper.find('.wm-list-scroll .wm-detail').exists()).toBe(false)
+    const detail = wrapper.find('.wm-detail').text()
+    expect(detail).toContain('Ward 1')
+    expect(detail).toContain('87.4%')
+    expect(detail).toContain('Rank 1 of 2')
+    expect(detail).toContain('90 of 103')
+    expect(detail).toContain('Shaded: 75% or more')
+  })
+
+  it('clicking a list row selects the ward and zooms the map to it', async () => {
+    const wrapper = await mountPage()
+    const before = lastMap().fits.length
+    await rowOf(wrapper, 'Z2').trigger('click')
+    expect(rowOf(wrapper, 'Z2').attributes('aria-current')).toBe('true')
+    expect(rowOf(wrapper, 'Z2').classes()).toContain('is-selected')
+    expect(lastMap().fits.length).toBe(before + 1)
+    const [bounds, opts] = lastMap().fits[lastMap().fits.length - 1] as [unknown, { maxZoom: number }]
+    expect(bounds).toEqual([[29, -20], [30, -19]])
+    expect(opts.maxZoom).toBe(10)
+    expect(lastMap().filters[lastMap().filters.length - 1]).toEqual(['wards-selected', ['==', ['get', 'ward_code'], 'Z2']])
+  })
+
+  it('a row is reachable and selectable from the keyboard', async () => {
+    const wrapper = await mountPage()
+    expect(rowOf(wrapper, 'Z1').attributes('tabindex')).toBe('0')
+    await rowOf(wrapper, 'Z1').trigger('keydown', { key: 'Enter' })
+    expect(rowOf(wrapper, 'Z1').attributes('aria-current')).toBe('true')
+  })
+
+  it('clicking a ward on the map selects it and scrolls the list to its row, without moving the map', async () => {
+    const wrapper = await mountPage()
+    const before = lastMap().fits.length
+    fire('click', 'wards-fill', { features: [{ properties: { ward_code: 'Z2' } }] })
+    await flushPromises()
+    expect(rowOf(wrapper, 'Z2').attributes('aria-current')).toBe('true')
+    expect(wrapper.find('.wm-detail').text()).toContain('Ward 2')
+    expect(scrollTo).toHaveBeenCalled()
+    expect(lastMap().fits.length).toBe(before) // the user is already looking at the ward: no zoom
+  })
+
+  it('says why a ward without a figure is not ranked', async () => {
+    const wrapper = await mountPage()
+    await rowOf(wrapper, 'Z3').trigger('click')
+    expect(wrapper.find('.wm-detail').text()).toContain('Not ranked: the base is too small')
+    await rowOf(wrapper, 'Z4').trigger('click')
+    expect(wrapper.find('.wm-detail').text()).toContain('Not ranked: no data')
+  })
+
+  it('clicking empty map clears the selection', async () => {
+    const wrapper = await mountPage()
+    await rowOf(wrapper, 'Z1').trigger('click')
+    created.hit = []
+    fire('click', null, { point: { x: 1, y: 1 } })
+    await flushPromises()
+    expect(wrapper.find('.wm-detail').text()).toContain('Click a ward on the map or in the list')
+    expect(rowOf(wrapper, 'Z1').attributes('aria-current')).toBeUndefined()
+  })
+
+  it('a click that lands on a ward does not clear the selection', async () => {
+    const wrapper = await mountPage()
+    await rowOf(wrapper, 'Z1').trigger('click')
+    created.hit = [{}]
+    fire('click', null, { point: { x: 1, y: 1 } })
+    await flushPromises()
+    expect(rowOf(wrapper, 'Z1').attributes('aria-current')).toBe('true')
+  })
+
+  it('"Show all wards" appears with a selection, returns the whole district and clears it', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('.wm-reset').exists()).toBe(false)
+    await rowOf(wrapper, 'Z1').trigger('click')
+    const before = lastMap().fits.length
+    await wrapper.find('.wm-reset').trigger('click')
+    expect(lastMap().fits.length).toBe(before + 1)
+    expect(wrapper.find('.wm-reset').exists()).toBe(false)
+    expect(wrapper.find('.wm-detail').text()).toContain('Click a ward')
+  })
+
+  it('keeps the selected ward when another measure is chosen, so one ward can be compared across measures', async () => {
+    const wrapper = await mountPage()
+    await rowOf(wrapper, 'Z1').trigger('click')
+    await wrapper.findAll('input[type="radio"]')[1].setValue(true)
+    await flushPromises()
+    expect(rowOf(wrapper, 'Z1').attributes('aria-current')).toBe('true')
+    expect(wrapper.find('.wm-detail').text()).toContain('Ward 1')
   })
 })
