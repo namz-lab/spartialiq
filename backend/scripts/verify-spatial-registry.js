@@ -25,7 +25,7 @@ async function main() {
   const q = async (s, a) => (await pool.query(s, a)).rows
   try {
     const geo = await q(`SELECT DISTINCT f_table_schema AS s, f_table_name AS t FROM geometry_columns
-                          WHERE f_table_schema NOT IN ('pg_catalog', 'information_schema', 'topology', 'tiger', 'tiger_data')
+                          WHERE f_table_schema NOT IN ('pg_catalog', 'information_schema', 'topology', 'tiger', 'tiger_data', 'scratch')
                             AND f_table_schema NOT LIKE 'surveyor\\_%' ESCAPE '\\'
                           ORDER BY 1, 2`)
     const registered = new Map((await q('SELECT relation, concept_code, role FROM spatial_concept_source')).map((r) => [r.relation, r]))

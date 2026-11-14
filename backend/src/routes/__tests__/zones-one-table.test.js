@@ -93,3 +93,43 @@ describe('one zones table (migration 219)', () => {
     expect(d.column_default).toBe('false')
   })
 })
+
+// Migration 220: the real table has its convention name and the old name is a compatibility view.
+describe('spatial_planning.zone is the table (migration 220)', () => {
+  const relkind = async (rel) => (await q('SELECT relkind::text AS k FROM pg_class WHERE oid = to_regclass($1)', [rel]))[0]?.k
+
+  test('the zones table is spatial_planning.zone, and the old names are views', async () => {
+    expect(await relkind('spatial_planning.zone')).toBe('r')
+    for (const view of ['public.proposed_peri_urban_zones', 'public.zones_master', 'public.vungu_beyond_peri_urban_zones']) {
+      expect(await relkind(view)).toBe('v')
+    }
+  })
+
+  test('foreign keys follow the table: parcel_zoning, zone_land_use_controls and stands point at spatial_planning.zone', async () => {
+    const rows = await q(`SELECT conrelid::regclass::text AS child FROM pg_constraint WHERE confrelid = 'spatial_planning.zone'::regclass ORDER BY 1`)
+    const children = rows.map((r) => r.child)
+    for (const t of ['parcel_zoning', 'zone_land_use_controls', 'stands']) expect(children).toContain(t)
+  })
+
+  test('a write through the old name lands in the new table, and the plan-sync trigger still fires', async () => {
+    await client.query('SAVEPOINT w')
+    try {
+      await client.query(
+        `INSERT INTO public.proposed_peri_urban_zones (zone, geom)
+         VALUES ('Jest Zone 220', ST_Multi(ST_MakeEnvelope(10, 50, 10.1, 50.1, 4326)))`)
+      const [row] = await q(`SELECT plan_instrument_id, plan_zone_type_id FROM spatial_planning.zone WHERE zone = 'Jest Zone 220'`)
+      expect(row).toBeDefined()
+      expect(row.plan_instrument_id).not.toBeNull() // filed under the Vungu plan by the trigger
+      expect(row.plan_zone_type_id).not.toBeNull() // and given a zone type
+      await client.query(`UPDATE public.proposed_peri_urban_zones SET zone_description = 'edited through the old name' WHERE zone = 'Jest Zone 220'`)
+      expect((await q(`SELECT zone_description FROM spatial_planning.zone WHERE zone = 'Jest Zone 220'`))[0].zone_description).toBe('edited through the old name')
+    } finally {
+      await client.query('ROLLBACK TO SAVEPOINT w')
+    }
+  })
+
+  test('the old name has the same columns, in the same order, as the table', async () => {
+    const cols = async (rel) => (await q(`SELECT attname FROM pg_attribute WHERE attrelid = to_regclass($1) AND attnum > 0 AND NOT attisdropped ORDER BY attnum`, [rel])).map((r) => r.attname)
+    expect(await cols('public.proposed_peri_urban_zones')).toEqual(await cols('spatial_planning.zone'))
+  })
+})

@@ -8,8 +8,10 @@
  *   node scripts/load-master-plan.js [--gpkg path/to/file.gpkg]
  *
  * It runs after the migrations, and does what the migrations cannot do on their own:
- *   1. imports the six layers into public.vungu_*  (EPSG:4326, the same table names the
- *      migrations and routes expect)
+ *   1. imports the layers (EPSG:4326): the farm cadastre and parcels into public.vungu_*, and the council's
+ *      cemetery and waste sites through a staging table into council_ops.cemetery / waste_facility (their
+ *      convention names, migration 220; the old names are views, which ogr2ogr -overwrite cannot replace).
+ *      The zones are not loaded here: scripts/load-zones.js fills spatial_planning.zone from the council's files.
  *   2. gives the API's roles read access to them (they are created after the migrations that
  *      grant on the schema, so nothing else does)
  *   3. runs migration 187 again. On a fresh database it ran before these tables existed and so
@@ -27,15 +29,16 @@ const GPKG = (() => {
   return i > -1 ? process.argv[i + 1] : path.join(__dirname, '..', '..', 'data', 'spatial', 'Vungu_RDC_Master_Plan.gpkg')
 })()
 
-// source layer -> table, the same list as setup-spatial.mjs
+// source layer -> public table, as in setup-spatial.mjs
 const LAYERS = [
-  ['Cemetery', 'vungu_cemeteries'],
-  ['Waste management', 'vungu_waste_management'],
   ['Zim_national_farm_cadastre_wgs_84', 'vungu_farm_cadastre'],
   ['parcels', 'vungu_parcels'],
-  ['proposed_peri_urban_zones', 'vungu_proposed_peri_urban_zones'],
-  // beyond_peri_urban_zones is not loaded here: the council's file goes into the one zones table (scripts/load-zones.js,
-  // migration 219), and public.vungu_beyond_peri_urban_zones is a view over it.
+]
+
+// source layer -> the council_ops table it fills (staged in scratch, then copied: TRUNCATE + INSERT of the shared columns)
+const COUNCIL_OPS = [
+  ['Cemetery', 'council_ops.cemetery'],
+  ['Waste management', 'council_ops.waste_facility'],
 ]
 
 function fail(msg) { console.error(msg); process.exit(1) }
@@ -51,10 +54,10 @@ const nativeOgr = (() => {
   return spawnSync(exe, ['--version'], { encoding: 'utf8' }).status === 0 ? exe : null
 })()
 
-function importLayer(srcLayer, table) {
+function importLayer(srcLayer, qualifiedTable) {
   const pg = (host) => `PG:host=${host} port=${db.port || 5432} dbname=${db.pathname.slice(1)} ` +
     `user=${decodeURIComponent(db.username)} password=${decodeURIComponent(db.password)}`
-  const opts = ['-nln', `public.${table}`, '-lco', 'GEOMETRY_NAME=geom', '-lco', 'FID=fid', '-lco', 'LAUNDER=YES',
+  const opts = ['-nln', qualifiedTable, '-lco', 'GEOMETRY_NAME=geom', '-lco', 'FID=fid', '-lco', 'LAUNDER=YES',
     '-nlt', 'PROMOTE_TO_MULTI', '-t_srs', 'EPSG:4326', '-overwrite']
   if (nativeOgr) {
     execFileSync(nativeOgr, ['-f', 'PostgreSQL', pg(db.hostname), GPKG, srcLayer, ...opts], { stdio: 'inherit' })
@@ -69,15 +72,33 @@ function importLayer(srcLayer, table) {
 }
 
 async function main() {
-  console.log(`Loading ${LAYERS.length} master-plan layers from ${path.basename(GPKG)} (${nativeOgr ? 'ogr2ogr' : 'ogr2ogr in Docker'}) ...`)
-  for (const [src, table] of LAYERS) {
-    process.stdout.write(`  ${src} -> ${table}\n`)
-    importLayer(src, table)
-  }
-
+  console.log(`Loading ${LAYERS.length + COUNCIL_OPS.length} master-plan layers from ${path.basename(GPKG)} (${nativeOgr ? 'ogr2ogr' : 'ogr2ogr in Docker'}) ...`)
   const client = new Client({ connectionString: process.env.DATABASE_URL })
   await client.connect()
   try {
+    await client.query('CREATE SCHEMA IF NOT EXISTS scratch')
+    for (const [src, table] of LAYERS) {
+      process.stdout.write(`  ${src} -> ${table}
+`)
+      importLayer(src, `public.${table}`)
+    }
+    for (const [src, target] of COUNCIL_OPS) {
+      const staging = `scratch.master_plan_${target.split('.')[1]}`
+      process.stdout.write(`  ${src} -> ${target} (via ${staging})
+`)
+      importLayer(src, staging)
+      // Copy the columns both tables have; a target column the file lacks keeps its default.
+      const { rows: cols } = await client.query(
+        `SELECT a.attname FROM pg_attribute a
+          WHERE a.attrelid = $1::regclass AND a.attnum > 0 AND NOT a.attisdropped AND a.attgenerated = ''
+            AND EXISTS (SELECT 1 FROM pg_attribute b WHERE b.attrelid = $2::regclass AND b.attnum > 0 AND NOT b.attisdropped AND b.attname = a.attname)`,
+        [target, staging])
+      const list = cols.map((c) => `"${c.attname}"`).join(', ')
+      await client.query(`TRUNCATE ${target}`)
+      await client.query(`INSERT INTO ${target} (${list}) SELECT ${list} FROM ${staging}`)
+      await client.query(`DROP TABLE ${staging}`)
+    }
+
     // 2. Read access for the roles the API runs as (they exist once migration 168 has run).
     const tables = LAYERS.map(([, t]) => `public.${t}`).join(', ')
     for (const role of ['vungu_app', 'vungu_system', 'vungu_runtime']) {
