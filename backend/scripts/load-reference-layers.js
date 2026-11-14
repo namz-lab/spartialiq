@@ -15,6 +15,12 @@
  *                                    cut to Vungu: all five chiefdoms, business centres inside Vungu's wards, river
  *                                    lines that touch them (rivers with invalid coordinates in the source are left out).
  *
+ *   roads, planning_boundary  the council's GIS (roads.geojson, planning_boundary.geojson, supplied 14 November 2026):
+ *                                 roads -> basemap.road (all 1,207, with the road authority each is tagged with) and, for the
+ *                                 1,059 tagged VUNGU, council_ops.road_asset (unverified: OpenStreetMap geometry, no surface or
+ *                                 condition, none invented); planning_boundary -> admin.planning_boundary (as supplied: the
+ *                                 Gweru Rural polygon, ZW1704, not the union of the wards).
+ *
  * Voters become spatial_engine.ward_denominator rows of kind 'registered_voters' (as of 2023): the sum of the
  * polling areas whose point on surface lies in each of the council's current wards. Registered voters are adults on
  * the roll, not the population, and the source says so. A ward number that disagrees with the ward that holds the area
@@ -37,6 +43,8 @@ const dir = path.resolve(arg('dir', path.join(__dirname, '..', 'data', 'referenc
 
 const ZEC = 'Zimbabwe Electoral Commission, Midlands polling areas and stations, file of 20 April 2023 (Vungu RDC rows)'
 const LEGACY = 'Earlier VunGIS legacy layer (gweru_legacy.sql), cut to Vungu'
+const ROADS = 'OpenStreetMap road centrelines, council-supplied roads.geojson (14 November 2026)'
+const BOUNDARY = 'Council GIS planning_boundary.geojson (14 November 2026), as supplied'
 
 const read = (name) => {
   const file = path.join(dir, `${name}.geojson`)
@@ -85,6 +93,53 @@ async function main() {
 
     report.polling_stations = await replaceLayer(db, 'admin.polling_station', ['polling_code', 'name', 'ward_number', 'voters', 'integrity', 'source'],
       read('polling_stations').map(feat).map(({ p, geometry }) => ({ geometry, values: [txt(p.polling_code), txt(p.name), int(p.ward_number), int(p.voters), txt(p.integrity), ZEC] })), 'Point')
+
+    // ── The road network, and the council's own roads in its inventory ──
+    const roads = read('roads').map(feat)
+    const reverse = roads.filter((r) => r.p.oneway === 'T').length
+    if (reverse) throw new Error(`${reverse} roads are one-way in the reverse direction; basemap.road keeps no direction, so nothing was loaded.`)
+    await db.query('DELETE FROM basemap.road WHERE source = $1', [ROADS])
+    for (const { p, geometry } of roads) {
+      await db.query(
+        `INSERT INTO basemap.road (source_id, source, class, name, ref, oneway, max_speed, layer, bridge, tunnel, road_authority, geom)
+         VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7::int, 0), $8, $9, $10, $11, ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($12), 4326)))`,
+        [txt(p.osm_id), ROADS, txt(p.fclass), txt(p.name), txt(p.ref), p.oneway === null || p.oneway === undefined ? null : p.oneway === 'F',
+          int(p.maxspeed), int(p.layer), p.bridge === null || p.bridge === undefined ? null : p.bridge === 'T',
+          p.tunnel === null || p.tunnel === undefined ? null : p.tunnel === 'T', txt(p.authority), JSON.stringify(geometry)])
+    }
+    report.roads = roads.length
+
+    // The council's own inventory: only the roads tagged VUNGU. The demonstration roads (DEMO-RD-*) give way to them.
+    const { rowCount: demo } = await db.query("DELETE FROM council_ops.road_asset WHERE asset_code LIKE 'DEMO-RD-%'")
+    await db.query("DELETE FROM council_ops.road_asset WHERE source = $1", [ROADS])
+    const seen = new Map()
+    let inventory = 0
+    for (const { p, geometry } of roads.filter((r) => r.p.authority === 'VUNGU')) {
+      const base = `OSM-${p.osm_id}`
+      const n = (seen.get(base) ?? 0) + 1
+      seen.set(base, n)
+      await db.query(
+        `INSERT INTO council_ops.road_asset (asset_code, name, hierarchy, authority, length_m, status, data_quality, source, geom)
+         SELECT $1, $2, $3, 'Vungu RDC', round((ST_Length(g::geography))::numeric, 2), 'active', 'unverified', $4, g
+           FROM (SELECT ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($5), 4326)) AS g) t`,
+        [n === 1 ? base : `${base}-${n}`, txt(p.name), txt(p.fclass), ROADS, JSON.stringify(geometry)])
+      inventory++
+    }
+    report.road_assets = inventory
+    if (demo) report.demo_roads_replaced = demo
+
+    // ── The planning boundary, as supplied ──
+    const boundary = read('planning_boundary')
+    if (boundary.length !== 1) throw new Error(`planning_boundary.geojson holds ${boundary.length} features; one was expected.`)
+    const bp = boundary[0].properties ?? {}
+    await db.query('DELETE FROM admin.planning_boundary WHERE authority_id = $1', [auth.id])
+    await db.query(
+      `INSERT INTO admin.planning_boundary (authority_id, name, adm2_pcode, adm1_pcode, source, note, geom)
+       VALUES ($1, $2, $3, $4, $5, $6, ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($7), 4326)))`,
+      [auth.id, txt(bp.ADM2_EN) ?? 'Planning boundary', txt(bp.ADM2_PCODE), txt(bp.ADM1_PCODE), BOUNDARY,
+        'The polygon as supplied: the Gweru Rural district (ZW1704) with the city of Gweru cut out. Not the union of the wards of the council, and not a Council act.',
+        JSON.stringify(boundary[0].geometry)])
+    report.planning_boundary = 1
 
     report.polling_areas = await replaceLayer(db, 'admin.polling_area',
       ['polling_code', 'name', 'ward_number', 'voters', 'integrity', 'old_name', 'address', 'assembly', 'modified', 'source'],

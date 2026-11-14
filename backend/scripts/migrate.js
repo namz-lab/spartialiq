@@ -355,6 +355,9 @@ const MIGRATIONS = [
   // Zones and council points move to their convention names (spatial_planning.zone, council_ops.cemetery, waste_facility,
   // health_facility); the old names stay as views. Rollback: migrations/rollback/220_spatial_table_names.down.sql.
   '220_spatial_table_names.sql',
+  // The road network (basemap.road) and the planning boundary (admin.planning_boundary), with compatibility views.
+  // Rollback: migrations/rollback/221_roads_and_planning_boundary.down.sql.
+  '221_roads_and_planning_boundary.sql',
 ]
 
 function createPool(env = process.env) {
