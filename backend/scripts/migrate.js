@@ -344,6 +344,8 @@ const MIGRATIONS = [
   // The Executive Arm's units: engineer and hr_social_officer roles, the establishment's unit_key, unit-owned
   // ward measures (road_density, premises_certified). Rollback: migrations/rollback/216_executive_units.down.sql.
   '216_executive_units.sql',
+  // Road density by segment midpoint (GEOS 3.9 returned an empty ST_Intersection for real ward polygons).
+  '217_road_density_segments.sql',
 ]
 
 function createPool(env = process.env) {
