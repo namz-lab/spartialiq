@@ -341,6 +341,9 @@ const MIGRATIONS = [
   // The spatial engine: ward measures for the Chief Executive's maps (schema spatial_engine). Reads registers
   // only; stores its own results. Rollback: migrations/rollback/215_spatial_engine.down.sql.
   '215_spatial_engine.sql',
+  // The Executive Arm's units: engineer and hr_social_officer roles, the establishment's unit_key, unit-owned
+  // ward measures (road_density, premises_certified). Rollback: migrations/rollback/216_executive_units.down.sql.
+  '216_executive_units.sql',
 ]
 
 function createPool(env = process.env) {

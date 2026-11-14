@@ -41,6 +41,9 @@ const VALID_ROLES = new Set([
   'accounting_officer',
   // Migration 208.
   'cash_supervisor',
+  // Migration 216: heads of the Executive Arm's other units.
+  'engineer',
+  'hr_social_officer',
 ])
 
 const DEFAULT_DEMO_USERS = [
@@ -86,6 +89,9 @@ const DEFAULT_DEMO_USERS = [
   { email: 'demo.ceo@vungu.test', name: 'Demo Accounting Officer', role: 'accounting_officer' },
   // Migration 208. Recovers an abandoned drawer with a witness; never the cashier or the verifier.
   { email: 'demo.supervisor@vungu.test', name: 'Demo Cash Supervisor', role: 'cash_supervisor', department: 'Finance' },
+  // Migration 216. Heads of Engineering and of HR / Social Services / Administration; each lands on their own unit dashboard.
+  { email: 'demo.engineer@vungu.test', name: 'Demo Engineer', role: 'engineer', department: 'Engineering' },
+  { email: 'demo.hr-social@vungu.test', name: 'Demo HR and Social Services Officer', role: 'hr_social_officer', department: 'Human Resources' },
 ]
 
 function normalizeEnabled(value) {
@@ -158,6 +164,28 @@ async function upsertDemoUser(pool, user) {
   return rows[0]
 }
 
+/**
+ * Seats the demo accounts in the Executive Arm posts of the organisation chart, so a unit dashboard shows a
+ * named head instead of a vacancy. Only posts with no holder are filled, except the Chief Executive's post,
+ * which migration 190 may have given to the IT administrator. Nothing is invented: a post with no demo
+ * account stays vacant.
+ */
+async function seatDemoPostHolders(pool, seeded) {
+  const byRole = new Map()
+  for (const u of seeded) if (!byRole.has(u.role)) byRole.set(u.role, u)
+  let seated = 0
+  for (const [role, u] of byRole) {
+    const { rowCount } = await pool.query(
+      `UPDATE public.admin_org_position p SET holder_id = $2, updated_at = now()
+          WHERE p.system_role = $1
+            AND (p.holder_id IS NULL
+                 OR (p.reports_to IS NULL AND p.holder_id IN (SELECT id FROM public.users WHERE role = 'admin')))`,
+      [role, u.id])
+    seated += rowCount
+  }
+  return seated
+}
+
 async function seedDemoUsers(env = process.env) {
   if (!normalizeEnabled(env.DEMO_SEED_ENABLED)) {
     console.log('[demo-seed] skipped: DEMO_SEED_ENABLED is not true')
@@ -172,6 +200,13 @@ async function seedDemoUsers(env = process.env) {
       seeded.push(await upsertDemoUser(pool, user))
     }
     console.log(`[demo-seed] seeded ${seeded.length} demo users`)
+    try {
+      const seated = await seatDemoPostHolders(pool, seeded)
+      if (seated) console.log(`[demo-seed] seated ${seated} organisation-chart posts`)
+    } catch (err) {
+      // An older database without migration 216 has no unit_key; the accounts are still seeded.
+      console.warn(`[demo-seed] organisation chart not updated: ${err.message}`)
+    }
     return seeded
   } finally {
     await pool.end()

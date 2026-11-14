@@ -121,6 +121,15 @@ describe('ExecutiveOverviewView', () => {
     expect(wrapper.text().toLowerCase()).not.toContain('arrear')
   })
 
+  it('opens each unit dashboard from its card (the drill-down), HR and Social Services sharing one unit', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    const hrefs = wrapper.findAll('a').filter((a) => a.text().includes('Unit dashboard')).map((a) => a.attributes('href'))
+    expect(hrefs).toEqual([
+      '/units/finance', '/units/planning', '/units/engineering', '/units/social_admin', '/units/social_admin', '/units/audit',
+    ])
+  })
+
   it('links the finance card to the existing finance dashboard', async () => {
     api.overview.mockResolvedValue(FULL)
     const wrapper = await mountPage()

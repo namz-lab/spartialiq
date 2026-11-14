@@ -52,6 +52,17 @@ async function seed (db) {
     }, 'asset_code = $1', [code])
   }
 
+  // The ward map for road density needs geometry. Where the real ward polygons are loaded, give each demonstration
+  // road a short line inside the ward it is labelled with (a stand-in, like everything here, not a surveyed route);
+  // where they are not, the roads stay without geometry and the map says "no data" rather than inventing a figure.
+  const { rowCount: drawn } = await db.query(
+    `UPDATE council_ops.road_asset r
+        SET geom = ST_Multi(ST_MakeLine(ST_PointOnSurface(w.geom), ST_Translate(ST_PointOnSurface(w.geom), 0.03, 0)))
+       FROM admin.ward w
+      WHERE r.asset_code LIKE 'DEMO-RD-%' AND r.geom IS NULL
+        AND w.ward_code = 'ZEC23-VUNGU-' || lpad(r.ward, 2, '0') AND w.geom IS NOT NULL`)
+  if (drawn) console.log(`[executive-demo] drew ${drawn} demonstration roads inside their wards`)
+
   const water = [
     ['DEMO-WP-001', 'borehole', 'Madigane borehole (demo)', '2', 'working'],
     ['DEMO-WP-002', 'borehole', 'Nyama borehole (demo)', '3', 'working'],

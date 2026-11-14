@@ -34,11 +34,15 @@ const FINANCE_ROLES = [
   'cash_supervisor',
 ]
 
+/** Heads of the Executive Arm's other units (migration 216). Each arrives with a unit dashboard at /units/<key>. */
+const UNIT_ROLES = ['engineer', 'hr_social_officer']
+
 const ALL_ROLES = [
   'admin', 'planner', 'eo', 'env_officer', 'building_inspector',
   'planning_clerk', 'surveyor', 'gis_officer',
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
   ...FINANCE_ROLES,
+  ...UNIT_ROLES,
   'viewer', 'registered', 'public',
 ]
 
@@ -48,6 +52,7 @@ const STAFF_ROLES = [
   'planning_clerk', 'surveyor', 'gis_officer',
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
   ...FINANCE_ROLES,
+  ...UNIT_ROLES,
 ]
 
 /** Council clients (citizens). Never staff; they see only their own records. */
@@ -85,6 +90,8 @@ const ROLE_LABELS = {
   revenue_officer:    { name: 'Revenue Officer',             short: 'Revenue',    summary: 'Valuation roll, rates accounts, billing runs, debtors and arrears. Drafts tariffs and raises runs; approves and commits neither.' },
   accounting_officer: { name: 'Accounting Officer (CEO)',    short: 'CEO',        summary: 'Reads the council’s whole financial position, the cash office and the audit trail. Writes nothing in this phase.' },
   cash_supervisor:    { name: 'Cash Supervisor',             short: 'Supervisor', summary: 'Watches every till, recovers an abandoned drawer by a witnessed count, assigns cashiers and verifies cash-ups. Takes no money and keeps no book.' },
+  engineer:           { name: 'Engineer',                    short: 'Engineer',   summary: 'Heads Engineering and Works: roads, water points, council assets and projects. Reads own unit’s dashboard and ward maps.' },
+  hr_social_officer:  { name: 'HR, Social Services & Administration Officer', short: 'HR & Social', summary: 'Heads Human Resources, Social Services and Administration. Reads own unit’s dashboard and ward maps.' },
   viewer:             { name: 'Citizen (legacy account)',    short: 'Citizen',    summary: 'A client account from before self-registration. Same access as a registered citizen.' },
   registered:         { name: 'Registered citizen',          short: 'Citizen',    summary: 'Applies, pays and tracks their own case. Issued on self-registration.' },
   public:             { name: 'Public',                      short: 'Public',     summary: 'Anonymous visitor. The explorer and the public registers only.' },
@@ -204,6 +211,6 @@ function capabilitiesFor(role) {
 }
 
 module.exports = {
-  ALL_ROLES, STAFF_ROLES, FINANCE_ROLES, CLIENT_ROLES, ASSIGNABLE_ROLES, ROLE_LABELS,
+  ALL_ROLES, STAFF_ROLES, FINANCE_ROLES, UNIT_ROLES, CLIENT_ROLES, ASSIGNABLE_ROLES, ROLE_LABELS,
   CAPABILITIES, matrix, capabilitiesFor,
 }

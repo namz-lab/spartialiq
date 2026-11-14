@@ -7,8 +7,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const api = vi.hoisted(() => ({ index: vi.fn(), map: vi.fn() }))
-vi.mock('@/services/spatialEngine', () => ({ spatialEngineApi: { index: api.index, map: api.map } }))
+const api = vi.hoisted(() => ({
+  index: vi.fn(), map: vi.fn(), wardProfile: vi.fn(), unitIndex: vi.fn(), unitMap: vi.fn(),
+}))
+vi.mock('@/services/spatialEngine', () => ({ spatialEngineApi: { index: api.index, map: api.map, wardProfile: api.wardProfile } }))
+vi.mock('@/services/units', () => ({ unitsApi: { mapsIndex: api.unitIndex, map: api.unitMap } }))
+vi.mock('vue-router', () => ({ RouterLink: { name: 'RouterLink', props: ['to'], template: '<a :href="to"><slot /></a>' } }))
 
 // MapLibre needs WebGL, which happy-dom does not have; the component's own logic is what is under test.
 type Handler = { event: string; layer: string | null; cb: (e: unknown) => void }
@@ -76,8 +80,8 @@ const MAP: WardMap = {
   ],
 }
 
-async function mountPage() {
-  const wrapper = mount(ExecutiveWardMap)
+async function mountPage(props: { unitKey?: 'engineering' } = {}) {
+  const wrapper = mount(ExecutiveWardMap, { props })
   await flushPromises()
   return wrapper
 }
@@ -93,6 +97,12 @@ beforeEach(() => {
   created.hit = []
   api.index.mockReset()
   api.map.mockReset()
+  api.wardProfile.mockReset()
+  api.unitIndex.mockReset()
+  api.unitMap.mockReset()
+  api.wardProfile.mockRejectedValue(new Error('not under test'))
+  api.unitIndex.mockResolvedValue(INDEX)
+  api.unitMap.mockResolvedValue(MAP)
   created.maps.length = 0
   api.index.mockResolvedValue(INDEX)
   api.map.mockResolvedValue(MAP)
@@ -287,5 +297,53 @@ describe('ExecutiveWardMap selection', () => {
     await flushPromises()
     expect(rowOf(wrapper, 'Z1').attributes('aria-current')).toBe('true')
     expect(wrapper.find('.wm-detail').text()).toContain('Ward 1')
+  })
+})
+
+describe('the unit drill-down', () => {
+  const rowOf = (w: ReturnType<typeof mount>, code: string) => w.find(`tr[data-ward="${code}"]`)
+
+  const PROFILE = {
+    ward: { ward_code: 'Z1', name: '1', basis: 'interim', area_km2: 10 },
+    computed_at: null,
+    units: {
+      engineering: [{ measure_key: 'water_points_working', label: 'Water points working', unit: '% working', kind: 'share', direction: 'higher_is_better',
+        unit_key: 'engineering', owner_dept: 'Engineering', value: 66.7, raw_value: 66.7, numerator: 2, denominator: 3, reliability: 'ok', rank: 1, ranked: 2 }],
+      social_admin: [{ measure_key: 'premises_certified', label: 'Health premises with a valid fitness certificate', unit: '% certified', kind: 'share', direction: 'higher_is_better',
+        unit_key: 'social_admin', owner_dept: 'Social Services', value: null, raw_value: null, numerator: null, denominator: null, reliability: 'no_data', rank: null, ranked: 0 }],
+    },
+  }
+
+  it("reads the selected ward across every unit and links into each unit, saying 'no data' where there is none", async () => {
+    api.wardProfile.mockResolvedValue(PROFILE)
+    const wrapper = await mountPage()
+    await rowOf(wrapper, 'Z1').trigger('click')
+    await flushPromises()
+    expect(api.wardProfile).toHaveBeenCalledWith('Z1')
+    const profile = wrapper.find('.wm-profile')
+    expect(profile.text()).toContain('Water points working')
+    expect(profile.text()).toContain('66.7%')
+    expect(profile.text()).toContain('rank 1 of 2')
+    expect(profile.text()).toContain('no data')
+    expect(profile.findAll('a').map((a) => a.attributes('href')).sort()).toEqual(['/units/engineering', '/units/social_admin'])
+  })
+
+  it('says so when the ward profile cannot be read, without hiding the ward map', async () => {
+    const wrapper = await mountPage()
+    await rowOf(wrapper, 'Z1').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.wm-profile').text()).toContain('could not be read just now')
+    expect(wrapper.find('.wm-detail').text()).toContain('Ward 1')
+  })
+
+  it("on a unit's own dashboard it reads only that unit's measures and offers no cross-unit profile", async () => {
+    const wrapper = await mountPage({ unitKey: 'engineering' })
+    expect(api.unitIndex).toHaveBeenCalledWith('engineering')
+    expect(api.unitMap).toHaveBeenCalledWith('engineering', 'parcel_account_coverage')
+    expect(api.index).not.toHaveBeenCalled()
+    await rowOf(wrapper, 'Z1').trigger('click')
+    await flushPromises()
+    expect(api.wardProfile).not.toHaveBeenCalled()
+    expect(wrapper.find('.wm-profile').exists()).toBe(false)
   })
 })

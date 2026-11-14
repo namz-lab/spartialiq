@@ -4,7 +4,7 @@
 // Finance is read separately, from the existing executive finance dashboard.
 import api from './api'
 
-interface SectionState {
+export interface SectionState {
   /** False when the department's register is empty: show `note`, not zeros. */
   loaded: boolean
   note?: string

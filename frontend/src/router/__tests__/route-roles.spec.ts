@@ -152,6 +152,13 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
     expect(rolesFor('/executive')).toEqual(['accounting_officer'])
   })
 
+  it('admits the chief executive and the five unit heads to a unit dashboard, and nobody else', () => {
+    // The API enforces which unit each may open (backend src/config/units.js); the route must not admit a role
+    // the API refuses outright, nor leave out one that has a unit.
+    expect([...rolesFor('/units/engineering')].sort()).toEqual(
+      ['accounting_officer', 'auditor', 'engineer', 'eo', 'finance_admin', 'hr_social_officer'].sort())
+  })
+
   it('never lists a role the backend cannot issue', () => {
     // The DB CHECK constraint (migration 061, widened by 132 for the GIS
     // Branch and by 188, 207 and 208 for finance) is the authority; a role outside it makes
@@ -167,6 +174,8 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
       'accountant', 'cashier', 'revenue_officer', 'accounting_officer',
       // Migration 208: the senior cashier who supervises the tills.
       'cash_supervisor',
+      // Migration 216: heads of the Executive Arm's other units.
+      'engineer', 'hr_social_officer',
     ]
     for (const r of router.getRoutes()) {
       for (const role of (r.meta?.roles ?? []) as Role[]) {
@@ -196,6 +205,9 @@ describe('roleHome', () => {
       auditor:            '/finance',
       // The chief executive: the cross-department overview, not the finance console.
       accounting_officer: '/executive',
+      // Migration 216: each of these two lands on their own unit's dashboard.
+      engineer:           '/units/engineering',
+      hr_social_officer:  '/units/social_admin',
       viewer:             '/citizen',
       registered:         '/citizen',
       public:             '/citizen',
