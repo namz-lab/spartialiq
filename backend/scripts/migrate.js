@@ -352,6 +352,9 @@ const MIGRATIONS = [
   // One zones table: the beyond layer reads it, spatial_planning.zone, and the public-preview switch for a draft plan.
   // Rollback: migrations/rollback/219_zones_one_table.down.sql.
   '219_zones_one_table.sql',
+  // Zones and council points move to their convention names (spatial_planning.zone, council_ops.cemetery, waste_facility,
+  // health_facility); the old names stay as views. Rollback: migrations/rollback/220_spatial_table_names.down.sql.
+  '220_spatial_table_names.sql',
 ]
 
 function createPool(env = process.env) {

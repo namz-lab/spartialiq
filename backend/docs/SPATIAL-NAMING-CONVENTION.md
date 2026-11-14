@@ -138,3 +138,29 @@ Still to do: switch the remaining readers (the 44 backend files, the tile id and
 `proposed_peri_urban_zones` to `spatial_planning.zone`, make that a real table, retire `vungu_proposed_peri_urban_zones` (still
 loaded by `load-master-plan.js`, no longer read by tiles or QGIS) and the retired beyond copy, and refresh the QGIS style of the
 beyond layer (it is categorised on the old FLSCF/SSCF values).
+
+## Status after migration 220 (14 November 2026)
+
+Zones and the council's point layers now have their convention names. Each old name stays as a **view** over the new table, with the same
+columns in the same order, so the tile config, the QGIS project, the portal catalogue and every query keep working; a write through an old
+name reaches the new table. `node scripts/verify-spatial-registry.js` passes again (every spatial relation is classified; scratch schemas are skipped).
+
+| Concept | Table (real) | Old name (now a view) | Other views |
+|---|---|---|---|
+| `planning_zone` | `spatial_planning.zone` | `public.proposed_peri_urban_zones` | `public.zones_master` (peri-urban zones, the map layer), `public.vungu_beyond_peri_urban_zones` (the areas beyond) |
+| `cemetery` | `council_ops.cemetery` | `public.vungu_cemeteries` | |
+| `waste_facility` | `council_ops.waste_facility` | `public.vungu_waste_management` | |
+| `health_facility` (new concept) | `council_ops.health_facility` | `public.gweru_health_centres` | |
+
+Retired, kept until someone drops them: `public.vungu_proposed_peri_urban_zones_retired`, `public.vungu_beyond_peri_urban_zones_retired`.
+The master-plan loader no longer loads the raw zone layers, and loads the cemetery and waste sites through a staging table into
+`council_ops` (an ogr2ogr `-overwrite` cannot replace a view).
+
+Still to do, in order:
+1. **Parcels**: switch the readers of `vungu_parcels`, `vungu_farm_cadastre`, `gweru_rural_farms` and `stands` (12 backend and 12 frontend files,
+   the parcel-zoning engine) to `land.parcel`, then make the old names views.
+2. **Basemap** (`basemap.*`) and the admin country, province and district tables: not loaded in the development database; the loaders must use
+   the convention names from the start.
+3. **Column names**: `zone` to `name`, `zone_code` to `code`, `fid` to `id` (the rules in section "Rules", 6 and 10).
+4. **Move the readers** (44 backend files, the tile ids and the QGIS layer names) from the old names to the new, then drop the old-name views.
+   The tile SQL quotes the table as one identifier, so a tile layer can only serve a schema-qualified table once that is changed.
