@@ -145,6 +145,13 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
     expect(m?.roles).toBeUndefined()
   })
 
+  it("admits only the chief executive to the Chief Executive's overview", () => {
+    // The overview reads planning, land, engineering, audit and social services in one page. The API
+    // admits the accounting officer only (backend src/routes/executive-overview.js); the route must
+    // not be wider, or a person would reach a screen whose every call is refused.
+    expect(rolesFor('/executive')).toEqual(['accounting_officer'])
+  })
+
   it('never lists a role the backend cannot issue', () => {
     // The DB CHECK constraint (migration 061, widened by 132 for the GIS
     // Branch and by 188, 207 and 208 for finance) is the authority; a role outside it makes
@@ -187,6 +194,8 @@ describe('roleHome', () => {
       finance_committee:  '/finance',
       publisher:          '/finance',
       auditor:            '/finance',
+      // The chief executive: the cross-department overview, not the finance console.
+      accounting_officer: '/executive',
       viewer:             '/citizen',
       registered:         '/citizen',
       public:             '/citizen',

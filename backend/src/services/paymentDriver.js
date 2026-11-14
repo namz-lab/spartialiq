@@ -208,7 +208,7 @@ const paynowDriver = {
       id:             PAYNOW_ID(),
       reference:      String(payment.id),
       amount:         amount,
-      additionalinfo: `${payment?.metadata?.title || payment?.purpose || 'Council payment'} ${payment.id}`,
+      additionalinfo: `Vungu RDC application fee ${payment.id}`,
       returnurl:      PAYNOW_RETURN(),
       resulturl:      PAYNOW_RESULT(),
       authemail:      payment.payer_email || '',

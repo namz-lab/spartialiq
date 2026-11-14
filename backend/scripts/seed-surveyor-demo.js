@@ -79,13 +79,32 @@ async function seed (db) {
   const surveyorUser = await publicUserId(db, 'demo.surveyor@vungu.test')
   const gisUser = await publicUserId(db, 'demo.gis@vungu.test')
 
-  const surveyUsers = await db.query('SELECT id FROM survey.users WHERE email = $1', ['demo.surveyor@vungu.test'])
-  if (!surveyUsers.rows.length) throw new Error('No survey.users row for demo.surveyor@vungu.test')
+  // The survey module keeps its own user and surveyor-profile rows. On the developers' database
+  // they exist already; on one built from the migrations alone nothing creates them, so a
+  // stand-in pair is made (tagged, so --undo removes it) for the surveyor's console to open on.
+  let surveyUsers = await db.query('SELECT id FROM survey.users WHERE email = $1', ['demo.surveyor@vungu.test'])
+  if (!surveyUsers.rows.length) {
+    const { rows: [pub] } = await db.query('SELECT password_hash FROM public.users WHERE id = $1', [surveyorUser])
+    await ensure(db, TAG, 'survey.users', {
+      email: 'demo.surveyor@vungu.test',
+      password_hash: pub.password_hash,
+      user_type: 'registered_surveyor',
+    }, 'email = $1', ['demo.surveyor@vungu.test'])
+    surveyUsers = await db.query('SELECT id FROM survey.users WHERE email = $1', ['demo.surveyor@vungu.test'])
+  }
   const surveyUserId = surveyUsers.rows[0].id
 
-  const profile = await db.query(
+  let profile = await db.query(
     'SELECT id FROM survey.surveyor_profiles WHERE user_id = $1 LIMIT 1', [surveyUserId])
-  if (!profile.rows.length) throw new Error('No survey.surveyor_profiles row for the demo surveyor')
+  if (!profile.rows.length) {
+    await ensure(db, TAG, 'survey.surveyor_profiles', {
+      user_id: surveyUserId,
+      name: 'Demo Surveyor',
+      surveyor_type: 'registered',
+      license_number: 'DEMO-0001',
+    }, 'user_id = $1', [surveyUserId])
+    profile = await db.query('SELECT id FROM survey.surveyor_profiles WHERE user_id = $1 LIMIT 1', [surveyUserId])
+  }
   const profileId = profile.rows[0].id
 
   // ── 1. Legacy surveyors row for the demo surveyor's login ──────────────

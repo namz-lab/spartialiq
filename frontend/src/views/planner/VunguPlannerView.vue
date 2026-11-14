@@ -1448,9 +1448,11 @@ async function connectQgis(quiet = false) {
   qgisError.value = ''
   try {
     const health = await ogcService.health().catch(() => null)
-    qgisStatus.value = health?.data?.status ?? 'degraded'
-    // The project catalogue is read from the .qgs file even when QGIS Server
-    // itself is down, so a failed probe must not hide those layers.
+    qgisStatus.value = health?.data?.status ?? 'offline'
+    if (!health || qgisStatus.value === 'offline') {
+      qgisError.value = 'QGIS Server is not running'
+      return
+    }
     const layers = await ogcService.getAvailableLayers()
     qgisLayers.value = layers.map((l: any) => ({
       name: l.name,

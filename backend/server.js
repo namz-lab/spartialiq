@@ -108,6 +108,8 @@ const { surveyorComputeRoutes } = require('./src/routes/surveyorCompute')
 const { controlPointRoutes } = require('./src/routes/controlPoints')
 const { propertyRoutes } = require('./src/routes/properties')
 const { councilOpsRoutes } = require('./src/routes/council-ops')
+const { executiveOverviewRoutes } = require('./src/routes/executive-overview')
+const { spatialEngineRoutes } = require('./src/routes/spatial-engine')
 const { councilRegistersRoutes } = require('./src/routes/council-registers')
 // Integrated budget and financial management (migration 188). Seven modules, split by the thing
 // each one is responsible for rather than by screen: configuration, budgets, imports, projects,
@@ -251,36 +253,17 @@ async function build() {
     'http://localhost:5174',
     'http://localhost:5175',
     'http://localhost:3000',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-    'http://127.0.0.1:5175',
-    'http://127.0.0.1:3000',
     'http://127.0.0.1:58487',
-    'http://tauri.localhost',
-    'https://tauri.localhost',
-    'tauri://localhost',
   ]
   const configuredOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '')
     .split(',')
     .map(origin => origin.trim())
     .filter(Boolean)
-  // The desktop window is http://tauri.localhost and calls the API on
-  // 127.0.0.1:3000. Without this origin the browser drops every response,
-  // so PostGIS layers and the QGIS catalogue look disconnected.
-  const devOriginAllowed = (origin) => {
-    if (!origin) return true
-    if (localOrigins.includes(origin) || configuredOrigins.includes(origin)) return true
-    try {
-      const url = new URL(origin)
-      if (url.protocol === 'tauri:') return true
-      if (url.hostname === 'tauri.localhost') return true
-      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true
-    } catch { /* not a URL */ }
-    return false
-  }
-  const corsOrigins = process.env.NODE_ENV === 'production'
-    ? (configuredOrigins.length ? configuredOrigins : ['https://vungu-rdc.org'])
-    : (origin, cb) => { cb(null, devOriginAllowed(origin) ? true : false) }
+  const corsOrigins = configuredOrigins.length
+    ? configuredOrigins
+    : process.env.NODE_ENV === 'production'
+      ? ['https://vungu-rdc.org']
+      : localOrigins
 
   // ── Security headers (@fastify/helmet) ──────────────────────────────────
   // Was installed but never registered. Without this, browsers receive no
@@ -738,6 +721,8 @@ async function build() {
     await server.register(gisStyleRoutes, { prefix: '/api' })
     await server.register(planningRoutes, { prefix: '/api' })
     await server.register(councilOpsRoutes, { prefix: '/api' })
+    await server.register(executiveOverviewRoutes, { prefix: '/api' })
+    await server.register(spatialEngineRoutes, { prefix: '/api' })
     await server.register(councilRegistersRoutes, { prefix: '/api' })
     // Finance. All under /api, same as everything else; the public surface is distinguished by its
     // own /public/finance path prefix and by using optionalAuth rather than a permission guard.
@@ -881,34 +866,8 @@ async function build() {
     console.log(server.printRoutes())
   }
 
-  // Hosted demo: the built Vue app sits next to the API. Real files are
-  // served; any other page URL returns the app shell so the router can open it.
-  const publicDir = process.env.PUBLIC_DIR
-    ? require('path').resolve(process.env.PUBLIC_DIR)
-    : ''
-  if (publicDir) {
-    await server.register(require('@fastify/static'), {
-      root: publicDir,
-      prefix: '/',
-      decorateReply: false,
-      index: 'index.html',
-    })
-  }
-
   // 404 handler
   server.setNotFoundHandler(async (request, reply) => {
-    const pagePath = String(request.url || '').split('?')[0]
-    if (
-      publicDir &&
-      request.method === 'GET' &&
-      !pagePath.startsWith('/api') &&
-      !pagePath.startsWith('/uploads')
-    ) {
-      try {
-        const html = require('node:fs').readFileSync(require('path').join(publicDir, 'index.html'))
-        return reply.type('text/html; charset=utf-8').send(html)
-      } catch { /* no shell yet */ }
-    }
     reply.status(404).send({
       error: 'Not Found',
       message: `Route ${request.method} ${request.url} not found`,

@@ -7,8 +7,5 @@
     "core:default",
     "updater:default",
     "process:default"
-  ],
-  "remote": {
-    "urls": ["https://*.trycloudflare.com/*"]
-  }
+  ]
 }

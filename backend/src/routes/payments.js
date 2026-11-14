@@ -34,13 +34,9 @@ const isString = (v, max = 4096) =>
 const VALID_PURPOSES = new Set([
   'application_fee', 'inspection_fee', 'permit_fee',
   'occupation_certificate', 'other',
-  'land_rates', 'supplementary_charge', 'rates_clearance', 'shop_licence', 'vendor_permit',
-  'refuse_charge', 'water_charge', 'sewer_charge', 'cemetery_fee', 'market_fee',
-  'stand_deposit', 'lease_rent', 'plan_scrutiny', 'advertisement_fee', 'wayleave_fee',
-  'property_search', 'hall_hire', 'dog_licence', 'appeal_fee',
 ])
 const VALID_RELATED_KINDS = new Set([
-  'inspection_booking', 'development_application', 'permit', 'council_charge',
+  'inspection_booking', 'development_application', 'permit',
 ])
 const VALID_DRIVERS = new Set(['manual', 'paynow', 'stripe', 'ecocash', 'onemoney'])
 const VALID_WALLETS = new Set(['USD', 'ZWG'])
@@ -121,18 +117,6 @@ async function paymentRoutes(fastify) {
       if (!VALID_DRIVERS.has(driverName)) {
         return reply.code(400).send({ success: false, error: 'bad_driver' })
       }
-      // Paynow is selected by the application-fee screens. Until the council
-      // Paynow account is connected, a development server records the payment
-      // on the manual driver so the receipt can still be issued. Production
-      // keeps the failure: a payer must not confirm their own charge there.
-      let effectiveDriver = driverName
-      if (
-        driverName === 'paynow'
-        && !driverModule.isDriverLive('paynow')
-        && process.env.NODE_ENV !== 'production'
-      ) {
-        effectiveDriver = 'manual'
-      }
       if (!VALID_WALLETS.has(walletCcy)) {
         return reply.code(400).send({ success: false, error: 'bad_wallet' })
       }
@@ -140,41 +124,9 @@ async function paymentRoutes(fastify) {
         return reply.code(400).send({ success: false, error: 'bad_price' })
       }
 
-      let chargePrice = priceUsd
-      if (relatedKind === 'council_charge') {
-        if (!relatedId) {
-          return reply.code(400).send({ success: false, error: 'bad_related_kind' })
-        }
-        const tariff = await fastify.pg.query(
-          `SELECT code, title, department, amount_usd, priced_by
-             FROM council_fee_tariff
-            WHERE code = $1 AND active`,
-          [relatedId],
-        )
-        const charge = tariff.rows[0]
-        if (!charge || charge.code !== purpose) {
-          return reply.code(400).send({ success: false, error: 'unknown_charge' })
-        }
-        if (charge.priced_by === 'tariff') {
-          chargePrice = Number(charge.amount_usd)
-        } else {
-          const ref = isString(metadata.accountRef, 64) ? metadata.accountRef.trim() : ''
-          if (ref.length < 2) {
-            return reply.code(400).send({ success: false, error: 'account_ref_required' })
-          }
-          if (!Number.isFinite(priceUsd) || priceUsd < 0.01 || priceUsd > 100000) {
-            return reply.code(400).send({ success: false, error: 'bad_price' })
-          }
-          metadata.accountRef = ref
-          chargePrice = priceUsd
-        }
-        metadata.title = charge.title
-        metadata.department = charge.department
-      }
+      const quoted = await exchangeRate.quote(fastify.pg, { priceUsd, walletCcy })
 
-      const quoted = await exchangeRate.quote(fastify.pg, { priceUsd: chargePrice, walletCcy })
-
-      const driver = driverModule.getDriver(effectiveDriver)
+      const driver = driverModule.getDriver(driverName)
 
       // Insert as 'pending' first so we have an id for the driver call.
       const { rows } = await fastify.pg.query(
@@ -187,7 +139,7 @@ async function paymentRoutes(fastify) {
         [
           purpose, relatedKind, relatedId, request.user.id, request.user.email,
           quoted.amountUsd, quoted.amountZwg, quoted.rate, quoted.rateId, walletCcy,
-          effectiveDriver,
+          driverName,
           JSON.stringify(metadata),
         ],
       )
@@ -246,34 +198,6 @@ async function paymentRoutes(fastify) {
       })
     } catch (err) {
       request.log.error({ err }, 'payment init failed')
-      return reply.code(500).send({ success: false, error: 'internal' })
-    }
-  })
-
-  // Council charges a resident can pay. Amounts on tariff rows are the
-  // working schedule. Bill rows take the amount on the payer's statement.
-  fastify.get('/payments/tariff', async (_request, reply) => {
-    try {
-      const { rows } = await fastify.pg.query(
-        `SELECT code, department, title, detail, amount_usd, unit_label, priced_by, sort_order
-           FROM council_fee_tariff
-          WHERE active
-          ORDER BY sort_order, title`,
-      )
-      return reply.send({
-        success: true,
-        data: rows.map((r) => ({
-          code: r.code,
-          department: r.department,
-          title: r.title,
-          detail: r.detail,
-          amountUsd: r.amount_usd == null ? null : Number(r.amount_usd),
-          unitLabel: r.unit_label,
-          pricedBy: r.priced_by,
-        })),
-      })
-    } catch (err) {
-      _request.log.error({ err }, 'tariff list failed')
       return reply.code(500).send({ success: false, error: 'internal' })
     }
   })
@@ -338,7 +262,7 @@ async function paymentRoutes(fastify) {
       const row = rows[0]
       if (!row) return reply.code(404).send({ success: false, error: 'not_found' })
       const u = request.user
-      const isStaff = ['admin', 'planner', 'eo', 'planning_clerk', 'finance_officer'].includes(u.role)
+      const isStaff = ['admin', 'planner', 'eo', 'planning_clerk'].includes(u.role)
       if (row.payer_id !== u.id && !isStaff) {
         return reply.code(403).send({ success: false, error: 'forbidden' })
       }
@@ -387,7 +311,7 @@ async function paymentRoutes(fastify) {
       // counter (clerk/admin) may do it; a payer confirming their own manual
       // payment is the DEV/QA shortcut and would otherwise let a client
       // settle a fee without paying.
-      const isStaff = ['admin', 'planning_clerk', 'finance_officer'].includes(u.role)
+      const isStaff = ['admin', 'planning_clerk'].includes(u.role)
       const payerMayConfirm = process.env.NODE_ENV !== 'production' && row.payer_id === u.id
       if (!isStaff && !payerMayConfirm) {
         return reply.code(403).send({ success: false, error: 'forbidden' })
@@ -415,7 +339,7 @@ async function paymentRoutes(fastify) {
       const row = rows[0]
       if (!row) return reply.code(404).send({ success: false, error: 'not_found' })
       const u = request.user
-      const isStaff = ['admin', 'planner', 'eo', 'planning_clerk', 'finance_officer'].includes(u.role)
+      const isStaff = ['admin', 'planner', 'eo', 'planning_clerk'].includes(u.role)
       if (row.payer_id !== u.id && !isStaff) {
         return reply.code(403).send({ success: false, error: 'forbidden' })
       }

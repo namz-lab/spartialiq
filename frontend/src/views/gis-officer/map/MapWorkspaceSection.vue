@@ -104,7 +104,10 @@ onMounted(async () => {
   layers.value = ls
   crs.value = cs
 
-  m.on('load', async () => {
+  // The style here is empty, so the map can finish loading while the layer list is still in flight; a
+  // 'load' listener added after that never fires and the overlays and tools are never set up. Run the
+  // setup now if the map is already loaded, otherwise when it is.
+  const initMap = async () => {
     await addVunguBasemap(m, { interactive: false, autoTilt: false }).catch(() => {})
     basemapLayerIds = m.getStyle().layers.map((l: any) => l.id).filter((id: string) => id !== 'bg')
     addOverlays()
@@ -117,7 +120,9 @@ onMounted(async () => {
     m.on('mouseup', onMouseUp)
     m.on('draw.create', onDrawCreate)
     m.on('moveend', refreshSnapCandidates)
-  })
+  }
+  if (m.loaded()) void initMap()
+  else m.once('load', () => { void initMap() })
   window.addEventListener('keydown', onKey)
 })
 

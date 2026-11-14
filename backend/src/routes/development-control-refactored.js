@@ -201,24 +201,8 @@ async function developmentControlRoutes(fastify) {
     return rows[0].id
   }
 
-  // GET /api/development-control/groups?plan=<id>   a plan's land uses.
-  // This database's land_use_groups rows are the live vocabulary and are not
-  // split by plan_instrument yet. When that column is absent, return them all.
+  // GET /api/development-control/groups?plan=<id>   a plan's land uses
   fastify.get('/groups', async (request, reply) => {
-    const { rows: cols } = await rdb(request).query(
-      `SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'land_use_groups'
-          AND column_name = 'plan_instrument_id'`,
-    )
-    if (!cols.length) {
-      const { rows } = await rdb(request).query(`
-        SELECT id AS group_id, group_code, description, group_category, notes
-          FROM land_use_groups
-         WHERE is_active = TRUE
-         ORDER BY display_order, group_code`)
-      return { success: true, data: rows }
-    }
     const plan = await planFor(request, reply)
     if (!plan) return
     const { rows } = await rdb(request).query(`
@@ -250,7 +234,7 @@ async function developmentControlRoutes(fastify) {
         c.conditions,
         c.notes
       FROM zone_land_use_controls c
-      JOIN vungu_proposed_peri_urban_zones z ON c.zone_id = z.id
+      JOIN proposed_peri_urban_zones z ON c.zone_id = z.id
       JOIN land_use_groups g ON c.land_use_group_id = g.id
       WHERE c.deleted_at IS NULL
     `
@@ -272,7 +256,7 @@ async function developmentControlRoutes(fastify) {
       query += ` AND c.control_type = $${params.length}`
     }
 
-    query += ` ORDER BY z.zone_code, g.group_code`
+    query += ` ORDER BY z.display_order, g.group_code`
 
     const { rows } = await rdb(request).query(query, params)
     return {

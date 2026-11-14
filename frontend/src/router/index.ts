@@ -111,6 +111,7 @@ const SurveyorJobsView = () => import('../views/SurveyorJobsView.vue')  // the c
 const SurveyorConsoleView = () => import('../views/SurveyorView.vue')  // map console: GIS map + task queue + per-task capture
 // Survey Task Manager child routes, all lazy.
 const GISOfficerPortalView = () => import('../views/GISOfficerPortalView.vue')
+const ExecutiveOverviewView = () => import('../views/ExecutiveOverviewView.vue')
 
 // Citizen surfaces wired in this round (Turn C/D follow-up).
 const PaymentsView    = () => import('../views/PaymentsView.vue')
@@ -717,6 +718,18 @@ const router = createRouter({
     // The embedded Survey Task Manager is gone (surveying moved to SurveyPro): old bookmarks land on the console.
     { path: '/surveyor-workspace/:rest(.*)*', redirect: '/surveyor' },
     // Legacy console — redirects to the modern GIS Officer portal (deprecated).
+    // The Chief Executive's overview: the six areas of the Executive Arm in one read-only page. The chief
+    // executive is the accounting officer, so that is the only role admitted (the API admits the same one).
+    {
+      path: '/executive',
+      name: 'executive-overview',
+      component: ExecutiveOverviewView,
+      meta: {
+        title: "Chief Executive's Overview - Vungu RDC",
+        requiresAuth: true,
+        roles: ['accounting_officer'],
+      }
+    },
     { path: '/gis-officer', redirect: '/gis-officer-portal' },
     {
       path: '/gis-officer-portal',
@@ -916,7 +929,8 @@ const ROLE_HOME: Record<Role, string> = {
   accountant:         '/finance',
   cashier:            '/finance',
   revenue_officer:    '/finance',
-  accounting_officer: '/finance',
+  // The chief executive lands on the cross-department overview; Executive Finance is one click away from it.
+  accounting_officer: '/executive',
   cash_supervisor:    '/finance',
   viewer:             '/citizen',
   registered:         '/citizen',

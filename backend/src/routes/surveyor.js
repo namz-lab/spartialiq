@@ -136,24 +136,15 @@ async function surveyorRoutes(fastify) {
   fastify.get('/surveyor/jobs/:id', { preHandler: requireRole(fastify, READERS) }, async (request, reply) => {
     const task = await loadTask(request, reply); if (!task) return
     try {
-      const [findings, coords, beacons, comments, documents] = await Promise.all([
+      const [findings, coords, beacons, comments] = await Promise.all([
         pg.query('SELECT * FROM spatial_planning.survey_finding WHERE survey_task_id=$1 ORDER BY submitted_at DESC', [task.id]),
         pg.query('SELECT * FROM spatial_planning.survey_coordinate WHERE survey_task_id=$1 ORDER BY recorded_at', [task.id]),
         pg.query('SELECT * FROM spatial_planning.survey_beacon WHERE survey_task_id=$1 ORDER BY recorded_at', [task.id]),
         pg.query('SELECT * FROM spatial_planning.survey_comment WHERE survey_task_id=$1 ORDER BY created_at', [task.id]),
-        pg.query(`SELECT id, survey_task_id, doc_type, title, content, generated_by, created_at
-                    FROM spatial_planning.survey_document WHERE survey_task_id=$1 ORDER BY created_at DESC`, [task.id]),
       ])
       return reply.send({
         success: true,
-        data: {
-          ...task,
-          findings: findings.rows,
-          coordinates: coords.rows,
-          beacons: beacons.rows,
-          comments: comments.rows,
-          documents: documents.rows,
-        },
+        data: { ...task, findings: findings.rows, coordinates: coords.rows, beacons: beacons.rows, comments: comments.rows },
       })
     } catch (err) {
       request.log.error({ err }, 'load survey task failed')

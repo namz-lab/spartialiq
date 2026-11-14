@@ -45,11 +45,32 @@ async function userId (db, email) {
   return rows[0].id
 }
 
+// The three premises the register data hangs from. They already exist on the developers' own
+// database; on one built from the migrations alone they do not, so a stand-in is created (tagged,
+// so --undo removes it) rather than leaving the environmental health console empty.
+const PREMISES = {
+  'PR-2026-0001': { name: 'Kudu Bakery', premises_type: 'bakery', stand_number: 'ST-0101', operator_name: 'Demo operator 1' },
+  'PR-2026-0002': { name: 'Somabula Butchery', premises_type: 'butchery', stand_number: 'ST-0102', operator_name: 'Demo operator 2' },
+  'PR-2026-0003': { name: 'Far Tuckshop', premises_type: 'general_dealer', stand_number: 'ST-0103', operator_name: 'Demo operator 3' },
+}
+
 async function premisesByReference (db, reference) {
   const { rows } = await db.query(
     'SELECT id, name FROM spatial_planning.health_premises WHERE reference = $1', [reference])
-  if (!rows.length) throw new Error(`No health_premises with reference ${reference}`)
-  return rows[0]
+  if (rows.length) return rows[0]
+  const stand = PREMISES[reference]
+  if (!stand) throw new Error(`No health_premises with reference ${reference}`)
+  const id = await ensure(db, TAG, 'spatial_planning.health_premises', {
+    reference,
+    name: stand.name,
+    premises_type: stand.premises_type,
+    stand_number: stand.stand_number,
+    suburb_ward: 'Ward 12',
+    operator_name: stand.operator_name,
+    operator_contact: '+263 77 000 0000',
+    notes: 'Demonstration premises (stand-in so the register has a file to attach to).',
+  }, 'reference = $1', [reference])
+  return { id, name: stand.name }
 }
 
 async function seed (db) {

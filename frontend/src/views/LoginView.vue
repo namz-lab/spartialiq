@@ -30,10 +30,8 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-// Demo one-click accounts in local development, and on a hosted demo when
-// the build was made with VITE_ALLOW_DEMO_LOGIN=1.
-const isDev = import.meta.env.VITE_ALLOW_DEMO_LOGIN === '1'
-  || (import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEMO_LOGIN !== '0')
+// Demo one-click accounts only in Vite DEV, and only when not explicitly disabled.
+const isDev = import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEMO_LOGIN !== '0'
 
 // ── Form state ─────────────────────────────────────────────────────────
 const email = ref('')

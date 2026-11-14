@@ -5,7 +5,7 @@
 //   - vunguBasemap (PostGIS vector tiles)         → src/map/vunguBasemap.ts
 //   - country-wide search (places, wards, POIs)   → GET /api/map-search
 //   - council contact card                        → GET /api/council
-//   - exact Vungu parcel boundaries                → GET /api/stands/polygons
+//   - council stands offered for allocation       → GET /api/available-stands
 //
 // Chrome matches the Stitch "Map & Discover" design: a full-bleed map
 // with a floating search + map tools + legend, a desktop "Land Discovery"
@@ -15,6 +15,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
+import { escapeHtml } from '@/utils/escapeHtml'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addVunguBasemap, setBasemapLayerVisible } from '@/map/vunguBasemap'
 import { searchMap, type SearchResult } from '@/services/vectorTiles'
@@ -89,7 +90,7 @@ function initMap() {
         } catch { /* style may have been replaced */ }
       }
       applyLayerToggles()
-      void loadStandPolygons()
+      plotAvailableStands()
     } catch (err) {
       console.warn('[citizen map] basemap failed', err)
       mapError.value = 'Could not load the council basemap. The OpenStreetMap base is still usable for navigation.'
@@ -101,7 +102,7 @@ function initMap() {
   })
   // Spatial identify: click any stand polygon → sold/status + properties from Postgres.
   map.on('click', (e) => {
-    void identifyStandAt(e.lngLat.lng, e.lngLat.lat, e.point)
+    void identifyStandAt(e.lngLat.lng, e.lngLat.lat)
   })
   map.getCanvas().style.cursor = 'crosshair'
   resizeObserver = new ResizeObserver(() => map?.resize())
@@ -126,7 +127,7 @@ function locate() {
 interface LayerDef { key: keyof typeof layers.value; label: string; icon: any }
 const layers = ref({
   wards: true, landuse: true, parcels: false, buildings: false,
-  roads: true, places: true, stands: true, acua: false,
+  roads: true, places: true, stands: true, acua: true,
 })
 const LAYER_DEFS: LayerDef[] = [
   { key: 'wards',     label: 'Ward boundaries', icon: MapIcon },
@@ -135,7 +136,7 @@ const LAYER_DEFS: LayerDef[] = [
   { key: 'buildings', label: 'Buildings', icon: MapIcon },
   { key: 'roads',     label: 'Roads', icon: MapIcon },
   { key: 'places',    label: 'Places & facilities', icon: MapPin },
-  { key: 'stands',    label: 'Vungu parcels', icon: MapIcon },
+  { key: 'stands',    label: 'Stands available', icon: MapPin },
   { key: 'acua',      label: 'Acua 300 m² stands', icon: MapPin },
 ]
 const LAYER_GROUPS: Record<string, string[]> = {
@@ -153,7 +154,7 @@ function applyLayerToggles() {
 }
 watch(layers, () => {
   applyLayerToggles()
-  syncStandLayer()
+  plotAvailableStands()
   syncAcuaLayer()
 }, { deep: true })
 
@@ -184,126 +185,76 @@ interface AvailableStand {
   depthM?: number | null
   useScale?: string | null
   allocation?: { referenceNo?: string; purpose?: string | null; allocatedAt?: string | null } | null
-  cadastral?: boolean
-  gid?: string | null
-  nameCfu?: string | null
-  areaHa?: string | null
-  mapSheet?: string | null
 }
+const availableStands = ref<AvailableStand[]>([])
+const standsLoading = ref(false)
 const identifyLoading = ref(false)
-
-const standCount = ref(0)
-
-function standFromHit(props: Record<string, unknown>): AvailableStand {
-  const name = props.name != null ? String(props.name) : ''
-  const nameCfu = props.name_cfu != null ? String(props.name_cfu) : ''
-  const status = props.status != null && String(props.status) !== '' ? String(props.status) : 'Unstated'
-  return {
-    id: String(props.gid || props.fid || ''),
-    stand_number: String(props.label || name || props.gid || 'Parcel'),
-    suburb_ward: props.district != null ? String(props.district) : null,
-    area_sqm: null,
-    zone: name && nameCfu && name !== nameCfu ? nameCfu : null,
-    status,
-    description: null,
-    longitude: props.longitude != null ? Number(props.longitude) : null,
-    latitude: props.latitude != null ? Number(props.latitude) : null,
-    sold: false,
-    available: false,
-    label: status,
-    cadastral: true,
-    gid: props.gid != null ? String(props.gid) : null,
-    nameCfu: nameCfu || null,
-    areaHa: props.area_ha != null ? String(props.area_ha) : null,
-    mapSheet: props.map_sheet != null ? String(props.map_sheet) : null,
-  }
+async function loadAvailableStands() {
+  standsLoading.value = true
+  try { const r = await api.get('/available-stands'); availableStands.value = (r.data?.data ?? []) as AvailableStand[] }
+  catch { availableStands.value = [] }
+  finally { standsLoading.value = false; plotAvailableStands() }
 }
 
-/** Exact vungu_parcels polygons. Demo layout stands are not drawn. */
-async function loadStandPolygons() {
-  if (!map) return
-  try {
-    const r = await api.get('/stands/polygons')
-    const fc = r.data?.type === 'FeatureCollection' ? r.data : { type: 'FeatureCollection', features: [] }
-    standCount.value = Array.isArray(fc.features) ? fc.features.length : 0
-    if (map.getSource('stand-polygons')) {
-      ;(map.getSource('stand-polygons') as maplibregl.GeoJSONSource).setData(fc)
-    } else {
-      map.addSource('stand-polygons', { type: 'geojson', data: fc })
-      map.addLayer({
-        id: 'stand-polygons-fill',
-        type: 'fill',
-        source: 'stand-polygons',
-        paint: {
-          'fill-color': [
-            'match', ['get', 'status'],
-            'Commercial', '#c4a574',
-            'City', '#7eb6d6',
-            'Purchase', '#8fbf9f',
-            'State Land', '#d4a0a0',
-            'Resettlement', '#c9b6e4',
-            'Communal', '#e6d48a',
-            '#d9d3c7',
-          ],
-          'fill-opacity': 0.42,
-        },
-      })
-      map.addLayer({
-        id: 'stand-polygons-line',
-        type: 'line',
-        source: 'stand-polygons',
-        paint: { 'line-color': '#3f3428', 'line-width': 1.15 },
-      })
-      map.addLayer({
-        id: 'stand-polygons-label',
-        type: 'symbol',
-        source: 'stand-polygons',
-        minzoom: 12,
-        layout: {
-          'text-field': ['get', 'label'],
-          'text-size': 11,
-          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-          'text-allow-overlap': false,
-          'text-optional': true,
-          'text-max-width': 10,
-        },
-        paint: {
-          'text-color': '#1c1917',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1.2,
-        },
-      })
-    }
-    try { setBasemapLayerVisible(map, 'stands', false) } catch { /* demo stand tiles */ }
-    try { setBasemapLayerVisible(map, 'vungu_parcels', false) } catch { /* same polygons, simplified in tiles */ }
-    syncStandLayer()
-  } catch (err) {
-    console.warn('[citizen map] parcel polygons failed', err)
-  }
-}
-
-function syncStandLayer() {
-  if (!map) return
-  const on = !!layers.value.stands
-  for (const id of ['stand-polygons-fill', 'stand-polygons-line', 'stand-polygons-label']) {
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none')
-  }
-}
-
-/** Click selects the Vungu parcel under the cursor. */
-async function identifyStandAt(_lng: number, _lat: number, point?: { x: number; y: number }) {
+/** Point-in-polygon stand identify — sold/status + full register properties. */
+async function identifyStandAt(lng: number, lat: number) {
   identifyLoading.value = true
   try {
-    if (!map || !point || !map.getLayer('stand-polygons-fill')) {
+    const r = await api.get('/stands/identify', { params: { lng, lat } })
+    const d = r.data?.data
+    if (!d) {
       selectedStand.value = null
       return
     }
-    const hits = map.queryRenderedFeatures([point.x, point.y], { layers: ['stand-polygons-fill'] })
-    selectedStand.value = hits[0]?.properties
-      ? standFromHit(hits[0].properties as Record<string, unknown>)
+    const acuaNote = d.kind === 'subunit'
+      ? `Acua ${d.typology === 'acua_300' ? '300 m²' : ''} · parent ${d.parentStandNumber || '—'}`
       : null
+    selectedStand.value = {
+      id: String(d.id),
+      stand_number: d.standNumber || d.stand_number || 'Stand',
+      suburb_ward: d.ward || null,
+      area_sqm: d.areaSqm != null ? String(d.areaSqm) : null,
+      zone: acuaNote || d.zoneName || d.zoneType || null,
+      status: d.label || d.status || 'Unknown',
+      description: d.description || null,
+      longitude: Array.isArray(d.centroid) ? d.centroid[0] : lng,
+      latitude: Array.isArray(d.centroid) ? d.centroid[1] : lat,
+      sold: !!d.sold,
+      available: !!d.available,
+      label: d.label || d.status,
+      priceUsd: d.priceUsd ?? null,
+      frontageM: d.frontageM ?? null,
+      depthM: d.depthM ?? null,
+      useScale: d.useScale ?? null,
+      allocation: d.allocation ?? null,
+    }
+  } catch {
+    /* keep prior selection on network blip */
   } finally {
     identifyLoading.value = false
+  }
+}
+
+let standMarkers: maplibregl.Marker[] = []
+function plotAvailableStands() {
+  if (!map) return
+  for (const m of standMarkers) m.remove()
+  standMarkers = []
+  if (!layers.value.stands) return
+  for (const s of availableStands.value) {
+    if (s.longitude == null || s.latitude == null) continue
+    const el = document.createElement('div')
+    el.className = 'ms-stand-marker'
+    el.addEventListener('click', () => { selectedStand.value = s })
+    const m = new maplibregl.Marker({ element: el })
+      .setLngLat([Number(s.longitude), Number(s.latitude)])
+      .setPopup(new maplibregl.Popup({ offset: 14, closeButton: false }).setHTML(
+        `<div class="ms-pop"><strong>${escapeHtml(s.stand_number)}</strong>
+           <div>${escapeHtml(s.suburb_ward || '')}</div>
+           <div>${s.area_sqm ? Number(s.area_sqm).toLocaleString() + ' m² · ' : ''}${escapeHtml(s.zone || '')}</div></div>`,
+      ))
+      .addTo(map)
+    standMarkers.push(m)
   }
 }
 
@@ -353,6 +304,11 @@ function syncAcuaLayer() {
 }
 
 const selectedStand = ref<AvailableStand | null>(null)
+function flyToStand(s: AvailableStand) {
+  selectedStand.value = s
+  if (!map || s.longitude == null || s.latitude == null) return
+  map.flyTo({ center: [Number(s.longitude), Number(s.latitude)], zoom: 15, duration: reduceMotion ? 0 : 800 })
+}
 
 // ── Search (country-wide) ────────────────────────────────────────
 const search = ref('')
@@ -371,10 +327,10 @@ function flyToResult(r: SearchResult) {
 }
 function clearSearch() { search.value = ''; searchResults.value = [] }
 
-function fmtAreaHa(s: string | null | undefined): string {
+function fmtArea(s: string | null): string {
   if (!s) return '—'
   const n = Number(s)
-  return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ha' : s
+  return Number.isFinite(n) ? n.toLocaleString() + ' m²' : '—'
 }
 function openApply() { router.push('/citizen?section=new') }
 
@@ -384,6 +340,7 @@ onMounted(async () => {
   await nextTick()
   initMap()
   void loadCouncil()
+  void loadAvailableStands()
   // Acua layer after map style is ready
   const tryAcua = () => { if (map?.isStyleLoaded()) void loadAcuaSubunits(); else map?.once('load', () => void loadAcuaSubunits()) }
   tryAcua()
@@ -392,6 +349,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   resizeObserver = undefined
+  for (const m of standMarkers) m.remove()
+  standMarkers = []
   if (map) { map.remove(); map = undefined }
 })
 </script>
@@ -430,11 +389,10 @@ onBeforeUnmount(() => {
       <!-- Legend (desktop) -->
       <div class="ms-legend">
         <h3>Map legend</h3>
-        <div class="ms-leg-row"><span class="ms-sw commercial"></span> Commercial</div>
-        <div class="ms-leg-row"><span class="ms-sw city"></span> City</div>
-        <div class="ms-leg-row"><span class="ms-sw purchase"></span> Purchase</div>
-        <div class="ms-leg-row"><span class="ms-sw state"></span> State land</div>
-        <div class="ms-leg-row"><span class="ms-sw other"></span> Other tenure</div>
+        <div class="ms-leg-row"><span class="ms-sw res"></span> Residential</div>
+        <div class="ms-leg-row"><span class="ms-sw com"></span> Commercial</div>
+        <div class="ms-leg-row"><span class="ms-sw agr"></span> Agricultural</div>
+        <div class="ms-leg-row"><span class="ms-sw und"></span> Undeveloped</div>
       </div>
 
       <!-- Loading / error -->
@@ -449,28 +407,55 @@ onBeforeUnmount(() => {
       <transition name="ms-pop-fade">
         <div v-if="selectedStand || identifyLoading" class="ms-prop">
           <div v-if="identifyLoading && !selectedStand" class="ms-prop-head">
-            <div><h3>Identifying…</h3><p>Looking up the parcel under the click</p></div>
+            <div><h3>Identifying…</h3><p>Looking up stand under click</p></div>
           </div>
           <template v-else-if="selectedStand">
             <div class="ms-prop-head">
               <div>
                 <h3>{{ selectedStand.stand_number }}</h3>
-                <p>{{ selectedStand.mapSheet || selectedStand.suburb_ward || 'Vungu RDC' }}</p>
+                <p>{{ selectedStand.suburb_ward || 'Vungu RDC' }}</p>
               </div>
               <button class="ms-prop-x" @click="selectedStand = null"><X :size="18" /></button>
             </div>
             <div class="ms-prop-grid">
-              <div><label>Parcel id</label><p class="mono">{{ selectedStand.gid || '—' }}</p></div>
-              <div><label>Area</label><p class="mono">{{ fmtAreaHa(selectedStand.areaHa) }}</p></div>
+              <div><label>Size</label><p class="mono">{{ fmtArea(selectedStand.area_sqm) }}</p></div>
+              <div><label>Zoning</label><p class="pri">{{ selectedStand.zone || '—' }}</p></div>
               <div>
-                <label>Tenure</label>
-                <span class="ms-prop-pill">{{ selectedStand.label || '—' }}</span>
+                <label>Status</label>
+                <span
+                  class="ms-prop-pill"
+                  :class="{
+                    sold: selectedStand.sold,
+                    avail: selectedStand.available,
+                  }"
+                >{{ selectedStand.label || selectedStand.status || '—' }}</span>
               </div>
-              <div v-if="selectedStand.zone">
-                <label>Recorded as</label>
-                <p>{{ selectedStand.zone }}</p>
+              <div v-if="selectedStand.priceUsd != null">
+                <label>Price</label>
+                <p class="mono">USD {{ Number(selectedStand.priceUsd).toLocaleString() }}</p>
+              </div>
+              <div v-if="selectedStand.frontageM != null">
+                <label>Frontage</label>
+                <p class="mono">{{ selectedStand.frontageM }} m</p>
+              </div>
+              <div v-if="selectedStand.useScale">
+                <label>Use scale</label>
+                <p>{{ selectedStand.useScale }}</p>
               </div>
             </div>
+            <p v-if="selectedStand.allocation?.referenceNo" class="ms-prop-desc">
+              Allocation {{ selectedStand.allocation.referenceNo }}
+              <span v-if="selectedStand.allocation.purpose"> · {{ selectedStand.allocation.purpose }}</span>
+            </p>
+            <p v-if="selectedStand.description" class="ms-prop-desc">{{ selectedStand.description }}</p>
+            <button
+              v-if="selectedStand.available !== false && !selectedStand.sold"
+              class="ms-btn primary full"
+              @click="openApply"
+            ><FilePlus :size="16" /> Start application</button>
+            <p v-else class="ms-muted" style="margin-top:0.5rem">
+              This stand is not available for a new application.
+            </p>
           </template>
         </div>
       </transition>
@@ -499,8 +484,8 @@ onBeforeUnmount(() => {
     <!-- Desktop sidebar -->
     <aside class="ms-side">
       <div class="ms-side-head">
-        <h1>Find land</h1>
-        <p>Each shape is a Vungu parcel boundary from the cadastre. The name on it is the name stored with that parcel.</p>
+        <h1>Find a stand</h1>
+        <p>Search places, wards and stands in Vungu, then start an application from the parcel.</p>
       </div>
       <div class="ms-side-body">
         <!-- Search -->
@@ -532,8 +517,22 @@ onBeforeUnmount(() => {
 
         <!-- Available stands -->
         <div class="ms-field">
-          <label>Vungu parcels <span v-if="standCount" class="ms-count">{{ standCount }}</span></label>
-          <p class="ms-muted">These are the stored parcel polygons. A shared name keeps the source parcel id so each one stays distinct.</p>
+          <label>Available stands <span v-if="availableStands.length" class="ms-count">{{ availableStands.length }}</span></label>
+          <p v-if="standsLoading" class="ms-muted"><Loader2 :size="13" class="ms-spin" /> Loading…</p>
+          <p v-else-if="!availableStands.length" class="ms-muted">No stands currently offered.</p>
+          <ul v-else class="ms-stand-list">
+            <li v-for="s in availableStands" :key="s.id" class="ms-stand">
+              <div class="ms-stand-top">
+                <strong>{{ s.stand_number }}</strong>
+                <span v-if="s.zone" class="ms-zone">{{ s.zone }}</span>
+              </div>
+              <p v-if="s.suburb_ward" class="ms-stand-meta">{{ s.suburb_ward }} · {{ fmtArea(s.area_sqm) }}</p>
+              <div class="ms-stand-actions">
+                <button class="ms-link" @click="flyToStand(s)"><MapPin :size="12" /> Show on map</button>
+                <button class="ms-link primary" @click="openApply"><FilePlus :size="12" /> Apply</button>
+              </div>
+            </li>
+          </ul>
         </div>
 
         <!-- Market brief / council -->
@@ -612,11 +611,10 @@ onBeforeUnmount(() => {
 .ms-legend h3 { margin:0 0 0.5rem; font-size:0.62rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--cp-muted); }
 .ms-leg-row { display:flex; align-items:center; gap:0.5rem; font-size:0.78rem; color:var(--cp-text-2); margin-bottom:0.3rem; }
 .ms-sw { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
-.ms-sw.commercial { background:#c4a574; border:1px solid #3f3428; }
-.ms-sw.city { background:#7eb6d6; border:1px solid #1e4d6b; }
-.ms-sw.purchase { background:#8fbf9f; border:1px solid #1f6b3a; }
-.ms-sw.state { background:#d4a0a0; border:1px solid #7a3030; }
-.ms-sw.other { background:#e6d48a; border:1px solid #6b5420; }
+.ms-sw.res { background:#e0f2fe; border:1px solid var(--cp-primary); }
+.ms-sw.com { background:#ffedd5; border:1px solid #ea580c; }
+.ms-sw.agr { background:#dcfce7; border:1px solid #16a34a; }
+.ms-sw.und { background:#f1f5f9; border:1px solid var(--cp-border-strong); }
 
 /* Selected parcel card */
 .ms-prop { position:absolute; right:14px; bottom:14px; z-index:9; width:20rem; max-width:calc(100% - 28px);
@@ -699,6 +697,11 @@ onBeforeUnmount(() => {
 .ms-brief-line { margin:0.2rem 0; font-size:0.78rem; color:var(--cp-text-2); display:flex; align-items:center; gap:0.35rem; }
 .ms-brief-line a { color:var(--cp-primary); text-decoration:none; }
 .ms-brief-fee { margin:0.4rem 0 0; font-size:0.78rem; font-weight:600; color:var(--cp-text); }
+
+/* Map markers / popups */
+:deep(.ms-stand-marker) { width:18px; height:18px; border-radius:50%; background:var(--cp-primary); border:3px solid #fff; cursor:pointer; box-shadow:0 2px 6px rgba(15,23,42,0.25); }
+:deep(.ms-pop) { font-family:var(--cp-sans); font-size:12px; color:var(--cp-text); line-height:1.4; }
+:deep(.ms-pop strong) { font-size:13px; color:var(--cp-primary); }
 
 /* ── Responsive ───────────────────────────────────────────────────── */
 @media (min-width: 1024px) {

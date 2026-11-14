@@ -2,7 +2,6 @@
  * Stands routes — public list/detail + planner CRUD + reserve flow.
  *
  *   GET    /api/stands                  → GeoJSON FeatureCollection
- *   GET    /api/stands/polygons         → exact vungu_parcels boundaries
  *   GET    /api/stands/identify         → spatial point-in-polygon identify (sold/status + props)
  *   GET    /api/stands/:id              → single stand + zone + plan suggestion
  *   POST   /api/stands                  → planner/admin: create stand with geometry
@@ -223,67 +222,6 @@ async function standsRoutes(fastify) {
       })
     } catch (err) {
       request.log.error({ err }, 'stands identify failed')
-      return reply.code(500).send({ success: false, error: 'internal' })
-    }
-  })
-
-  // Exact Vungu cadastre. Geometry is public.vungu_parcels.geom with no
-  // simplify, snap, or stand-register substitute. The label is the name
-  // stored on the parcel. Shared names keep the source gid so each polygon
-  // stays individually identifiable.
-  fastify.get('/stands/polygons', async (request, reply) => {
-    try {
-      const { rows } = await fastify.pg.query(
-        `SELECT
-           p.fid,
-           p.gid,
-           NULLIF(btrim(p.objectid), '') AS objectid,
-           NULLIF(btrim(p.name), '') AS name,
-           NULLIF(btrim(p.name_cfu), '') AS name_cfu,
-           NULLIF(btrim(p.status), '') AS status,
-           NULLIF(btrim(p.map_sheet), '') AS map_sheet,
-           NULLIF(btrim(p.district), '') AS district,
-           NULLIF(btrim(p.area_ha), '') AS area_ha,
-           CASE
-             WHEN n.name_key IS NULL THEN p.gid
-             WHEN count(*) OVER (PARTITION BY n.name_key) > 1 THEN n.name_key || ' · ' || p.gid
-             ELSE n.name_key
-           END AS label,
-           ST_X(ST_PointOnSurface(p.geom)) AS longitude,
-           ST_Y(ST_PointOnSurface(p.geom)) AS latitude,
-           ST_AsGeoJSON(p.geom, 7)::json AS geometry
-         FROM public.vungu_parcels p
-         CROSS JOIN LATERAL (
-           SELECT NULLIF(btrim(COALESCE(NULLIF(btrim(p.name), ''), NULLIF(btrim(p.name_cfu), ''))), '') AS name_key
-         ) n
-         WHERE p.geom IS NOT NULL
-           AND NOT ST_IsEmpty(p.geom)
-         ORDER BY p.fid`,
-      )
-      return reply.send({
-        type: 'FeatureCollection',
-        features: rows.map((r) => ({
-          type: 'Feature',
-          id: r.fid,
-          geometry: r.geometry,
-          properties: {
-            fid: r.fid,
-            gid: r.gid,
-            objectid: r.objectid,
-            name: r.name,
-            name_cfu: r.name_cfu,
-            label: r.label,
-            status: r.status || '',
-            map_sheet: r.map_sheet,
-            district: r.district,
-            area_ha: r.area_ha,
-            longitude: r.longitude != null ? Number(r.longitude) : null,
-            latitude: r.latitude != null ? Number(r.latitude) : null,
-          },
-        })),
-      })
-    } catch (err) {
-      request.log.error({ err }, 'stands polygons failed')
       return reply.code(500).send({ success: false, error: 'internal' })
     }
   })

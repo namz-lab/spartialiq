@@ -7,7 +7,6 @@ type ActiveWallet = 'ecocash' | 'onemoney' | 'innbucks'
 interface Props {
   priceUsd: number
   council:  { name: string }
-  title?: string
   defaultWalletCcy?: 'USD' | 'ZWG'
   /**
    * True while the parent has a submit/payment request in flight. The parent
@@ -17,7 +16,6 @@ interface Props {
   busy?: boolean
 }
 const props = withDefaults(defineProps<Props>(), {
-  title: 'Pay application fee',
   defaultWalletCcy: 'USD',
   busy: false,
 })
@@ -117,7 +115,7 @@ function fmtAmount(): string {
   <div class="pmp">
     <header class="pmp-head">
       <div>
-        <h3>{{ title }}</h3>
+        <h3>Pay application fee</h3>
         <p class="pmp-sub">{{ council.name }} · {{ fmtAmount() }}</p>
       </div>
       <button class="pmp-close" data-test="pmp-close" @click="emit('cancel')" aria-label="Close">✕</button>
