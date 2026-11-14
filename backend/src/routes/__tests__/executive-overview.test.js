@@ -94,6 +94,11 @@ describe('GET /api/executive/overview', () => {
     expect(problems).toEqual([])
   })
 
+  test('carries no arrears figure (decision D13)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/executive/overview', headers: headersOf('accounting_officer') })
+    expect(JSON.stringify(res.json().data).toLowerCase()).not.toContain('arrear')
+  })
+
   test('says human resources is not in the system', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/executive/overview', headers: headersOf('accounting_officer') })
     expect(res.json().data.hr).toEqual({ loaded: false, note: 'Staff and payroll are not yet in the system.' })

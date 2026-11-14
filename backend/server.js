@@ -109,6 +109,7 @@ const { controlPointRoutes } = require('./src/routes/controlPoints')
 const { propertyRoutes } = require('./src/routes/properties')
 const { councilOpsRoutes } = require('./src/routes/council-ops')
 const { executiveOverviewRoutes } = require('./src/routes/executive-overview')
+const { spatialEngineRoutes } = require('./src/routes/spatial-engine')
 const { councilRegistersRoutes } = require('./src/routes/council-registers')
 // Integrated budget and financial management (migration 188). Seven modules, split by the thing
 // each one is responsible for rather than by screen: configuration, budgets, imports, projects,
@@ -721,6 +722,7 @@ async function build() {
     await server.register(planningRoutes, { prefix: '/api' })
     await server.register(councilOpsRoutes, { prefix: '/api' })
     await server.register(executiveOverviewRoutes, { prefix: '/api' })
+    await server.register(spatialEngineRoutes, { prefix: '/api' })
     await server.register(councilRegistersRoutes, { prefix: '/api' })
     // Finance. All under /api, same as everything else; the public surface is distinguished by its
     // own /public/finance path prefix and by using optionalAuth rather than a permission guard.

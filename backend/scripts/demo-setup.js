@@ -3,16 +3,21 @@
  * Builds a working demonstration from an empty PostGIS database, in one command:
  *
  *   npm run demo:setup
- *   npm run demo:setup -- --township-dxf "C:/path/combined hertfordshire.dxf" --township HERTS
+ *   npm run demo:setup -- --wards "C:/path/vungu wards.gpkg"
+ *   npm run demo:setup -- --wards <file> --township-dxf "C:/path/combined hertfordshire.dxf" --township HERTS
  *
  * Steps, each of which can be run on its own:
- *   1. migrations            node scripts/migrate.js            the schema, permissions, finance, tenancy
- *   2. master-plan layers    node scripts/load-master-plan.js   farm cadastre and zones, parcel register
- *   3. demo data             node scripts/seed-all-demo.js      accounts and a populated desk for each role
- *   4. (optional) a township node scripts/import-township-dxf.js + seed-township-owners.js
+ *   1. migrations            node scripts/migrate.js                 the schema, permissions, finance, tenancy
+ *   2. master-plan layers    node scripts/load-master-plan.js        farm cadastre and zones, parcel register
+ *   3. (optional) wards      node scripts/load-wards.js              the council's wards, linked provisionally
+ *   4. demo data             node scripts/seed-all-demo.js           accounts and a populated desk for each role
+ *   5. (optional) a township node scripts/import-township-dxf.js + seed-township-owners.js
+ *   6. ward measures         node scripts/refresh-spatial-engine.js  the Chief Executive's ward maps
  *
- * Needs DATABASE_URL (backend/.env) pointing at a PostGIS database, and for step 2 ogr2ogr (native,
- * $OGR2OGR, or the ghcr.io/osgeo/gdal Docker image). --skip-spatial leaves step 2 out.
+ * Needs DATABASE_URL (backend/.env) pointing at a PostGIS database, and for steps 2 and 3 ogr2ogr (native,
+ * $OGR2OGR, or the ghcr.io/osgeo/gdal Docker image). --skip-spatial leaves step 2 out. --wards takes the ward
+ * boundary file the council supplies (COD-AB, ZIMSTAT, or its own); --wards-parent names the district code the
+ * wards sit under (default ZW1704). Without --wards the ward maps say the wards are not loaded: nothing is drawn.
  * Demo accounts all use the password demo1234 (set DEMO_DEFAULT_PASSWORD to change it).
  *
  * This is demonstration data: it refuses to run in production or against a database that is not on
@@ -40,6 +45,8 @@ if (!['localhost', '127.0.0.1', '::1'].includes(host) && process.env.ALLOW_REMOT
 const dxf = arg('township-dxf')
 const township = arg('township')
 if (dxf && !township) fail('--township-dxf needs --township <CODE> (for example HERTS).')
+const wards = arg('wards')
+const wardsParent = arg('wards-parent') || 'ZW1704'
 
 function step(title, script, args = [], env = {}) {
   console.log(`\n── ${title} ──`)
@@ -49,16 +56,20 @@ function step(title, script, args = [], env = {}) {
   if (r.status !== 0) fail(`\nStopped: "${title}" failed (${script} exited ${r.status}).`)
 }
 
-step('1/4 Migrations', 'migrate.js')
-if (has('skip-spatial')) console.log('\n── 2/4 Master-plan layers: skipped (--skip-spatial) ──')
-else step('2/4 Master-plan layers and parcel register', 'load-master-plan.js')
-step('3/4 Demo accounts and data', 'seed-all-demo.js')
+step('1/6 Migrations', 'migrate.js')
+if (has('skip-spatial')) console.log('\n── 2/6 Master-plan layers: skipped (--skip-spatial) ──')
+else step('2/6 Master-plan layers and parcel register', 'load-master-plan.js')
+if (wards) step('3/6 Wards, linked provisionally', 'load-wards.js', ['--file', wards, '--parent', wardsParent])
+else console.log('\n── 3/6 Wards: skipped (give --wards <file> to load the council\'s ward boundaries) ──')
+step('4/6 Demo accounts and data', 'seed-all-demo.js')
 if (dxf) {
-  step(`4/4 Township ${township}: stands from the DXF`, 'import-township-dxf.js', ['--dxf', dxf, '--township', township,
+  step(`5/6 Township ${township}: stands from the DXF`, 'import-township-dxf.js', ['--dxf', dxf, '--township', township,
     '--report', path.join(os.tmpdir(), `${township.toLowerCase()}-import-report.csv`)])
-  step(`4/4 Township ${township}: demonstration owners`, 'seed-township-owners.js', ['--township', township])
+  step(`5/6 Township ${township}: demonstration owners`, 'seed-township-owners.js', ['--township', township])
 } else {
-  console.log('\n── 4/4 Township: skipped (give --township-dxf <file> --township <CODE> to add one) ──')
+  console.log('\n── 5/6 Township: skipped (give --township-dxf <file> --township <CODE> to add one) ──')
 }
+// Last, so the measures see everything above: the parcels, the stands, the water points and the finance lines.
+step('6/6 Ward measures for the Chief Executive\'s maps', 'refresh-spatial-engine.js')
 
 console.log('\nDone. Start the API (npm start) and the portal (cd ../frontend && npm run dev); sign in with any demo.* account, password demo1234.')

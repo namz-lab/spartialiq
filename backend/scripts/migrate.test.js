@@ -185,6 +185,7 @@ describe('migration plan', () => {
       '212_finance_bank_reconciliation.sql',
       '213_finance_creditors.sql',
       '214_finance_fixed_assets.sql',
+      '215_spatial_engine.sql',
     ])
 
     for (const filename of MIGRATIONS) {

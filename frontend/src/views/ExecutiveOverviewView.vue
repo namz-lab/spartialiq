@@ -11,6 +11,7 @@ import { computed, onMounted, ref, type Component } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { Banknote, Building2, HardHat, HeartPulse, Users, ShieldCheck, Info, TriangleAlert, ArrowRight } from 'lucide-vue-next'
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
+import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
 import { useAuthStore } from '@/stores/auth'
 import { executiveApi, type ExecutiveOverview } from '@/services/executiveOverview'
 import { executiveDash } from '@/modules/finance/workspaces/executive/dashboard'
@@ -115,7 +116,6 @@ const cards = computed<Card[]>(() => {
           stats: [
             { label: 'Parcels on the register', value: n(ld.parcels) },
             { label: 'With a rates account', value: share(ld.parcels_with_account, ld.parcels) },
-            { label: 'Accounts in arrears', value: n(ld.accounts_in_arrears), tone: flag(ld.accounts_in_arrears, 'warn') },
             { label: 'Outlines estimated, not surveyed', value: n(ld.estimated_boundaries), tone: flag(ld.estimated_boundaries, 'warn') },
           ],
         } : { heading: 'Land register', ...missing('The land register could not be read.') },
@@ -219,6 +219,8 @@ const asOf = computed(() => {
           </RouterLink>
         </section>
       </div>
+
+      <ExecutiveWardMap />
     </main>
   </div>
 </template>

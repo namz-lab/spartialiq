@@ -23,6 +23,8 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ logout: vi.fn(), user: { name: 'CEO', role: 'accounting_officer' } }) }))
 vi.mock('@/components/shared/ProfileDropdown.vue', () => ({ default: { name: 'ProfileDropdown', template: '<div />' } }))
+// The ward map has its own spec; here it is a stand-in so this page's tests make no map request.
+vi.mock('@/views/executive/ExecutiveWardMap.vue', () => ({ default: { name: 'ExecutiveWardMap', template: '<div class="wm-stub" />' } }))
 
 import ExecutiveOverviewView from '../ExecutiveOverviewView.vue'
 import type { ExecutiveOverview } from '@/services/executiveOverview'
@@ -30,7 +32,7 @@ import type { ExecutiveOverview } from '@/services/executiveOverview'
 const FULL: ExecutiveOverview = {
   as_of: '2026-11-13T17:12:09.705Z',
   planning: { loaded: true, total: 8, in_progress: 3, overdue: 2, awaiting_decision: 1, approved_this_year: 5, open_building_complaints: 2 },
-  land: { loaded: true, parcels: 2320, parcels_with_account: 1589, accounts_in_arrears: 487, estimated_boundaries: 1064 },
+  land: { loaded: true, parcels: 2320, parcels_with_account: 1589, estimated_boundaries: 1064 },
   engineering: { loaded: true, roads: 5, road_km: 73.2, water_points: 6, water_points_working: 4, council_assets: 3, projects_in_progress: 3 },
   social_services: { loaded: true, premises: 3, certificates_due_or_expired: 0, open_nuisance_complaints: 0 },
   hr: { loaded: false, note: 'Staff and payroll are not yet in the system.' },
@@ -111,6 +113,12 @@ describe('ExecutiveOverviewView', () => {
     const wrapper = await mountPage()
     const overdue = wrapper.findAll('.xo-stat').find((s) => s.text().includes('Past statutory due date'))!
     expect(overdue.find('dd').classes()).toContain('is-bad')
+  })
+
+  it('shows no arrears figure anywhere (decision D13)', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    expect(wrapper.text().toLowerCase()).not.toContain('arrear')
   })
 
   it('links the finance card to the existing finance dashboard', async () => {

@@ -124,7 +124,7 @@ Stand **HDR-105**, account **VRDC-LAYOUT-HDR-105**, parcel **P-0000746**, is the
 - **Surveyor.** Diagrams and the subdivision file.
 - **GIS officer.** The layers everyone else is reading.
 - **IT admin.** Issues the accounts. Does not decide an application or edit a rates balance.
-- **Chief executive.** The six areas of the Executive Arm on one read-only page: finance, planning and land, engineering, social services, human resources and internal audit. A department with no data says so, and human resources says it is not yet in the system. The finance dashboard is one click away. Demo account: `demo.ceo@vungu.test`.
+- **Chief executive.** The six areas of the Executive Arm on one read-only page: finance, planning and land, engineering, social services, human resources and internal audit. A department with no data says so, and human resources says it is not yet in the system. Below the cards, "Ward by ward" maps four measures (parcel density, rates-account coverage, working water points, spending against budget) with a ranked list beside each map. The wards are labelled provisional, and no arrears figure is shown. The finance dashboard is one click away. Demo account: `demo.ceo@vungu.test`. How the ward measures work and how to add one: `backend/docs/spatial-engine.md`.
 
 ## Run it locally
 
@@ -142,7 +142,13 @@ cd backend && npm install
 npm run demo:setup
 ```
 
-`demo:setup` runs the migrations, loads the master-plan layers and the parcel register, and seeds an account and a populated desk for every role. The master-plan step needs `ogr2ogr` (a QGIS or GDAL install, or Docker, which it uses if `ogr2ogr` is not found); `--skip-spatial` leaves it out. To add a township from a Lo29 drawing:
+`demo:setup` runs the migrations, loads the master-plan layers and the parcel register, seeds an account and a populated desk for every role, and computes the ward measures for the Chief Executive's maps. The master-plan step needs `ogr2ogr` (a QGIS or GDAL install, or Docker, which it uses if `ogr2ogr` is not found); `--skip-spatial` leaves it out. The ward maps need the council's ward boundaries, which are not in the repository: give the file the council supplies (OCHA COD-AB, ZIMSTAT, or its own) with `--wards`. The wards are linked as provisional, because the Council has not yet confirmed its official ward list. Without the file the maps say the wards are not loaded and draw nothing:
+
+```
+npm run demo:setup -- --wards "path/to/wards.gpkg"
+```
+
+To add a township from a Lo29 drawing:
 
 ```
 npm run demo:setup -- --township-dxf "path/to/township.dxf" --township HERTS

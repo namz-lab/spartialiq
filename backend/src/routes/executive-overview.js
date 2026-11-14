@@ -80,8 +80,9 @@ async function executiveOverviewRoutes(fastify) {
           SELECT (SELECT count(*) FROM land.parcel WHERE status = 'current')::int AS parcels,
                  (SELECT count(DISTINCT a.parcel_id) FROM revenue_link.account_link a
                     JOIN land.parcel p ON p.parcel_id = a.parcel_id AND p.status = 'current')::int AS parcels_with_account,
-                 (SELECT count(*) FROM revenue_link.billing_status WHERE status_band = 'in_arrears')::int AS accounts_in_arrears,
                  (SELECT count(*) FROM land.parcel WHERE status = 'current' AND accuracy_basis = 'estimated')::int AS estimated_boundaries`)
+        // No arrears figure, by design (decision D13): the integration carries status bands, not amounts, and
+        // an outstanding-revenue figure must not be approximated from them.
         const loaded = l.parcels > 0
         return { loaded, ...(loaded ? {} : { note: 'The parcel register is empty.' }), ...l }
       }),

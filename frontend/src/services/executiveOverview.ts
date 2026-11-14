@@ -29,7 +29,6 @@ export interface PlanningSection extends SectionState {
 export interface LandSection extends SectionState {
   parcels?: number
   parcels_with_account?: number
-  accounts_in_arrears?: number
   /** Stand outlines cut from a block rather than drawn (accuracy_basis 'estimated'). */
   estimated_boundaries?: number
 }

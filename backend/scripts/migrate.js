@@ -338,6 +338,9 @@ const MIGRATIONS = [
   '212_finance_bank_reconciliation.sql',
   '213_finance_creditors.sql',
   '214_finance_fixed_assets.sql',
+  // The spatial engine: ward measures for the Chief Executive's maps (schema spatial_engine). Reads registers
+  // only; stores its own results. Rollback: migrations/rollback/215_spatial_engine.down.sql.
+  '215_spatial_engine.sql',
 ]
 
 function createPool(env = process.env) {
