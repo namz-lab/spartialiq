@@ -220,7 +220,7 @@ const demoAccounts: DemoAccount[] = isDev
   ? [
       { label: 'Citizen',    email: 'demo.viewer@vungu.test',    password: 'demo1234', role: 'viewer' },
       { label: 'Planner',    email: 'demo.planner@vungu.test',   password: 'demo1234', role: 'planner' },
-      { label: 'E.O.',       email: 'demo.eo@vungu.test',        password: 'demo1234', role: 'eo' },
+      { label: 'EO Planning', email: 'demo.eo@vungu.test',        password: 'demo1234', role: 'eo' },
       { label: 'Env. health', email: 'demo.envoffice@vungu.test', password: 'demo1234', role: 'env_officer' },
       { label: 'Inspector',  email: 'demo.inspector@vungu.test', password: 'demo1234', role: 'building_inspector' },
       { label: 'Clerk',      email: 'demo.clerk@vungu.test',     password: 'demo1234', role: 'planning_clerk' },
