@@ -6,7 +6,7 @@ import type {
 
 export type Tone = 'warn' | 'bad' | 'good'
 export interface Stat { label: string; value: string; tone?: Tone }
-export interface Group { heading?: string; loaded: boolean; unavailable?: boolean; note?: string; stats: Stat[] }
+export interface Group { heading?: string; loaded: boolean; unavailable?: boolean; note?: string; stats: Stat[]; /** A caveat shown under the figures, e.g. an incomplete register. */ footnote?: string }
 
 export const n = (v: number | undefined) => (v ?? 0).toLocaleString('en-GB')
 export const share = (part: number | undefined, whole: number | undefined) =>
@@ -42,15 +42,33 @@ export function landGroup(ld: LandSection | undefined, fail: () => Group): Group
 }
 
 export function engineeringGroup(en: EngineeringSection | undefined, fail: () => Group): Group {
-  return en ? {
-    loaded: en.loaded, unavailable: en.unavailable, note: en.note,
-    stats: [
-      { label: 'District roads', value: `${n(en.roads)} (${(en.road_km ?? 0).toLocaleString('en-GB')} km)` },
-      { label: 'Water points working', value: `${n(en.water_points_working)} of ${n(en.water_points)}`, tone: en.water_points && en.water_points_working! < en.water_points ? 'warn' : undefined },
-      { label: 'Council assets', value: n(en.council_assets) },
-      { label: 'Capital projects in progress', value: n(en.projects_in_progress) },
-    ],
-  } : fail()
+  if (!en) return fail()
+  const km = (v: number | undefined) => (v ?? 0).toLocaleString('en-GB')
+  // The roads in the register are map geometry, not a survey: say so when that is all there is.
+  const unverified = (en.roads ?? 0) > 0 && en.roads_unverified === en.roads
+  const incomplete = en.water_points_register_complete === false
+  const stats: Stat[] = [
+    { label: 'Council roads', value: `${n(en.roads)} (${km(en.road_km)} km${unverified ? ', unverified' : ''})` },
+  ]
+  if ((en.national_roads ?? 0) > 0) {
+    stats.push({ label: "National roads (not the council's)", value: `${n(en.national_roads)} (${km(en.national_road_km)} km)` })
+  }
+  stats.push(
+    {
+      label: incomplete ? 'Water points recorded working' : 'Water points working',
+      value: incomplete ? `${n(en.water_points_working)} of ${n(en.water_points)} recorded` : `${n(en.water_points_working)} of ${n(en.water_points)}`,
+      tone: !incomplete && en.water_points && en.water_points_working! < en.water_points ? 'warn' : undefined,
+    },
+    { label: 'Council assets', value: n(en.council_assets) },
+    { label: 'Capital projects in progress', value: n(en.projects_in_progress) },
+  )
+  const notes: string[] = []
+  if (incomplete) {
+    notes.push(en.water_points_register_note
+      ?? `The water-point register is incomplete${en.water_points_expected ? ` (about ${en.water_points_expected} expected)` : ''}; its figures are what is recorded, not what exists.`)
+  }
+  if (unverified) notes.push('Roads are map geometry from OpenStreetMap, not a survey: they carry no surface or condition.')
+  return { loaded: en.loaded, unavailable: en.unavailable, note: en.note, stats, ...(notes.length ? { footnote: notes.join(' ') } : {}) }
 }
 
 export function socialGroup(ss: SocialServicesSection | undefined, fail: () => Group): Group {

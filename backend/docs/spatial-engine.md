@@ -78,3 +78,12 @@ the council's website, with no overlaps.
   or water point), **hot spots** and trends.
 - A **public** ward map (decision D14 governs what may be published).
 - History: only the `current` period is kept.
+
+## Incomplete registers (migration 223)
+
+A ward with nothing recorded is not a ward with nothing: in a register that holds 6 of about 360 water points, it is a ward where none is recorded.
+`spatial_engine.register_status` says, per council and register, whether the register is complete (and what is known of its size, with the source).
+A measure names the register it counts (`measure.register_key`). While the register is marked incomplete, a ward with **no item recorded at all** is stored as
+no data, not 0; a ward with something recorded keeps its figure (at least that much, and a recorded item that does not work is a real zero). The map's
+API (`measure.incomplete_register`) and the screens say so. A register with no status row behaves as before. Vungu's water points are marked incomplete (a few
+demonstration points against the council website's 360); mark a register complete once its inventory is loaded.

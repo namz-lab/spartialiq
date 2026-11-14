@@ -225,6 +225,10 @@ describe('rate over registered voters (migration 218)', () => {
     await client.query(
       `INSERT INTO spatial_engine.ward_denominator (ward_code, kind, as_of_year, value, source)
        VALUES ('ZJEST001', 'registered_voters', 2023, 2000, 'jest'), ('ZJEST002', 'registered_voters', 2023, 3000, 'jest')`)
+    // These tests are about the rate, not about the register: it counts as complete here (the incomplete case is below).
+    await client.query(
+      `INSERT INTO spatial_engine.register_status (authority_id, register, complete, note, source) VALUES (1, 'water_points', true, 'complete for this test', 'jest')
+       ON CONFLICT (authority_id, register) DO UPDATE SET complete = true`)
     await q('SELECT spatial_engine.refresh()')
   })
 
@@ -253,5 +257,57 @@ describe('rate over registered voters (migration 218)', () => {
     const v = await valuesOf('water_points_per_voters')
     expect(v.ZJEST003.value).toBeNull()
     expect(v.ZJEST003.reliability).toBe('no_data')
+  })
+})
+
+// Migration 223: a register the council has said is incomplete does not say "zero".
+describe('an incomplete register (migration 223)', () => {
+  const setComplete = (complete) => client.query(
+    `INSERT INTO spatial_engine.register_status (authority_id, register, complete, note, source) VALUES (1, 'water_points', $1, 'set by the test', 'jest')
+     ON CONFLICT (authority_id, register) DO UPDATE SET complete = $1`, [complete])
+
+  beforeAll(async () => {
+    // Ward A: a working point and a broken one recorded; ward B: one recorded point, broken; ward C: nothing recorded.
+    for (const [code, x, state] of [['JEST-IR-1', 10.02, 'working'], ['JEST-IR-2', 10.03, 'broken'], ['JEST-IR-3', 11.02, 'broken']]) {
+      await client.query(
+        `INSERT INTO council_ops.wash_asset (asset_code, asset_type, name, operational, geom)
+         VALUES ($1::varchar, 'borehole', $1::text, $2, ST_SetSRID(ST_MakePoint($3, 50.05), 4326))`, [code, state, x])
+    }
+    await client.query(`INSERT INTO spatial_engine.ward_denominator (ward_code, kind, as_of_year, value, source)
+                         VALUES ('ZJEST001', 'registered_voters', 2023, 2000, 'jest'), ('ZJEST002', 'registered_voters', 2023, 2000, 'jest'),
+                                ('ZJEST003', 'registered_voters', 2023, 2000, 'jest') ON CONFLICT DO NOTHING`)
+  })
+
+  test('while it is incomplete, a ward with nothing recorded is no data and a ward with a recorded point keeps its figure', async () => {
+    await setComplete(false)
+    await q('SELECT spatial_engine.refresh()')
+    const v = await valuesOf('water_points_per_voters')
+    expect(Number(v.ZJEST001.value)).toBeGreaterThan(0) // one working point recorded
+    expect(Number(v.ZJEST002.value)).toBe(0) // a point is recorded and does not work: a real zero
+    expect(v.ZJEST002.reliability).toBe('ok')
+    expect(v.ZJEST003.value).toBeNull() // nothing recorded: not zero
+    expect(v.ZJEST003.reliability).toBe('no_data')
+  })
+
+  test('once the register is complete, the same ward is a true zero', async () => {
+    await setComplete(true)
+    await q('SELECT spatial_engine.refresh()')
+    const v = await valuesOf('water_points_per_voters')
+    expect(Number(v.ZJEST003.value)).toBe(0)
+    expect(v.ZJEST003.reliability).toBe('ok')
+  })
+
+  test('a measure that names no register is unaffected', async () => {
+    await setComplete(false)
+    await q('SELECT spatial_engine.refresh()')
+    const v = await valuesOf('parcel_density')
+    expect(Number(v.ZJEST003.value)).toBe(0) // an empty ward in a complete-by-default register is still a true zero
+  })
+
+  test('the database refuses a status with no name for what is known', async () => {
+    await client.query('SAVEPOINT s')
+    await expect(client.query(`INSERT INTO spatial_engine.register_status (authority_id, register, complete, note, source) VALUES (1, 'x_register', false, 'short', 'jest')`))
+      .rejects.toThrow(/register_status_note_named/)
+    await client.query('ROLLBACK TO SAVEPOINT s')
   })
 })

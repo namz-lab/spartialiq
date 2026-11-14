@@ -361,6 +361,9 @@ const MIGRATIONS = [
   // One outline: the planning boundary is the outside figure of the authority area, and the wards are conformed to it.
   // Rollback: migrations/rollback/222_authority_area_one_outline.down.sql.
   '222_authority_area_one_outline.sql',
+  // An incomplete register does not say zero: spatial_engine.register_status, and refresh() reads a ward with nothing recorded as no data.
+  // Rollback: migrations/rollback/223_register_completeness.down.sql.
+  '223_register_completeness.sql',
 ]
 
 function createPool(env = process.env) {

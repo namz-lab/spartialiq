@@ -33,7 +33,12 @@ const FULL: ExecutiveOverview = {
   as_of: '2026-11-13T17:12:09.705Z',
   planning: { loaded: true, total: 8, in_progress: 3, overdue: 2, awaiting_decision: 1, approved_this_year: 5, open_building_complaints: 2 },
   land: { loaded: true, parcels: 2320, parcels_with_account: 1589, estimated_boundaries: 1064 },
-  engineering: { loaded: true, roads: 5, road_km: 73.2, water_points: 6, water_points_working: 4, council_assets: 3, projects_in_progress: 3 },
+  engineering: {
+    loaded: true, roads: 1059, road_km: 1676.5, roads_unverified: 1059, national_roads: 148, national_road_km: 577.1,
+    water_points: 6, water_points_working: 4, water_points_register_complete: false, water_points_expected: 360,
+    water_points_register_note: 'The register holds only a few demonstration points; the council website lists about 360 water points in the district.',
+    council_assets: 3, projects_in_progress: 3,
+  },
   social_services: { loaded: true, premises: 3, certificates_due_or_expired: 0, open_nuisance_complaints: 0 },
   hr: { loaded: false, note: 'Staff and payroll are not yet in the system.' },
   audit: { loaded: true, engagements: 2, engagements_open: 2, findings_open: 3, findings_high_risk: 1, actions_overdue: 1 },
@@ -128,6 +133,35 @@ describe('ExecutiveOverviewView', () => {
     expect(hrefs).toEqual([
       '/units/finance', '/units/planning', '/units/engineering', '/units/social_admin', '/units/social_admin', '/units/audit',
     ])
+  })
+
+  it("calls the roads the council's, says they are unverified, and shows national roads apart", async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const stat = (label: string) => eng.findAll('.xo-stat').find((s) => s.find('dt').text() === label)
+    expect(stat('Council roads')!.find('dd').text()).toBe('1,059 (1,676.5 km, unverified)')
+    expect(stat("National roads (not the council's)")!.find('dd').text()).toBe('148 (577.1 km)')
+    expect(eng.text()).not.toContain('District roads')
+    expect(eng.text()).toContain('not a survey')
+  })
+
+  it('says the water-point register is incomplete instead of reading 4 of 6 as the district', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    expect(eng.find('.xo-stat dt').exists()).toBe(true)
+    expect(eng.text()).toContain('Water points recorded working')
+    expect(eng.text()).toContain('4 of 6 recorded')
+    expect(eng.find('.xo-foot').text()).toContain('about 360 water points')
+  })
+
+  it('shows no roads caveat when the roads are not all unverified', async () => {
+    api.overview.mockResolvedValue({ ...FULL, engineering: { ...FULL.engineering, roads_unverified: 0, national_roads: 0 } })
+    const wrapper = await mountPage()
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    expect(eng.text()).not.toContain('unverified')
+    expect(eng.text()).not.toContain('National roads')
   })
 
   it('links the finance card to the existing finance dashboard', async () => {
