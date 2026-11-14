@@ -67,3 +67,44 @@ describe('the concept registry', () => {
     expect(rows).toEqual([])
   })
 })
+
+describe('the road network and the planning boundary (migration 221)', () => {
+  const kind = async (rel) => (await q('SELECT relkind::text AS k FROM pg_class WHERE oid = to_regclass($1)', [rel]))[0]?.k
+
+  test('basemap.road is the table and public.roads a view with the old basemap columns', async () => {
+    expect(await kind('basemap.road')).toBe('r')
+    expect(await kind('public.roads')).toBe('v')
+    const cols = (await q(`SELECT attname FROM pg_attribute WHERE attrelid = 'public.roads'::regclass AND attnum > 0 AND NOT attisdropped`)).map((r) => r.attname)
+    for (const c of ['fid', 'osm_id', 'fclass', 'name', 'ref', 'oneway', 'maxspeed', 'bridge', 'tunnel', 'geom']) expect(cols).toContain(c)
+  })
+
+  test('the old view reproduces the old codes and the same rows', async () => {
+    const [a] = await q('SELECT count(*)::int AS n FROM basemap.road')
+    const [b] = await q('SELECT count(*)::int AS n FROM public.roads')
+    expect(b.n).toBe(a.n)
+    const rows = await q('SELECT DISTINCT oneway, bridge, tunnel FROM public.roads')
+    for (const r of rows) for (const v of [r.oneway, r.bridge, r.tunnel]) expect(['B', 'F', 'T']).toContain(v)
+  })
+
+  test('an unknown speed is NULL in the table, not 0', async () => {
+    const [r] = await q('SELECT count(*)::int AS n FROM basemap.road WHERE max_speed = 0')
+    expect(r.n).toBe(0)
+  })
+
+  test('the planning boundary is one row per council, and the old name is a view of it', async () => {
+    expect(await kind('admin.planning_boundary')).toBe('r')
+    expect(await kind('public.gweru_rural_planning_boundary')).toBe('v')
+    const [a] = await q('SELECT count(*)::int AS n FROM admin.planning_boundary')
+    const [b] = await q('SELECT count(*)::int AS n FROM public.gweru_rural_planning_boundary')
+    expect(b.n).toBe(a.n)
+    expect(a.n).toBeLessThanOrEqual(1)
+  })
+
+  test('the council inventory comes from the roads tagged for the council, flagged unverified and with no invented surface', async () => {
+    const [r] = await q(`SELECT count(*)::int AS n, count(*) FILTER (WHERE data_quality <> 'unverified')::int AS verified,
+                                count(*) FILTER (WHERE surface IS NOT NULL OR condition IS NOT NULL)::int AS invented
+                           FROM council_ops.road_asset WHERE source LIKE 'OpenStreetMap%'`)
+    expect(r.verified).toBe(0)
+    expect(r.invented).toBe(0)
+  })
+})

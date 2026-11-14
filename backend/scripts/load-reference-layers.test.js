@@ -43,3 +43,34 @@ describe('data/reference/vungu', () => {
     }
   })
 })
+
+describe('data/reference/vungu: roads and the planning boundary', () => {
+  test('roads: 1,207 centrelines, each tagged with a road authority, none one-way in reverse', () => {
+    const f = read('roads')
+    expect(f).toHaveLength(1207)
+    for (const x of f) {
+      expect(x.geometry.type).toBe('MultiLineString')
+      expect(['RIDA', 'MOTID', 'VUNGU']).toContain(x.properties.authority)
+      expect(x.properties.oneway).not.toBe('T') // the loader keeps no reverse direction and refuses it
+    }
+    const by = (a) => f.filter((x) => x.properties.authority === a).length
+    expect([by('VUNGU'), by('RIDA'), by('MOTID')]).toEqual([1059, 106, 42])
+  })
+
+  test('the council inventory (VUNGU roads) holds no trunk road', () => {
+    expect(read('roads').filter((x) => x.properties.authority === 'VUNGU' && x.properties.fclass === 'trunk')).toEqual([])
+  })
+
+  test('planning boundary: one polygon, Gweru Rural, ZW1704, with the city cut out as a hole', () => {
+    const f = read('planning_boundary')
+    expect(f).toHaveLength(1)
+    expect(f[0].properties).toMatchObject({ ADM2_EN: 'Gweru Rural', ADM2_PCODE: 'ZW1704' })
+    expect(f[0].geometry.type).toBe('MultiPolygon')
+    expect(f[0].geometry.coordinates[0].length).toBeGreaterThan(1) // an outer ring and at least one hole
+  })
+
+  test('no coordinate is non-finite', () => {
+    const finite = (c) => (typeof c[0] === 'number' ? c.every(Number.isFinite) : c.every(finite))
+    for (const n of ['roads', 'planning_boundary']) for (const x of read(n)) expect(finite(x.geometry.coordinates)).toBe(true)
+  })
+})

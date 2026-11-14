@@ -44,7 +44,10 @@ async function seed (db) {
     ['DEMO-RD-004', 'Makepesi clinic road (demo)', 'tertiary', 'gravel', 'good', 6200, '8'],
     ['DEMO-RD-005', 'Muchakata - Gunde road (demo)', 'tertiary', 'earth', 'fair', 11800, '17'],
   ]
-  for (const [code, name, hierarchy, surface, condition, length, ward] of roads) {
+  // Real roads (scripts/load-reference-layers.js) supersede the demonstration ones: with them in the register the demo adds none.
+  const { rows: [real] } = await db.query("SELECT count(*)::int AS n FROM council_ops.road_asset WHERE asset_code NOT LIKE 'DEMO-RD-%'")
+  if (real.n > 0) console.log(`[executive-demo] ${real.n} real roads are loaded; no demonstration roads added`)
+  for (const [code, name, hierarchy, surface, condition, length, ward] of (real.n > 0 ? [] : roads)) {
     await ensure(db, TAG, 'council_ops.road_asset', {
       asset_code: code, name, hierarchy, surface, condition, length_m: length, ward,
       status: 'active', data_quality: 'unverified', source: 'Demonstration data (not the Council register)',

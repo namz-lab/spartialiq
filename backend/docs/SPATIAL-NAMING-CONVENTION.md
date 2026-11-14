@@ -164,3 +164,13 @@ Still to do, in order:
 3. **Column names**: `zone` to `name`, `zone_code` to `code`, `fid` to `id` (the rules in section "Rules", 6 and 10).
 4. **Move the readers** (44 backend files, the tile ids and the QGIS layer names) from the old names to the new, then drop the old-name views.
    The tile SQL quotes the table as one identifier, so a tile layer can only serve a schema-qualified table once that is changed.
+
+## Roads and the planning boundary (migration 221)
+
+`basemap.road` is the first table of the `basemap` schema: the council's road network (1,207 OpenStreetMap centrelines, each tagged with its road
+authority: 1,059 VUNGU, 106 RIDA, 42 MOTID). `public.roads` is a view over it with the old basemap columns, which the tile layer and the QGIS project
+read. The 1,059 roads tagged VUNGU also fill the council's inventory, `council_ops.road_asset`, flagged unverified with no surface or condition
+(they are map geometry, not a survey); the five demonstration roads gave way to them.
+`admin.planning_boundary` holds the planning boundary as supplied (Gweru Rural, ZW1704, the city cut out); `public.gweru_rural_planning_boundary` is a
+view over it. It is not the union of the wards (`admin.authority_area`): its area is within 0.1% of it (583,644 ha against 584,012 ha), which
+corroborates the provisional wards without confirming them.
