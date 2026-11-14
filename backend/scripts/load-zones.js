@@ -10,10 +10,13 @@
  *   peri_urban_zones    61 polygons with a zone name (12 names). Loaded as the zone name. The source spells one zone
  *                       "Cemetry"; it is loaded as "Cemetery", the spelling the plan code already uses.
  *   beyond_peri_urban_zones   16 polygons for the area beyond the peri-urban zones. They carry no planning zone: they
- *                       carry a settlement category (Communal, Resettlement Area, FLSCF, ...) and a land-use code
- *                       (lu013 to lu018), the ward and the original admin codes. They are loaded with the settlement
- *                       category as the zone name, the code as zone_code, the ward number in `ward`, and the category
- *                       "Beyond the peri-urban area" so they can be told apart. Abbreviations are NOT expanded.
+ *                       carry a settlement category and a land-use code (lu013 to lu018), the ward and the original admin
+ *                       codes. Each settlement category is loaded as the planning zone the council named for it (see
+ *                       SETTLEMENT_ZONE: FLSCF is Large Scale Commercial Farms, FLSCF_A2 is Model A2, SSCF is Small Scale
+ *                       Commercial Farms, FLSCF_SSCF_A1 is Model A1; Communal and Resettlement Area are unchanged), the
+ *                       code as zone_code, the ward number in `ward`, and the category "Beyond the peri-urban area" so
+ *                       they can be told apart. The source category and code stay in the description. A category the map
+ *                       does not name is refused, not passed through.
  *
  * The database trigger zones_sync_plan_refs files each polygon under the plan and creates a zone type for every new zone
  * name (review_status 'unreviewed'). The beyond areas' settlement categories therefore appear as zone types of the plan:
@@ -43,6 +46,15 @@ const ifEmpty = has('if-empty')
 
 const PLAN_TITLE = 'Vungu RDC peri-urban local plan (as mapped)'
 const BEYOND = 'Beyond the peri-urban area'
+// The planning zone each settlement category of the beyond file becomes (the council's naming, 14 November 2026).
+const SETTLEMENT_ZONE = {
+  Communal: 'Communal',
+  'Resettlement Area': 'Resettlement Area',
+  FLSCF: 'Large Scale Commercial Farms',
+  FLSCF_A2: 'Model A2',
+  SSCF: 'Small Scale Commercial Farms',
+  FLSCF_SSCF_A1: 'Model A1',
+}
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8')).features
 const txt = (v) => (v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim())
 const GEOM = `ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)), 3))`
@@ -92,10 +104,24 @@ async function main() {
       const p = f.properties
       const settlement = txt(p.settlement)
       if (!settlement) throw new Error(`A beyond polygon (fid ${p.fid}) has no settlement category.`)
-      await insert(f, { zone: settlement, zone_code: txt(p.zone_code), scale_category: BEYOND, ward: txt(p.ADM3_EN),
-        description: `As labelled in the source file: ward ${txt(p.ADM3_EN)} (${txt(p.ADM3_PCODE)}), settlement "${settlement}", land-use code ${txt(p.zone_code)}, layer ${txt(p.layer)}`.slice(0, 500) })
+      const zone = SETTLEMENT_ZONE[settlement]
+      if (!zone) throw new Error(`Settlement category "${settlement}" (fid ${p.fid}) has no planning zone in SETTLEMENT_ZONE.`)
+      await insert(f, { zone, zone_code: txt(p.zone_code), scale_category: BEYOND, ward: txt(p.ADM3_EN),
+        description: `Source settlement category "${settlement}" (not expanded in the file): ward ${txt(p.ADM3_EN)} (${txt(p.ADM3_PCODE)}), settlement "${settlement}", land-use code ${txt(p.zone_code)}, layer ${txt(p.layer)}`.slice(0, 500) })
     }
     report.invalid_repaired = invalid
+
+    // Zone types the trigger made for names that no longer exist (a replaced load) go too, unless something uses them.
+    const { rowCount: staleTypes } = await db.query(`
+      DELETE FROM public.plan_zone_type t
+       WHERE t.plan_instrument_id = $1
+         AND NOT EXISTS (SELECT 1 FROM public.proposed_peri_urban_zones z WHERE z.plan_zone_type_id = t.id)
+         AND NOT EXISTS (SELECT 1 FROM public.parcel_zoning x WHERE x.plan_zone_type_id = t.id)
+         AND NOT EXISTS (SELECT 1 FROM public.plan_zone_standard x WHERE x.plan_zone_type_id = t.id)
+         AND NOT EXISTS (SELECT 1 FROM public.plan_zone_type_class x WHERE x.plan_zone_type_id = t.id)
+         AND NOT EXISTS (SELECT 1 FROM public.zone_land_use_controls x WHERE x.plan_zone_type_id = t.id)
+         AND NOT EXISTS (SELECT 1 FROM public.plan_zone_type x WHERE x.derived_from_id = t.id)`, [plan.id])
+    report.stale_zone_types_removed = staleTypes
 
     const q = async (sql, params) => (await db.query(sql, params)).rows
     const [counts] = await q(`SELECT count(*)::int AS total, count(*) FILTER (WHERE scale_category = $1)::int AS beyond,

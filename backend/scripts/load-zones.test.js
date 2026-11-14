@@ -45,6 +45,14 @@ describe('data/reference/vungu/zones', () => {
     for (const [settlement, codes] of pairs) expect([settlement, codes.size]).toEqual([settlement, 1])
   })
 
+  test('every settlement category has a planning zone, as the council named it', () => {
+    const expected = {
+      Communal: 'Communal', 'Resettlement Area': 'Resettlement Area', FLSCF: 'Large Scale Commercial Farms',
+      FLSCF_A2: 'Model A2', SSCF: 'Small Scale Commercial Farms', FLSCF_SSCF_A1: 'Model A1',
+    }
+    expect([...new Set(read('beyond_peri_urban_zones').map((x) => x.properties.settlement))].sort()).toEqual(Object.keys(expected).sort())
+  })
+
   test('no geometry carries a non-finite coordinate', () => {
     const finite = (c) => (typeof c[0] === 'number' ? c.every(Number.isFinite) : c.every(finite))
     for (const n of ['peri_urban_zones', 'beyond_peri_urban_zones']) for (const x of read(n)) expect(finite(x.geometry.coordinates)).toBe(true)
