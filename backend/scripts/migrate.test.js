@@ -187,6 +187,7 @@ describe('migration plan', () => {
       '214_finance_fixed_assets.sql',
       '215_spatial_engine.sql',
       '216_executive_units.sql',
+      '217_road_density_segments.sql',
     ])
 
     for (const filename of MIGRATIONS) {
