@@ -101,6 +101,10 @@ async function checkDetermination(q, permitId, { decision, notes, delegated, adm
   const status = DECISION_STATUS[decision]
   const c = await caseFacts(q, permitId)
   if (!c) return { halt: stop(404, 'not_found', 'Case not found.') }
+  // 0. the case has been acknowledged: the Act's clock runs from it
+  if (!c.acknowledged_at) {
+    return { halt: stop(409, 'not_acknowledged', 'This application has not been acknowledged, so the clock under the Act has not started. Acknowledge it (s.26(2)) before it is decided.') }
+  }
   const sw = await loadSwitches(q)
   const directions = await directionsFor(q, c.development_type)
   const binding = directions.filter((d) => d.refers_to_minister || d.restricts)

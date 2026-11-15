@@ -107,6 +107,29 @@ describe('the gates on eo-decision', () => {
     expect(res.json().error).toBe('committee_resolution_required')
   })
 
+  test('a registered case cannot skip acknowledgement on the way to review', async () => {
+    const created = await app.inject({ method: 'POST', url: '/api/permit-applications', headers: as(planner), payload: { applicant_name: 'Skip Test', development_type: 'new_building' } })
+    expect(created.statusCode).toBe(201)
+    permits.push(created.json().data.id)
+    const jump = await app.inject({
+      method: 'PATCH', url: `/api/permit-applications/${created.json().data.id}/status`, headers: as(planner),
+      payload: { status: 'under_review', expectedRevision: created.json().data.revision },
+    })
+    expect(jump.statusCode).toBe(409)
+    expect(jump.json().error).toBe('invalid_transition')
+    expect(jump.json().allowed).toContain('acknowledged')
+    expect(jump.json().allowed).not.toContain('under_review')
+  }, 30000)
+
+  test('a case that was never acknowledged is not decided, because its clock has not started', async () => {
+    const id = await permitUnderReview()
+    const c = await systemOf(app.pg).connect()
+    try { await c.query('UPDATE spatial_planning.permit_application SET acknowledged_at = NULL WHERE id = $1', [id]) } finally { c.release() }
+    const res = await decide(id, { decision: 'approve' })
+    expect(res.statusCode).toBe(409)
+    expect(res.json().error).toBe('not_acknowledged')
+  }, 30000)
+
   test('a decision needs the direction check to have been recorded', async () => {
     const id = await permitUnderReview({ checked: false })
     const res = await decide(id, { decision: 'approve' })

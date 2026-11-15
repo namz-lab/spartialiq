@@ -11,7 +11,7 @@ const { loginAs } = require('./helpers/auth')
 const { suspendAffirmation } = require('./helpers/proposedCells')
 
 describe('applications and the plan', () => {
-  let app, eo, planner, sys, restoreAffirmation
+  let app, eo, admin, planner, sys, restoreAffirmation
   const permits = []
   let eoStand, proposedStand            // a stand governed by an EO column, and one by a PROPOSED column
 
@@ -20,11 +20,8 @@ describe('applications and the plan', () => {
     sys = systemOf(app.pg)
     // the EO's pending decisions may be affirmed for testing; these tests pin the behaviour of a PROPOSED rule, so put the proposals back for the length of the file
     restoreAffirmation = await suspendAffirmation(sys)
-    // these tests pin the PLAN's gate, and take the EO's own lane to reach it: the council's delegation (S1, S3, S5) is recorded for the length of the file
-    await sys.query(`INSERT INTO spatial_planning.delegation_switch (authority_id, switch_key, is_on, evidence, confirmed_at)
-                     SELECT 1, k, true, 'test fixture: delegation recorded for application-plan.test.js', now() FROM unnest(ARRAY['S1','S3','S5']) k
-                     ON CONFLICT (authority_id, switch_key) DO UPDATE SET is_on = true, evidence = EXCLUDED.evidence`)
     eo = await loginAs(app, 'demo.eo@vungu.test', 'demo1234')
+    admin = await loginAs(app, 'demo.admin@vungu.test', 'demo1234')
     planner = await loginAs(app, 'demo.planner@vungu.test', 'demo1234')
     const pick = async (zone) => (await sys.query(
       `SELECT p.stand_no FROM public.parcel_zoning pz
@@ -44,7 +41,6 @@ describe('applications and the plan', () => {
       await sys.query('DELETE FROM spatial_planning.generated_document WHERE permit_app_id = $1', [id]).catch(() => {})
       await sys.query('DELETE FROM spatial_planning.permit_application WHERE id = $1', [id])
     }
-    await sys.query(`DELETE FROM spatial_planning.delegation_switch WHERE evidence LIKE 'test fixture:%'`)
     await restoreAffirmation()
     await app.close()
   }, 30000)
@@ -68,8 +64,10 @@ describe('applications and the plan', () => {
     return id
   }
   const assess = (id, use) => app.inject({ method: 'POST', url: `/api/permit-applications/${id}/rule-snapshot`, headers: auth(planner), payload: { land_use_code: use } })
-  const decide = (id, payload) => app.inject({ method: 'POST', url: `/api/permit-applications/${id}/eo-decision`, headers: auth(eo),
-    payload: { delegated_authority: 'Decided under delegated authority for this test.', ...payload } })
+  // These tests pin the PLAN's gate. The authority for a decision is not what they are about, so an administrator's written override stands in for it
+  // (the switches the delegated lane needs are shared state, and are tested in committee-gate.test.js).
+  const decide = (id, payload) => app.inject({ method: 'POST', url: `/api/permit-applications/${id}/eo-decision`, headers: auth(admin),
+    payload: { override: true, override_reason: 'Test: the plan gate is under test, not the decision authority.', ...payload } })
   const events = async (id) => (await sys.query('SELECT event_type, detail FROM spatial_planning.permit_event WHERE permit_app_id = $1 ORDER BY created_at', [id])).rows
 
   test('an application for a real stand number is linked to the parcel and lodged under the plan', async () => {

@@ -131,11 +131,12 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     out.push({
       id: 'acknowledged',
       label: 'Application acknowledged',
-      status: p.received_at ? 'complete' : 'outstanding',
-      detail: p.received_at
-        ? `Acknowledged on ${toDateOnly(p.received_at)}.`
-        : 'No acknowledgement date is recorded. Acknowledge the application before determining it.',
-      serverEnforced: false,
+      // the council's own record: the acknowledgement date the server holds (it starts the Act's clock), never the date of receipt
+      status: p.acknowledged_at ? 'complete' : 'outstanding',
+      detail: p.acknowledged_at
+        ? `Acknowledged on ${toDateOnly(p.acknowledged_at)}.`
+        : 'No acknowledgement is recorded, so the clock under the Act has not started. Acknowledge the application before determining it.',
+      serverEnforced: true,
     })
 
     // 2. Statutory determination period
