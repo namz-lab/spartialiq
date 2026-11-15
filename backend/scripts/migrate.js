@@ -377,6 +377,8 @@ const MIGRATIONS = [
   // Stand sales as a thin table over the parcel register; the demo stands are dropped.
   // Rollback: migrations/rollback/228_stand_offer.down.sql.
   '228_stand_offer.sql',
+  // Stand boundary changes as proposals to the Survey Section. Rollback: migrations/rollback/229_parcel_change_requests.down.sql.
+  '229_parcel_change_requests.sql',
 ]
 
 function createPool(env = process.env) {

@@ -31,6 +31,7 @@ const { authRoutes } = require('./src/routes/auth')
 // planner's "what can be developed here" assistant. Both endpoints read
 // from the existing zone_land_use_controls + planning_assistant_templates.
 const { standsRoutes } = require('./src/routes/stands')
+const { parcelChangeRequestRoutes } = require('./src/routes/parcel-change-requests')
 const { planningAssistantRoutes } = require('./src/routes/planning-assistant')
 const plannerRoutes = require('./src/routes/planner')
 const { zonesRoutes } = require('./src/routes/zones')
@@ -613,6 +614,7 @@ async function build() {
   // These mount under /api and respect the global rate-limit.
   try {
     await server.register(standsRoutes,            { prefix: '/api' })
+    await server.register(parcelChangeRequestRoutes, { prefix: '/api' })
     await server.register(zonesRoutes,             { prefix: '/api' })
     await server.register(planModelRoutes,         { prefix: '/api' })
     await server.register(parcelZoningRoutes,      { prefix: '/api' })

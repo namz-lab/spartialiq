@@ -12,6 +12,8 @@ import { useUiFeedback } from '@/composables/useUiFeedback'
 import UiFeedback from '@/components/UiFeedback.vue'
 import { addVunguBasemap } from '@/map/vunguBasemap'
 import MapLayerFilters from '@/components/MapLayerFilters.vue'
+import StandChangeProposals from '@/components/gis/StandChangeProposals.vue'
+import { parcelChangeApi, errorMessage, KIND_LABEL, type ChangeKind, type ProposalItemInput } from '@/services/parcelChangeService'
 import {
   Plus, Pencil, Trash2, Save, X, Search, Filter,
   MapPin, AlertTriangle, CheckCircle2, RotateCcw,
@@ -32,7 +34,7 @@ interface Stand {
   frontageM: number | null
   depthM: number | null
   priceUsd: number | null
-  status: 'available' | 'reserved' | 'allocated' | 'withdrawn'
+  status: 'available' | 'reserved' | 'allocated' | 'withdrawn' | 'not_offered'
   description: string | null
   geometry: GeoJSON.Polygon | null
   centroid: [number, number] | null
@@ -73,6 +75,15 @@ const mergeStandNumber = ref('')
 const splitMode = ref(false)
 const opBusy = ref(false)
 
+// ─── Proposals (migration 229) ─────────────────────────────────────────────────
+// A stand is a parcel of the register: its boundary changes only under a Survey Section import. What is drawn here is a PROPOSAL.
+interface Pending { kind: ChangeKind; parentIds: string[]; items: ProposalItemInput[]; summary: string }
+const pending = ref<Pending | null>(null)
+const pendingReason = ref('')
+const boundaryMode = ref<'none' | 'new' | 'reshape'>('none')
+const proposalsKey = ref(0)
+const openProposalId = ref<string | null>(null)
+
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
 const showForm = ref(false)
@@ -104,12 +115,14 @@ const STATUS_COLOR: Record<string, string> = {
   reserved:  '#f59e0b',
   allocated: '#3b82f6',
   withdrawn: '#9ca3af',
+  not_offered: '#cbd5e1',
 }
 const STATUS_BG: Record<string, string> = {
   available: 'bg-green-100 text-green-800',
   reserved:  'bg-amber-100 text-amber-800',
   allocated: 'bg-blue-100 text-blue-800',
   withdrawn: 'bg-gray-100 text-gray-500',
+  not_offered: 'bg-slate-100 text-slate-500',
 }
 
 const USE_SCALES = ['Low Density', 'Medium Density', 'High Density', 'Commercial', 'Industrial', 'Institutional', 'Agricultural']
@@ -137,9 +150,8 @@ const stats = computed(() => ({
   withdrawn: stands.value.filter(s => s.status === 'withdrawn').length,
 }))
 
-const canSave = computed(() =>
-  form.standNumber.trim() && form.ward && drawnGeometry.value && !drawError.value
-)
+// The form changes a stand's sales details; its number, ward and boundary are the register's.
+const canSave = computed(() => !!editingStandId.value && !saving.value)
 
 const mergeSelection = computed(() => {
   const chosen = stands.value.filter(s => selectedIds.value.has(s.id))
@@ -157,7 +169,7 @@ async function loadStands() {
   errorMsg.value = null
   try {
     const res = await api.get('/stands', {
-      params: { status: 'available,reserved,allocated,withdrawn' },
+      params: { status: 'available,reserved,allocated,withdrawn,not_offered' },
     })
     stands.value = (res.data?.features ?? []).map((f: any) => ({
       ...f.properties,
@@ -177,37 +189,39 @@ async function saveStand() {
   errorMsg.value = null
   try {
     const body = {
-      standNumber: form.standNumber.trim(),
-      ward: form.ward,
-      zoneType:   form.zoneType   || null,
       useScale:   form.useScale   || null,
       frontageM:  form.frontageM  ? Number(form.frontageM)  : null,
       depthM:     form.depthM     ? Number(form.depthM)     : null,
       priceUsd:   form.priceUsd   ? Number(form.priceUsd)   : null,
       description: form.description || null,
-      geometry:   drawnGeometry.value,
     }
-    if (isCreating.value) {
-      await api.post('/stands', body)
-      flashSuccess('Stand created')
-    } else {
-      await api.put(`/stands/${editingStandId.value}`, body)
-      flashSuccess('Stand updated')
-    }
+    await api.put(`/stands/${editingStandId.value}`, body)
+    flashSuccess('Sales details updated')
     cancelEdit()
     await loadStands()
   } catch (err: any) {
-    errorMsg.value = err.response?.data?.message ?? 'Failed to save stand'
+    errorMsg.value = errorMessage(err, 'Failed to save the sales details')
   } finally {
     saving.value = false
   }
 }
 
+// A stand is a parcel of the register. The council puts it on offer (price, use) before it can be reserved or allocated.
+async function putOnOffer(stand: Stand) {
+  try {
+    await api.post(`/stands/${stand.id}/offer`, {})
+    flashSuccess(`Stand ${stand.standNumber} is now on offer`)
+    await loadStands()
+  } catch {
+    errorMsg.value = 'Failed to put the stand on offer'
+  }
+}
+
 async function deleteStand(stand: Stand) {
   const ok = await fb.confirmAction(
-    'Delete stand',
-    `Delete stand ${stand.standNumber}? This cannot be undone.`,
-    { confirmLabel: 'Delete', danger: true },
+    'Withdraw offer',
+    `Withdraw the offer on stand ${stand.standNumber}? Its allocation history is kept.`,
+    { confirmLabel: 'Withdraw', danger: true },
   )
   if (!ok) return
   try {
@@ -216,10 +230,10 @@ async function deleteStand(stand: Stand) {
       selectedStand.value = null
       showForm.value = false
     }
-    flashSuccess(`Stand ${stand.standNumber} deleted`)
+    flashSuccess(`The offer on stand ${stand.standNumber} is withdrawn`)
     await loadStands()
   } catch {
-    errorMsg.value = 'Failed to delete stand'
+    errorMsg.value = 'Failed to withdraw the offer'
   }
 }
 
@@ -228,9 +242,6 @@ async function deleteStand(stand: Stand) {
 function validateForm(): boolean {
   Object.keys(formErrors).forEach(k => delete formErrors[k])
   let ok = true
-  if (!form.standNumber.trim()) { formErrors.standNumber = 'Required'; ok = false }
-  if (!form.ward) { formErrors.ward = 'Required'; ok = false }
-  if (!drawnGeometry.value) { errorMsg.value = 'Draw a polygon on the map first'; ok = false }
   if (form.frontageM.trim() && !isPositiveNumber(form.frontageM, { min: 0 })) {
     formErrors.frontageM = 'Must be a number of 0 or more'; ok = false
   }
@@ -491,37 +502,38 @@ function highlightMulti() {
 // ─── Draw actions ─────────────────────────────────────────────────────────────
 
 function startDrawNew() {
-  if (!draw) return
-  clearSelection()
+  const parent = selectedStand.value
+  if (!draw || !parent?.geometry) { errorMsg.value = 'Select the stand the new stand is to be cut from first.'; return }
   cancelEdit()
-  isCreating.value = true
+  boundaryMode.value = 'new'
   drawMode.value = 'drawing'
   draw.deleteAll()
   draw.changeMode('draw_polygon')
   drawError.value = null
   drawnGeometry.value = null
   drawnAreaSqm.value = 0
-  resetForm()
   errorMsg.value = null
 }
 
 function startEditGeometry() {
   const stand = selectedStand.value
   if (!stand || !stand.geometry || !draw) return
+  cancelEdit()
+  boundaryMode.value = 'reshape'
   drawMode.value = 'editing'
   editingStandId.value = stand.id
-  isCreating.value = false
   draw.deleteAll()
   const fid = draw.add({ type: 'Feature', geometry: stand.geometry, properties: {} })[0]
   draw.changeMode('direct_select', { featureId: fid })
   drawnGeometry.value = stand.geometry
   drawnAreaSqm.value = turf.area({ type: 'Feature', geometry: stand.geometry, properties: {} })
-  populateForm(stand)
-  showForm.value = true
   drawError.value = null
+  buildPendingFromDrawn()
 }
 
 function cancelEdit() {
+  boundaryMode.value = 'none'
+  pending.value = null
   drawMode.value = 'idle'
   draw?.deleteAll()
   draw?.changeMode?.('simple_select')
@@ -560,22 +572,21 @@ function openMergeForm() {
 }
 
 async function confirmMerge() {
-  if (!mergeStandNumber.value.trim() || selectedIds.value.size < 2) return
+  if (selectedIds.value.size < 2) return
   opBusy.value = true
   errorMsg.value = null
   try {
-    const ids = [...selectedIds.value]
-    const wards = stands.value.filter(s => ids.includes(s.id)).map(s => s.ward)
-    await api.post('/stands/merge', {
-      standIds: ids,
-      standNumber: mergeStandNumber.value.trim(),
-      ward: wards[0],
-    })
-    flashSuccess(`Merged ${ids.length} stands into ${mergeStandNumber.value.trim()}`)
-    exitMultiSelect()
-    await loadStands()
+    const picked = stands.value.filter(st => selectedIds.value.has(st.id) && st.geometry)
+    const geometry = await parcelChangeApi.mergeGeometries(picked.map(st => st.geometry as any))
+    pending.value = {
+      kind: 'merge',
+      parentIds: picked.map(st => st.id),
+      items: [{ role: 'child', label: mergeStandNumber.value.trim() || undefined, geometry }],
+      summary: `Merge ${picked.length} stands (${picked.map(st => st.standNumber).join(', ')}) into one`,
+    }
+    showMergeForm.value = false
   } catch (err: any) {
-    errorMsg.value = err.response?.data?.error ?? 'Merge failed'
+    errorMsg.value = errorMessage(err, 'The stands could not be merged')
   } finally {
     opBusy.value = false
   }
@@ -600,19 +611,21 @@ function cancelSplit() {
 
 async function submitSplit(blade: GeoJSON.LineString) {
   const stand = selectedStand.value
-  if (!stand) return
+  if (!stand?.geometry) return
   opBusy.value = true
   errorMsg.value = null
   try {
-    const res = await api.post(`/stands/${stand.id}/split`, { blade })
-    const n = res.data?.data?.children?.length ?? 0
-    flashSuccess(`Subdivided ${stand.standNumber} into ${n} stands`)
+    const pieces = await parcelChangeApi.splitGeometry(stand.geometry as any, blade)
+    pending.value = {
+      kind: 'split',
+      parentIds: [stand.id],
+      items: pieces.map((geometry, i) => ({ role: 'child' as const, label: `${stand.standNumber}-${i + 1}`, geometry })),
+      summary: `Split stand ${stand.standNumber} into ${pieces.length} stands`,
+    }
     splitMode.value = false
     draw?.deleteAll()
-    clearSelection()
-    await loadStands()
   } catch (err: any) {
-    errorMsg.value = err.response?.data?.error ?? 'Split failed'
+    errorMsg.value = errorMessage(err, 'The stand could not be split')
     draw?.deleteAll()
     splitMode.value = false
   } finally {
@@ -627,11 +640,7 @@ function onDrawCreate(e: any) {
     submitSplit(geo)
     return
   }
-  if (geo?.type === 'Polygon') {
-    processGeometry(geo)
-    // auto-open form once polygon is complete
-    if (!showForm.value) showForm.value = true
-  }
+  if (geo?.type === 'Polygon') processGeometry(geo)
 }
 
 function onDrawUpdate(e: any) {
@@ -653,11 +662,97 @@ function processGeometry(geometry: GeoJSON.Polygon) {
   drawnGeometry.value = geometry
   drawnAreaSqm.value = turf.area(feat)
   // Auto-fill frontage/depth from bounding box if not already set
-  const bb = turf.bbox(feat)
-  const w = turf.distance([bb[0], (bb[1] + bb[3]) / 2], [bb[2], (bb[1] + bb[3]) / 2], { units: 'meters' })
-  const h = turf.distance([(bb[0] + bb[2]) / 2, bb[1]], [(bb[0] + bb[2]) / 2, bb[3]], { units: 'meters' })
-  if (!form.frontageM) form.frontageM = String(Math.round(w * 10) / 10)
-  if (!form.depthM)    form.depthM    = String(Math.round(h * 10) / 10)
+  buildPendingFromDrawn()
+}
+
+/** The drawn shape, as a proposal: a new stand cut from the selected stand, or the selected stand's corrected boundary. */
+function buildPendingFromDrawn() {
+  const parent = selectedStand.value
+  const drawn = drawnGeometry.value
+  if (!parent?.geometry || !drawn || drawError.value || boundaryMode.value === 'none') { pending.value = null; return }
+  if (boundaryMode.value === 'reshape') {
+    pending.value = {
+      kind: 'reshape',
+      parentIds: [parent.id],
+      items: [{ role: 'revised', parent_parcel_id: parent.id, label: parent.standNumber, geometry: drawn }],
+      summary: `Corrected boundary for stand ${parent.standNumber}`,
+    }
+    return
+  }
+  // new: the part of the drawing that lies inside the stand is the new stand; what is left is the stand's revised boundary
+  try {
+    const parentFeat = { type: 'Feature' as const, geometry: parent.geometry, properties: {} }
+    const drawnFeat = { type: 'Feature' as const, geometry: drawn, properties: {} }
+    const child = turf.intersect(parentFeat as any, drawnFeat as any)
+    const rest = child ? turf.difference(parentFeat as any, child as any) : null
+    if (!child || !rest) { errorMsg.value = 'The new stand must lie inside the selected stand, and leave part of it.'; pending.value = null; return }
+    errorMsg.value = null
+    pending.value = {
+      kind: 'new',
+      parentIds: [parent.id],
+      items: [
+        { role: 'revised', parent_parcel_id: parent.id, label: parent.standNumber, geometry: rest.geometry as any },
+        { role: 'child', label: `New stand from ${parent.standNumber}`, geometry: child.geometry as any },
+      ],
+      summary: `New stand cut from stand ${parent.standNumber}`,
+    }
+  } catch {
+    errorMsg.value = 'The drawing could not be cut from the stand: draw a simple shape inside it.'
+    pending.value = null
+  }
+}
+
+async function createPending() {
+  const p = pending.value
+  if (!p) return
+  opBusy.value = true
+  errorMsg.value = null
+  try {
+    const created = await parcelChangeApi.create({
+      kind: p.kind, reason: pendingReason.value.trim() || null, parent_ids: p.parentIds, items: p.items,
+    })
+    flashSuccess(`${KIND_LABEL[p.kind]} proposal drafted: review it and send it to the Survey Section`)
+    pendingReason.value = ''
+    cancelEdit()
+    exitMultiSelect()
+    draw?.deleteAll()
+    openProposalId.value = null
+    await nextTick()
+    openProposalId.value = created.id
+    proposalsKey.value++
+  } catch (err: any) {
+    errorMsg.value = errorMessage(err, 'The proposal could not be saved')
+  } finally {
+    opBusy.value = false
+  }
+}
+
+function discardPending() {
+  pendingReason.value = ''
+  cancelEdit()
+  exitMultiSelect()
+  draw?.deleteAll()
+}
+
+/** Draw a proposal (its stands and its new boundaries) on the map, or clear it. */
+function showProposal(fc: GeoJSON.FeatureCollection | null) {
+  if (!map) return
+  if (!map.getSource('proposal-overlay')) {
+    map.addSource('proposal-overlay', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+    map.addLayer({ id: 'proposal-parent', type: 'line', source: 'proposal-overlay', filter: ['==', ['get', 'role'], 'parent'],
+      paint: { 'line-color': '#475467', 'line-width': 2 } })
+    map.addLayer({ id: 'proposal-fill', type: 'fill', source: 'proposal-overlay', filter: ['!=', ['get', 'role'], 'parent'],
+      paint: { 'fill-color': '#7c3aed', 'fill-opacity': 0.18 } })
+    map.addLayer({ id: 'proposal-line', type: 'line', source: 'proposal-overlay', filter: ['!=', ['get', 'role'], 'parent'],
+      paint: { 'line-color': '#7c3aed', 'line-width': 2.5, 'line-dasharray': [2, 1.5] } })
+  }
+  ;(map.getSource('proposal-overlay') as any).setData(fc ?? { type: 'FeatureCollection', features: [] })
+  if (fc?.features.length) {
+    try {
+      const [minX, minY, maxX, maxY] = turf.bbox(fc)
+      if ([minX, minY, maxX, maxY].every(Number.isFinite)) map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 80, maxZoom: 18, duration: 500 })
+    } catch { /* leave the view */ }
+  }
 }
 
 // ─── Form helpers ─────────────────────────────────────────────────────────────
@@ -753,21 +848,27 @@ onUnmounted(() => { map?.remove(); map = null })
 
       <!-- Draw toolbar -->
       <div class="se-toolbar">
+        <!-- A stand is a parcel of the register: its boundary changes only through the Survey Section import (migration 228),
+             so the drawing, merging, splitting and boundary-editing tools are not offered. -->
+        <p class="se-hint se-hint--blue" role="note">
+          <Info :size="13" />
+          Boundary changes are proposals: the Survey Section decides them and the survey import applies them.
+        </p>
         <button
           class="se-btn se-btn--primary"
-          :disabled="drawMode !== 'idle' || multiSelectMode || splitMode"
+          :disabled="drawMode !== 'idle' || multiSelectMode || splitMode || !selectedStand"
           @click="startDrawNew"
-          title="Draw a new stand polygon"
+          title="Draw a new stand inside the selected stand"
         >
           <Plus :size="14" />
-          New
+          New stand
         </button>
         <button
           class="se-btn"
           :class="multiSelectMode ? 'se-btn--primary' : 'se-btn--secondary'"
           :disabled="drawMode !== 'idle' || splitMode"
           @click="multiSelectMode ? exitMultiSelect() : enterMultiSelect()"
-          title="Select multiple stands to consolidate"
+          title="Select adjoining stands to propose joining them"
         >
           <Combine :size="14" />
           Merge
@@ -776,7 +877,7 @@ onUnmounted(() => { map?.remove(); map = null })
           v-if="selectedStand && drawMode === 'idle' && !multiSelectMode && !splitMode"
           class="se-btn se-btn--secondary"
           @click="startSplit"
-          title="Subdivide this stand by drawing a cut line"
+          title="Propose cutting this stand in two by drawing a line across it"
         >
           <Scissors :size="14" />
           Split
@@ -785,15 +886,16 @@ onUnmounted(() => { map?.remove(); map = null })
           v-if="selectedStand && drawMode === 'idle' && !multiSelectMode && !splitMode"
           class="se-btn se-btn--secondary"
           @click="startEditGeometry"
-          title="Edit this stand's boundary"
+          title="Propose a corrected boundary for this stand"
         >
           <Pencil :size="14" />
+          Boundary
         </button>
         <button
           v-if="selectedStand && drawMode === 'idle' && !multiSelectMode && !splitMode"
           class="se-btn se-btn--danger"
           @click="deleteStand(selectedStand)"
-          title="Delete stand"
+          title="Withdraw this stand's offer"
         >
           <Trash2 :size="14" />
         </button>
@@ -815,6 +917,21 @@ onUnmounted(() => { map?.remove(); map = null })
           <X :size="14" />
           Cancel
         </button>
+      </div>
+
+      <!-- A proposal waiting to be saved -->
+      <div v-if="pending" class="se-merge-form" role="group" aria-label="Save this proposal">
+        <strong>{{ pending.summary }}</strong>
+        <label class="se-label">
+          Why? (optional, the Survey Section reads it)
+          <input v-model="pendingReason" class="se-field" maxlength="500" @keyup.enter="createPending" />
+        </label>
+        <div class="se-merge-form__actions">
+          <button class="se-btn se-btn--ghost se-btn--sm" :disabled="opBusy" @click="discardPending">Discard</button>
+          <button class="se-btn se-btn--primary se-btn--sm" :disabled="opBusy" @click="createPending">
+            {{ opBusy ? 'Saving…' : 'Save as a draft proposal' }}
+          </button>
+        </div>
       </div>
 
       <!-- Draw hint -->
@@ -850,13 +967,13 @@ onUnmounted(() => { map?.remove(); map = null })
       <!-- Merge form -->
       <div v-if="showMergeForm" class="se-merge-form">
         <label class="se-label">
-          New stand number *
-          <input v-model="mergeStandNumber" class="se-field" placeholder="e.g. CONS-001" @keyup.enter="confirmMerge" />
+          Label for the merged stand (optional; the Survey Section assigns the number)
+          <input v-model="mergeStandNumber" class="se-field" placeholder="e.g. consolidation of 1228 and 1229" @keyup.enter="confirmMerge" />
         </label>
         <div class="se-merge-form__actions">
           <button class="se-btn se-btn--ghost se-btn--sm" @click="showMergeForm = false" :disabled="opBusy">Back</button>
-          <button class="se-btn se-btn--primary se-btn--sm" @click="confirmMerge" :disabled="opBusy || !mergeStandNumber.trim()">
-            {{ opBusy ? 'Merging…' : 'Merge' }}
+          <button class="se-btn se-btn--primary se-btn--sm" @click="confirmMerge" :disabled="opBusy">
+            {{ opBusy ? 'Joining…' : 'Propose the merge' }}
           </button>
         </div>
       </div>
@@ -917,6 +1034,11 @@ onUnmounted(() => { map?.remove(); map = null })
           <span class="se-stand-badge" :class="STATUS_BG[stand.status]">{{ stand.status }}</span>
         </button>
       </div>
+
+      <!-- Boundary proposals: mine, and the Survey Section's queue -->
+      <div class="se-proposals">
+        <StandChangeProposals :refresh-key="proposalsKey" :open-id="openProposalId" @show="showProposal" />
+      </div>
     </aside>
 
     <!-- ── Map panel ───────────────────────────────────────────────────── -->
@@ -942,13 +1064,13 @@ onUnmounted(() => { map?.remove(); map = null })
           <span class="se-info-badge" :class="STATUS_BG[selectedStand.status]">{{ selectedStand.status }}</span>
         </div>
         <div class="se-info-strip__actions">
-          <button class="se-btn se-btn--secondary" @click="startEditGeometry">
-            <Pencil :size="13" /> Edit boundary
+          <button v-if="selectedStand.status === 'not_offered'" class="se-btn se-btn--primary" @click="putOnOffer(selectedStand)">
+            <Plus :size="13" /> Put on offer
           </button>
-          <button class="se-btn se-btn--secondary" @click="() => { populateForm(selectedStand!); editingStandId = selectedStand!.id; isCreating = false; showForm = true }">
-            <Info :size="13" /> Edit details
+          <button v-else class="se-btn se-btn--secondary" @click="() => { populateForm(selectedStand!); editingStandId = selectedStand!.id; isCreating = false; showForm = true }">
+            <Info :size="13" /> Edit sales details
           </button>
-          <button class="se-btn se-btn--danger" @click="deleteStand(selectedStand)">
+          <button class="se-btn se-btn--danger" title="Withdraw this stand's offer" @click="deleteStand(selectedStand)">
             <Trash2 :size="13" />
           </button>
           <button class="se-btn se-btn--ghost" @click="clearSelection">
@@ -963,36 +1085,22 @@ onUnmounted(() => { map?.remove(); map = null })
       <aside v-if="showForm" class="se-form-panel">
         <header class="se-form-header">
           <h3 class="se-form-title">
-            {{ isCreating ? 'Create Stand' : 'Edit Stand' }}
+            Sales details
           </h3>
           <button class="se-icon-btn" @click="cancelEdit"><X :size="15" /></button>
         </header>
-
-        <!-- Geometry status -->
-        <div v-if="drawnGeometry" class="se-geom-ok">
-          <CheckCircle2 :size="14" />
-          Polygon set · {{ fmtArea(drawnAreaSqm) }}
-        </div>
-        <div v-else class="se-geom-missing">
-          <AlertTriangle :size="14" />
-          Draw a polygon on the map
-        </div>
-        <div v-if="drawError" class="se-geom-error">
-          <AlertTriangle :size="14" />
-          {{ drawError }}
-        </div>
 
         <!-- Form fields -->
         <div class="se-form-fields">
           <label class="se-label">
             Stand Number *
-            <input v-model="form.standNumber" class="se-field" :class="{ 'se-field--err': formErrors.standNumber }" placeholder="e.g. HDR-001" />
+            <input v-model="form.standNumber" class="se-field" disabled title="The stand's number is the register's" />
             <span v-if="formErrors.standNumber" class="se-err">{{ formErrors.standNumber }}</span>
           </label>
 
           <label class="se-label">
             Ward *
-            <select v-model="form.ward" class="se-field" :class="{ 'se-field--err': formErrors.ward }">
+            <select v-model="form.ward" class="se-field" disabled title="The stand's ward is the register's">
               <option value="">Select ward</option>
               <option v-for="w in allWards" :key="w" :value="w">{{ w }}</option>
               <option value="__new__" disabled>— or type below —</option>
@@ -1046,7 +1154,7 @@ onUnmounted(() => { map?.remove(); map = null })
           <button class="se-btn se-btn--ghost" @click="cancelEdit" :disabled="saving">Cancel</button>
           <button class="se-btn se-btn--primary" @click="saveStand" :disabled="saving || !canSave">
             <Save :size="14" />
-            {{ saving ? 'Saving…' : isCreating ? 'Create Stand' : 'Save Changes' }}
+            {{ saving ? 'Saving…' : 'Save changes' }}
           </button>
         </div>
       </aside>
@@ -1205,6 +1313,14 @@ onUnmounted(() => { map?.remove(); map = null })
 }
 
 /* ─── Stand list ──────────────────────────────────────────────────────────── */
+.se-proposals {
+  border-top: 1px solid #e4e7ec;
+  padding: 0.75rem;
+  max-height: 45%;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
 .se-list {
   flex: 1;
   overflow-y: auto;
