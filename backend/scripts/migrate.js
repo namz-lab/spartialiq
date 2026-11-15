@@ -385,6 +385,8 @@ const MIGRATIONS = [
   '231_applications_read_the_plan.sql',
   // Plan revisions keep their shapes; the adoption record (council, signatories, Minister). Rollback: migrations/rollback/232_plan_revisions_and_adoption.down.sql.
   '232_plan_revisions_and_adoption.sql',
+  // The facilities and land features the printed sheet shows (schools, police posts, quarries, irrigation schemes ...). Rollback: migrations/rollback/233_facilities_and_land_features.down.sql.
+  '233_facilities_and_land_features.sql',
 ]
 
 function createPool(env = process.env) {

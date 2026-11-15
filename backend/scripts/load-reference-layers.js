@@ -28,6 +28,13 @@
  *                                 left out); dams -> basemap.waterbody (138 polygons, a name for 14, no use). The demonstration
  *                                 water points give way to the real ones.
  *
+ *   schools, police_posts, dip_tanks, network_boosters, non_minerals, irrigation_schemes, recreational_sites
+ *                            the Vungu Master Plan Geo Package of 16 October 2024 (the printed composite master plan's facilities):
+ *                                 -> admin.community_facility (points; kind school, police_post, dip_tank, network_booster) and
+ *                                 admin.land_feature (polygons; kind quarry, sand_working, irrigation_scheme, recreational_site). A school keeps its
+ *                                 level and grant class, a police post its type, an irrigation scheme its status, and a workings its use (Quarry or
+ *                                 Sand); a value the source lacks stays NULL. The ward is found from the position (NULL outside every ward).
+ *
  * Voters become spatial_engine.ward_denominator rows of kind 'registered_voters' (as of 2023): the sum of the
  * polling areas whose point on surface lies in each of the council's current wards. Registered voters are adults on
  * the roll, not the population, and the source says so. A ward number that disagrees with the ward that holds the area
@@ -53,6 +60,7 @@ const LEGACY = 'Earlier VunGIS legacy layer (gweru_legacy.sql), cut to Vungu'
 const ROADS = 'OpenStreetMap road centrelines, council-supplied roads.geojson (14 November 2026)'
 const BOUNDARY = 'Council GIS planning_boundary.geojson (14 November 2026), as supplied'
 const BOREHOLES = 'Council GIS boreholes.geojson (14 November 2026): a position only'
+const PACKAGE = 'Vungu Master Plan Geo Package (16 October 2024)'
 const DAMS = 'Council GIS dams.geojson (14 November 2026)'
 
 const read = (name) => {
@@ -69,8 +77,8 @@ const geomSql = (kind) => ({
 const txt = (v) => (v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim())
 const int = (v) => (v === null || v === undefined || v === '' ? null : Number.parseInt(v, 10))
 
-async function replaceLayer(db, table, columns, rows, geometry) {
-  await db.query(`DELETE FROM ${table}`)
+async function replaceLayer(db, table, columns, rows, geometry, { clear = true } = {}) {
+  if (clear) await db.query(`DELETE FROM ${table}`)
   const cols = [...columns, 'geom']
   const ph = columns.map((_, i) => `$${i + 1}`)
   const sql = `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${ph.join(', ')}, ${geomSql(geometry).replace('$G', `$${columns.length + 1}`)})`
@@ -99,6 +107,32 @@ async function main() {
 
     report.rivers = await replaceLayer(db, 'admin.river', ['name', 'river_type', 'source'],
       read('rivers').map(feat).map(({ p, geometry }) => ({ geometry, values: [txt(p.name), txt(p.river_type), LEGACY] })), 'MultiLineString')
+
+    // ── The facilities and land features of the printed sheet (migration 233) ──
+    const FAC = ['kind', 'name', 'subtype', 'grade', 'school_number', 'operator', 'source']
+    const fac = (kind, file, pick) => read(file).map(feat).map(({ p, geometry }) => ({ geometry, values: [kind, txt(p.name), ...pick(p), PACKAGE] }))
+    await db.query('DELETE FROM admin.community_facility')
+    const f1 = await replaceLayer(db, 'admin.community_facility', FAC, fac('school', 'schools', (p) => [txt(p.level), txt(p.grant_class), txt(p.school_number), null]), 'Point', { clear: false })
+    const f2 = await replaceLayer(db, 'admin.community_facility', FAC, fac('police_post', 'police_posts', (p) => [txt(p.type), null, null, null]), 'Point', { clear: false })
+    const f3 = await replaceLayer(db, 'admin.community_facility', FAC, fac('dip_tank', 'dip_tanks', () => [null, null, null, null]), 'Point', { clear: false })
+    const f4 = await replaceLayer(db, 'admin.community_facility', FAC, fac('network_booster', 'network_boosters', (p) => [null, null, null, txt(p.operator)]), 'Point', { clear: false })
+    report.community_facilities = { schools: f1, police_posts: f2, dip_tanks: f3, network_boosters: f4 }
+
+    const LAND = ['kind', 'name', 'status', 'source']
+    const land = (file, kindOf, statusOf) => read(file).map(feat).map(({ p, geometry }) => ({ geometry, values: [kindOf(p), txt(p.name), statusOf(p), PACKAGE] }))
+    await db.query('DELETE FROM admin.land_feature')
+    const unknownUse = read('non_minerals').map((x) => txt(x.properties?.use)).filter((u) => u && !['Quarry', 'Sand'].includes(u))
+    if (unknownUse.length) throw new Error(`non_minerals has uses this loader does not know: ${unknownUse.join(', ')}`)
+    const l1 = await replaceLayer(db, 'admin.land_feature', LAND, land('non_minerals', (p) => (txt(p.use) === 'Sand' ? 'sand_working' : 'quarry'), () => null), 'MultiPolygon', { clear: false })
+    const l2 = await replaceLayer(db, 'admin.land_feature', LAND, land('irrigation_schemes', () => 'irrigation_scheme', (p) => txt(p.use)), 'MultiPolygon', { clear: false })
+    const l3 = await replaceLayer(db, 'admin.land_feature', LAND, land('recreational_sites', () => 'recreational_site', () => null), 'MultiPolygon', { clear: false })
+    report.land_features = { workings: l1, irrigation_schemes: l2, recreational_sites: l3 }
+    // the ward each lies in, from its position (a feature outside every ward keeps NULL)
+    for (const t of ['admin.community_facility', 'admin.land_feature']) {
+      await db.query(`UPDATE ${t} x SET ward_code = (SELECT w.ward_code FROM admin.ward w WHERE ST_Intersects(w.geom, ST_PointOnSurface(x.geom)) ORDER BY w.ward_code LIMIT 1)`)
+    }
+    const { rows: [noWard] } = await db.query(`SELECT (SELECT count(*) FROM admin.community_facility WHERE ward_code IS NULL)::int AS facilities, (SELECT count(*) FROM admin.land_feature WHERE ward_code IS NULL)::int AS features`)
+    report.outside_every_ward = noWard
 
     report.polling_stations = await replaceLayer(db, 'admin.polling_station', ['polling_code', 'name', 'ward_number', 'voters', 'integrity', 'source'],
       read('polling_stations').map(feat).map(({ p, geometry }) => ({ geometry, values: [txt(p.polling_code), txt(p.name), int(p.ward_number), int(p.voters), txt(p.integrity), ZEC] })), 'Point')
