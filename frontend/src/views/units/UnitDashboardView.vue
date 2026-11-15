@@ -13,11 +13,13 @@ import { RouterLink, useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Banknote, Building2, HardHat, HeartPulse, Info, ShieldCheck, TriangleAlert } from 'lucide-vue-next'
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
+import WardTable from '@/components/executive/WardTable.vue'
+import ExportMenu from '@/components/shared/ExportMenu.vue'
 import { useAuthStore } from '@/stores/auth'
 import { unitsApi, type UnitDashboard, type UnitKey } from '@/services/units'
 import { UNIT_LABEL } from '@/views/units/unitCatalogue'
 import {
-  auditGroup, engineeringGroup, hrGroup, landGroup, missing, planningGroup, socialGroup, type Group,
+  auditGroup, engineeringGroup, groupsToTable, hrGroup, landGroup, missing, planningGroup, socialGroup, type Group,
 } from '@/views/units/unitStats'
 
 const props = defineProps<{ unit: string }>()
@@ -77,6 +79,10 @@ const groups = computed<Group[]>(() => {
   return out
 })
 
+function buildUnit() {
+  return groupsToTable(`${title.value}: unit dashboard`, dash.value ? new Date(dash.value.as_of).toLocaleString('en-GB') : 'now', [{ area: title.value, groups: groups.value }])
+}
+
 /** Finance keeps its figures in the finance workspaces; this page says where, instead of repeating or inventing them. */
 const keptElsewhere = computed(() => props.unit === 'finance'
   ? "The financial position is kept in the finance workspaces. Open them from the links below; this page does not repeat it."
@@ -109,6 +115,7 @@ const desks = computed(() => dash.value?.unit.desks ?? [])
         </p>
       </div>
       <p v-if="asOf" class="ud-asof">As at {{ asOf }}</p>
+      <ExportMenu v-if="dash" :build="buildUnit" :filename="`unit-${unit}`" print />
       <ProfileDropdown :role-label="roleLabel" avatar-key="unit_avatar" @logout="handleLogout" />
     </header>
 
@@ -175,6 +182,7 @@ const desks = computed(() => dash.value?.unit.desks ?? [])
 
         <ExecutiveWardMap v-if="dash.maps.has_measures" :key="unit" :unit-key="(unit as UnitKey)" />
         <p v-else class="ud-missing ud-nomap"><Info :size="16" aria-hidden="true" /><span>{{ noMapText }}</span></p>
+        <WardTable v-if="dash.maps.has_measures" :key="`t-${unit}`" :unit-key="(unit as UnitKey)" />
       </template>
     </main>
   </div>
@@ -234,4 +242,11 @@ const desks = computed(() => dash.value?.unit.desks ?? [])
 .ud-table thead th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); border-top: 0; }
 .ud-table tr.is-head th { font-weight: 600; }
 .ud-tag { display: inline-block; padding: 0.0625rem 0.5rem; border-radius: 999px; background: var(--ent-warning-soft); color: var(--ent-warning); font-size: 0.75rem; font-weight: 600; }
+
+/* Print (the browser's "Save as PDF"): black on white, the tables in full, none of the controls or the map */
+@media print {
+  .ud-root { background: #fff; color: #000; }
+  .ud-root :deep(.profile-dropdown), .ud-skip { display: none !important; }
+  :deep(.wm) { display: none !important; }   /* the ward map: the tables below carry the same figures */
+}
 </style>

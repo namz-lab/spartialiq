@@ -12,9 +12,12 @@ import { RouterLink, useRouter } from 'vue-router'
 import { Banknote, Building2, HardHat, HeartPulse, Users, ShieldCheck, Info, TriangleAlert, ArrowRight } from 'lucide-vue-next'
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
+import WardTable from '@/components/executive/WardTable.vue'
+import ExportMenu from '@/components/shared/ExportMenu.vue'
+import type { ExportTable } from '@/utils/tableExport'
 import { useAuthStore } from '@/stores/auth'
 import type { UnitKey } from '@/services/units'
-import { auditGroup, engineeringGroup, hrGroup, landGroup, missing, planningGroup, socialGroup, type Group } from '@/views/units/unitStats'
+import { auditGroup, engineeringGroup, groupsToTable, hrGroup, landGroup, missing, planningGroup, socialGroup, type Group } from '@/views/units/unitStats'
 import { executiveApi, type ExecutiveOverview, type MasterPlan } from '@/services/executiveOverview'
 import { identityLine } from '@/services/planLegend'
 import { executiveDash } from '@/modules/finance/workspaces/executive/dashboard'
@@ -142,6 +145,11 @@ const cards = computed<Card[]>(() => {
   ]
 })
 
+function buildOverview(): ExportTable {
+  return groupsToTable("Chief Executive's overview", asOf.value || 'now', cards.value.map((c) => ({ area: c.title, groups: c.groups })),
+    masterPlan.value?.decisions?.tested_on_affirmation ? ['Some master plan decisions are affirmed for testing only, not agreed by the council.'] : [])
+}
+
 const asOf = computed(() => {
   const t = overview.value?.as_of
   return t ? new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
@@ -164,6 +172,7 @@ const asOf = computed(() => {
       <p class="xo-lede">
         The six areas of the Executive Arm, read from the council's own registers. Nothing here can be changed from this page.
       </p>
+      <div class="xo-tools"><ExportMenu :build="buildOverview" filename="chief-executive-overview" print /></div>
       <p v-if="overviewError" class="xo-alert" role="alert">
         <TriangleAlert :size="16" aria-hidden="true" />{{ overviewError }}
         <button type="button" class="xo-retry" @click="load">Try again</button>
@@ -206,6 +215,7 @@ const asOf = computed(() => {
       </div>
 
       <ExecutiveWardMap />
+      <WardTable />
     </main>
   </div>
 </template>
@@ -223,6 +233,7 @@ const asOf = computed(() => {
 
 .xo-main { max-width: 76rem; margin: 0 auto; padding: 1.25rem; }
 .xo-main:focus { outline: none; }
+.xo-tools { margin: 0 0 1rem; }
 .xo-lede { margin: 0 0 1rem; color: var(--ent-text-2); max-width: 46rem; }
 
 .xo-alert { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; padding: 0.625rem 0.875rem; background: var(--ent-danger-soft); color: var(--ent-danger); border-radius: 6px; }
@@ -255,4 +266,13 @@ const asOf = computed(() => {
 .xo-foot { margin: 0.375rem 0 0; font-size: 0.8125rem; color: var(--ent-text-3); }
 .xo-link { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--ent-accent); font-size: 0.875rem; text-decoration: none; }
 .xo-link:hover { text-decoration: underline; }
+
+/* Print (the browser's "Save as PDF"): black on white, the tables in full, none of the controls or the map */
+@media print {
+  .xo-root { background: #fff; color: #000; }
+  .xo-header :deep(.profile-dropdown), .xo-skip, .xo-retry, .xo-links { display: none !important; }
+  .xo-card { break-inside: avoid; border-color: #999; }
+  .xo-stat dd, .xo-stat dt { color: #000; }
+  :deep(.wm) { display: none !important; }   /* the ward map: the tables below carry the same figures */
+}
 </style>

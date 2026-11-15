@@ -117,6 +117,17 @@ describe('GET /api/executive/overview', () => {
   })
 })
 
+describe('the land section', () => {
+  test('reports stands and farm parcels apart, so the farms are not read as a gap in the rates accounts', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/executive/overview', headers: headersOf('accounting_officer') })
+    const land = res.json().data.land
+    expect(land.stands + land.farms).toBe(land.parcels)
+    expect(land.stands_with_account).toBeLessThanOrEqual(land.stands)
+    expect(land.farms_with_account).toBeLessThanOrEqual(land.farms)
+    expect(land.stands_with_account + land.farms_with_account).toBe(land.parcels_with_account)
+  })
+})
+
 describe('GET /api/executive/master-plan', () => {
   test('refuses an anonymous caller', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/executive/master-plan' })).statusCode).toBe(401)

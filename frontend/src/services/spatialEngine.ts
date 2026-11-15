@@ -73,7 +73,36 @@ export interface WardMap {
   features: WardFeature[]
 }
 
+/**
+ * Every ward as a row and every figure as a column, with a total (GET /api/executive/ward-table, GET /api/units/:key/ward-table).
+ * A figure a ward does not have is `null` with its `reliability` saying why ("no_data"): never zero. A measure is a rate or density, so it has no
+ * total; a count's total is the register's own, and `not_in_a_ward` is what the wards do not account for.
+ */
+export interface WardTableMeasure { key: string; label: string; unit: string; kind: string; owner_dept: string }
+export interface WardTableCount { key: string; label: string }
+export interface WardTableRow {
+  ward_code: string
+  name: string
+  area_km2: number | null
+  measures: Record<string, { value: number | null; reliability: string }>
+  counts: Record<string, number>
+}
+export interface WardTable {
+  ward_register: { linked: boolean; wards: number; basis: string | null; instrument_ref: string | null }
+  run: { id: number; computed_at: string | null; wards: number; ward_register_basis: string | null } | null
+  measures: WardTableMeasure[]
+  counts: WardTableCount[]
+  rows: WardTableRow[]
+  totals: Record<string, number> | null
+  not_in_a_ward: Record<string, number> | null
+  reason: string | null
+}
+
 export const spatialEngineApi = {
+  async wardTable(): Promise<WardTable> {
+    const res = await api.get<{ success: boolean; data: WardTable }>('/executive/ward-table')
+    return res.data.data
+  },
   async index(): Promise<MapsIndex> {
     const res = await api.get<{ success: boolean; data: MapsIndex }>('/executive/maps')
     return res.data.data

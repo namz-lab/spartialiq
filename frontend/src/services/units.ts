@@ -5,7 +5,7 @@ import api from './api'
 import type {
   AuditSection, EngineeringSection, LandSection, PlanningSection, SectionState, SocialServicesSection,
 } from './executiveOverview'
-import type { MapsIndex, WardMap } from './spatialEngine'
+import type { MapsIndex, WardMap, WardTable } from './spatialEngine'
 
 export type UnitKey = 'planning' | 'finance' | 'engineering' | 'social_admin' | 'audit'
 
@@ -77,6 +77,10 @@ export interface WardProfile {
 }
 
 export const unitsApi = {
+  async wardTable(key: string): Promise<WardTable> {
+    const res = await api.get<{ success: boolean; data: WardTable }>(`/units/${encodeURIComponent(key)}/ward-table`)
+    return res.data.data
+  },
   async list(): Promise<UnitListItem[]> {
     const res = await api.get<{ success: boolean; data: UnitListItem[] }>('/units')
     return res.data.data

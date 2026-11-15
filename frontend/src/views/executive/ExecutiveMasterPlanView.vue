@@ -21,6 +21,8 @@ import { addVunguBasemap, setBasemapLayerVisible } from '@/map/vunguBasemap'
 import { executiveApi, type MasterPlan, type MasterPlanZone } from '@/services/executiveOverview'
 import { getPublishedStyle } from '@/services/gisStyles'
 import { kindLegend, identityLine } from '@/services/planLegend'
+import ExportMenu from '@/components/shared/ExportMenu.vue'
+import type { ExportTable } from '@/utils/tableExport'
 
 const FACILITY: Record<string, string> = {
   school: 'Schools', health_facility: 'Health facilities', police_post: 'Police posts and prisons', dip_tank: 'Dip tanks', network_booster: 'Network boosters',
@@ -57,13 +59,30 @@ const START = new Set([
 const toggles = ref([
   { key: 'zones', label: 'Plan zones', ids: ['vungu_proposed_peri_urban_zones', 'vungu_beyond_peri_urban_zones'], on: true },
   { key: 'facilities', label: 'Facilities and business centres', ids: ['vungu_facilities'], on: true },
-  { key: 'features', label: 'Mines, quarries, schemes and the new city', ids: ['vungu_land_features'], on: true },
+  { key: 'features', label: 'Mines, quarries, schemes and recreation', ids: ['vungu_land_features'], on: true },
+  { key: 'newcity', label: 'Proposed new city', ids: ['vungu_land_features'], on: true },
   { key: 'rail', label: 'Railway lines', ids: ['vungu_railway'], on: true },
   { key: 'wards', label: 'Ward boundaries', ids: ['wards'], on: true },
   { key: 'roads', label: 'Roads', ids: ['roads'], on: true },
 ])
-function applyToggle(t: { ids: string[]; on: boolean }) {
+// The land features are one layer: the mines, quarries and schemes, and the proposed new city. Two switches share it, so the layer is shown when either is
+// on and filtered to the kinds that are.
+function applyFeatureKinds() {
+  const m = map.value
+  if (!m) return
+  const features = toggles.value.find((t) => t.key === 'features')!.on
+  const city = toggles.value.find((t) => t.key === 'newcity')!.on
+  try { setBasemapLayerVisible(m, 'vungu_land_features', features || city) } catch { /* layer absent */ }
+  const filter = features && city ? null
+    : city ? ['==', ['get', 'kind'], 'proposed_new_city']
+      : ['!=', ['get', 'kind'], 'proposed_new_city']
+  for (const id of ['vungu-vungu_land_features', 'vungu-vungu_land_features-outline']) {
+    if (m.getLayer(id)) m.setFilter(id, filter)
+  }
+}
+function applyToggle(t: { key: string; ids: string[]; on: boolean }) {
   if (!map.value) return
+  if (t.key === 'features' || t.key === 'newcity') { applyFeatureKinds(); return }
   for (const id of t.ids) { try { setBasemapLayerVisible(map.value, id, t.on) } catch { /* layer absent at this zoom */ } }
 }
 
@@ -80,7 +99,23 @@ const coveragePct = computed(() => {
   const c = data.value?.coverage
   return c && c.parcels ? Math.round((1000 * c.zoned) / c.parcels) / 10 : null
 })
+const zoneTotals = computed(() => zones.value.reduce((a, z) => ({ ha: a.ha + z.hectares, parcels: a.parcels + z.parcels }), { ha: 0, parcels: 0 }))
 const chosenZone = computed<MasterPlanZone | null>(() => zones.value.find((z) => z.zone === selected.value) ?? null)
+function buildZones(): ExportTable {
+  const d = data.value!
+  return {
+    title: 'Master plan: zones',
+    asAt: when(d.as_of),
+    source: 'The master plan and the parcel register.',
+    notes: [
+      `${d.plan?.title} (${identity.value}): ${standing.value}.`,
+      ...(d.decisions?.tested_on_affirmation ? ['Some of the plan decisions are affirmed for testing only, not agreed by the council.'] : []),
+    ],
+    columns: ['Zone', 'Area (ha)', 'Share of the plan (%)', 'Parcels', 'Uses permitted', 'By special consent', 'Not allowed', 'Not decided'],
+    rows: zones.value.map((z) => [z.zone, z.hectares, z.share_pct, z.parcels, z.permitted, z.special_consent, z.prohibited, z.not_decided]),
+    totals: { label: 'Total', cells: [Math.round(zoneTotals.value.ha * 10) / 10, 100, zoneTotals.value.parcels, 'n/a', 'n/a', 'n/a', 'n/a'] },
+  }
+}
 const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const n = (v: number) => v.toLocaleString('en-GB')
 const ha = (v: number) => v.toLocaleString('en-GB', { maximumFractionDigits: 1 })
@@ -223,7 +258,10 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); map.value?.remove(); map.v
           </section>
 
           <section class="mp-card mp-zones" aria-labelledby="mp-zones-h">
-            <h2 id="mp-zones-h" class="mp-h2">Zones <small>{{ zones.length }} zone types, {{ n(data?.total_hectares ?? 0) }} ha</small></h2>
+            <div class="mp-zhead">
+              <h2 id="mp-zones-h" class="mp-h2">Zones <small>{{ zones.length }} zone types, {{ n(data?.total_hectares ?? 0) }} ha</small></h2>
+              <ExportMenu :build="buildZones" filename="master-plan-zones" print />
+            </div>
             <div v-if="chosenZone" class="mp-detail" data-testid="mp-zone-detail">
               <h3 class="mp-h3">{{ chosenZone.zone }}</h3>
               <dl class="mp-dl">
@@ -235,15 +273,26 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); map.value?.remove(); map.v
                 <div v-if="chosenZone.not_decided"><dt>Not decided</dt><dd class="is-warn">{{ chosenZone.not_decided }}</dd></div>
               </dl>
             </div>
-            <ul class="mp-zonelist" data-testid="mp-zonelist">
-              <li v-for="z in zones" :key="z.zone">
-                <button type="button" class="mp-zonebtn" :class="{ on: z.zone === selected }" @click="selectZone(z.zone)">
-                  <span class="mp-sw" :style="{ background: colours[z.zone] || '#efeadf' }"></span>
-                  <span class="mp-zname">{{ z.zone }}</span>
-                  <span class="mp-zfig">{{ ha(z.hectares) }} ha · {{ n(z.parcels) }} parcels</span>
-                </button>
-              </li>
-            </ul>
+            <table class="mp-ztable" data-testid="mp-zonelist">
+              <caption class="sr-only">The zones of the plan</caption>
+              <thead>
+                <tr><th scope="col">Zone</th><th scope="col" class="num">Area (ha)</th><th scope="col" class="num">Parcels</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="z in zones" :key="z.zone" :class="{ on: z.zone === selected }">
+                  <th scope="row">
+                    <button type="button" class="mp-zonebtn" :aria-pressed="z.zone === selected" @click="selectZone(z.zone)">
+                      <span class="mp-sw" :style="{ background: colours[z.zone] || '#efeadf' }"></span>{{ z.zone }}
+                    </button>
+                  </th>
+                  <td class="num">{{ ha(z.hectares) }}<small>{{ z.share_pct }}%</small></td>
+                  <td class="num">{{ n(z.parcels) }} parcels</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr data-testid="mp-ztotal"><th scope="row">Total</th><td class="num">{{ ha(zoneTotals.ha) }}</td><td class="num">{{ n(zoneTotals.parcels) }} parcels</td></tr>
+              </tfoot>
+            </table>
           </section>
         </div>
 
@@ -325,13 +374,22 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); map.value?.remove(); map.v
 .mp-map { height: 34rem; border-radius: 6px; overflow: hidden; background: #f5f3ee; }
 .mp-picked { position: absolute; left: 1.25rem; bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.125rem; padding: 0.5rem 0.75rem; background: var(--ent-surface); border: 1px solid var(--ent-line-strong, var(--ent-line)); border-radius: 6px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.15); font-size: 0.8125rem; max-width: 16rem; }
 .mp-picked span { color: var(--ent-text-3); }
-.mp-zones { max-height: 40.5rem; overflow: auto; }
+.mp-zhead { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.mp-zhead .mp-h2 { margin: 0; }
 .mp-detail { margin-bottom: 0.75rem; padding: 0.625rem 0.75rem; background: var(--ent-surface-2); border-radius: 6px; }
-.mp-zonelist { list-style: none; margin: 0; padding: 0; }
-.mp-zonebtn { display: grid; grid-template-columns: auto 1fr; gap: 0 0.5rem; align-items: center; width: 100%; padding: 0.4375rem 0.375rem; border: 0; border-bottom: 1px solid var(--ent-surface-2); background: none; text-align: left; cursor: pointer; color: inherit; font: inherit; }
-.mp-zonebtn:hover, .mp-zonebtn.on { background: var(--ent-surface-2); }
-.mp-zonebtn:focus-visible { outline: 2px solid var(--ent-accent); outline-offset: -2px; }
-.mp-sw { width: 0.875rem; height: 0.875rem; border-radius: 3px; border: 1px solid var(--ent-line); grid-row: span 2; }
+.mp-ztable { width: 100%; border-collapse: collapse; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.mp-ztable th, .mp-ztable td { padding: 0.375rem 0.5rem; border-bottom: 1px solid var(--ent-surface-2); text-align: left; vertical-align: middle; }
+.mp-ztable thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); border-bottom: 2px solid var(--ent-line); }
+.mp-ztable tbody th { font-weight: 500; }
+.mp-ztable tr.on { background: var(--ent-surface-2); }
+.mp-ztable .num { text-align: right; white-space: nowrap; }
+.mp-ztable td small { display: block; font-size: 0.75rem; color: var(--ent-text-3); }
+.mp-ztable tfoot th, .mp-ztable tfoot td { font-weight: 700; border-top: 2px solid var(--ent-line); border-bottom: 0; }
+.mp-zonebtn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.mp-zonebtn:hover { text-decoration: underline; }
+.mp-zonebtn:focus-visible { outline: 2px solid var(--ent-accent); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.mp-sw { width: 0.875rem; height: 0.875rem; border-radius: 3px; border: 1px solid var(--ent-line); flex: none; }
 .mp-zname { font-size: 0.875rem; font-weight: 500; }
 .mp-zfig { grid-column: 2; font-size: 0.75rem; color: var(--ent-text-3); font-variant-numeric: tabular-nums; }
 .mp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 1rem; align-items: start; }
@@ -341,4 +399,14 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); map.value?.remove(); map.v
 .mp-dl dt { color: var(--ent-text-2); font-size: 0.875rem; }
 .mp-dl dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 .mp-dl dd.is-warn { color: var(--ent-warning); }
+
+/* Print (the browser's "Save as PDF"): black on white, the tables in full, none of the map controls */
+@media print {
+  .mp-root { background: #fff; color: #000; }
+  .mp-back, .mp-toggles, .mp-retry { display: none !important; }
+  .mp-card { border-color: #999; break-inside: avoid; }
+  .mp-map { height: 22rem; }
+  .mp-split { grid-template-columns: 1fr; }
+  .mp-ztable { font-size: 11pt; }
+}
 </style>
