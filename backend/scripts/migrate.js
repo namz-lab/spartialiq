@@ -374,6 +374,9 @@ const MIGRATIONS = [
   // One parcel register: farm parcels are a kind of land.parcel; vungu_parcels becomes a view.
   // Rollback: migrations/rollback/227_single_parcel_register.down.sql.
   '227_single_parcel_register.sql',
+  // Stand sales as a thin table over the parcel register; the demo stands are dropped.
+  // Rollback: migrations/rollback/228_stand_offer.down.sql.
+  '228_stand_offer.sql',
 ]
 
 function createPool(env = process.env) {

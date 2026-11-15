@@ -105,10 +105,10 @@ describe('spatial_planning.zone is the table (migration 220)', () => {
     }
   })
 
-  test('foreign keys follow the table: parcel_zoning, zone_land_use_controls and stands point at spatial_planning.zone', async () => {
+  test('foreign keys follow the table: parcel_zoning and zone_land_use_controls point at spatial_planning.zone (stands are parcels of the register since migration 228)', async () => {
     const rows = await q(`SELECT conrelid::regclass::text AS child FROM pg_constraint WHERE confrelid = 'spatial_planning.zone'::regclass ORDER BY 1`)
     const children = rows.map((r) => r.child)
-    for (const t of ['parcel_zoning', 'zone_land_use_controls', 'stands']) expect(children).toContain(t)
+    for (const t of ['parcel_zoning', 'zone_land_use_controls']) expect(children).toContain(t)
   })
 
   test('a write through the old name lands in the new table, and the plan-sync trigger still fires', async () => {

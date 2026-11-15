@@ -29,6 +29,7 @@ const { invalidateTileLayer, emitMapEvent } = require('../routes/tiles')
 // entry whose `table` is not a real table.
 const TABLE_TO_LAYER = new Map(LAYERS.map((l) => [l.table, l.id]))
 TABLE_TO_LAYER.set('stands', 'stands') // stands_tile_view -> stands
+TABLE_TO_LAYER.set('stand_offer', 'stands') // land.stand_offer (migration 228): a stand's sales state, drawn by the stands layer
 TABLE_TO_LAYER.set('proposed_peri_urban_zones', 'vungu_proposed_peri_urban_zones') // zones_master
 // Migration 220 moved these tables to their convention names (docs/SPATIAL-NAMING-CONVENTION.md) and left the old names as
 // views, which the tile config still serves. The trigger sits on the BASE table, so the NOTIFY now names the new table.

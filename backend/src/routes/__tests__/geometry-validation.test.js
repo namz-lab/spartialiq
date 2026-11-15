@@ -62,7 +62,6 @@ afterAll(async () => {
   await dbContext.systemOf(app.pg).query(`DELETE FROM public.user_session WHERE id = $1`, [sid])
   await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.gis_feature WHERE layer = $1`, [TEST_LAYER])
   await dbContext.systemOf(app.pg).query(`DELETE FROM spatial_planning.gis_feature_history WHERE layer = $1`, [TEST_LAYER])
-  await dbContext.systemOf(app.pg).query(`DELETE FROM stands WHERE ward = $1`, [TEST_WARD])
   await dbContext.systemOf(app.pg).query(`DELETE FROM users WHERE id = $1`, [TEST_USER_ID])
   await app.close()
 }, 30000)
@@ -81,36 +80,12 @@ test('gis digitize: valid polygon accepted, bowtie rejected 422', async () => {
   expect(cnt.rows[0].n).toBe(1)
 })
 
-test('stand create: bowtie rejected 422', async () => {
-  const bad = await app.inject({
-    method: 'POST', url: '/api/stands', headers: auth,
-    payload: { standNumber: 'GEOM-1', ward: TEST_WARD, geometry: bowtiePoly },
-  })
-  expect(bad.statusCode).toBe(422)
-  expect(bad.json().error).toBe('invalid_geometry')
-
-  const ok = await app.inject({
-    method: 'POST', url: '/api/stands', headers: auth,
-    payload: { standNumber: 'GEOM-2', ward: TEST_WARD, geometry: validPoly },
-  })
-  expect(ok.statusCode).toBe(201)
-})
-
-test('topology: overlapping stand rejected 409; adjacent (shared edge) allowed', async () => {
-  // A stand that overlaps GEOM-2 (validPoly, at 31.20/-18.10) — half inside it.
-  const overlap = { type: 'Polygon', coordinates: [[[31.2005, -18.10], [31.2015, -18.10], [31.2015, -18.099], [31.2005, -18.099], [31.2005, -18.10]]] }
-  const bad = await app.inject({
-    method: 'POST', url: '/api/stands', headers: auth,
-    payload: { standNumber: 'GEOM-3', ward: TEST_WARD, geometry: overlap },
-  })
-  expect(bad.statusCode).toBe(409)
-  expect(bad.json().error).toBe('stand_overlap')
-
-  // A stand sharing only the eastern edge of GEOM-2 (touches, no interior overlap).
-  const adjacent = { type: 'Polygon', coordinates: [[[31.201, -18.10], [31.202, -18.10], [31.202, -18.099], [31.201, -18.099], [31.201, -18.10]]] }
-  const ok = await app.inject({
-    method: 'POST', url: '/api/stands', headers: auth,
-    payload: { standNumber: 'GEOM-4', ward: TEST_WARD, geometry: adjacent },
-  })
-  expect(ok.statusCode).toBe(201)
+test('stands: a boundary is never accepted through the stand routes (migration 228)', async () => {
+  // A stand is a parcel of the register; its boundary changes only through the Survey Section import, so the geometry gate for stands
+  // (a bowtie rejected, an overlap refused) has moved to that import. The stand routes answer 410 whatever geometry they are sent.
+  for (const geometry of [bowtiePoly, validPoly]) {
+    const res = await app.inject({ method: 'POST', url: '/api/stands', headers: auth, payload: { standNumber: 'GEOM-1', ward: TEST_WARD, geometry } })
+    expect(res.statusCode).toBe(410)
+    expect(res.json().error).toBe('boundaries_via_survey_import')
+  }
 })

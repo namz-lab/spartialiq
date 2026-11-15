@@ -96,20 +96,21 @@ async function seed(db) {
   const uid = await plannerId(db);
   let stands = 0, meetings = 0, orders = 0;
 
-  for (const s of STANDS) {
+  // Stands are parcels of the register (land.parcel); the council's sales state is land.stand_offer (migration 228). The
+  // demonstration puts the first few real stands on offer, in each of the states below, rather than inventing stand polygons:
+  // the stand's number, ward and area are the register's. Nothing is drawn if the register holds no stand yet.
+  const { rows: register } = await db.query(
+    `SELECT parcel_id FROM land.parcel p
+      WHERE p.parcel_kind = 'stand' AND p.status = 'current'
+        AND NOT EXISTS (SELECT 1 FROM land.stand_offer o WHERE o.parcel_id = p.parcel_id)
+      ORDER BY p.parcel_id LIMIT $1`, [STANDS.length]);
+  for (const [i, parcel] of register.entries()) {
+    const s = STANDS[i];
     const r = await db.query(
-      `INSERT INTO public.stands
-         (stand_number, ward, zone_type, use_scale, area_sqm, frontage_m, depth_m,
-          price_usd, status, description, geom, created_by)
-       SELECT $1::varchar,$2::varchar,$3::varchar,$4::varchar,
-              $5::numeric,$6::numeric,$7::numeric,$8::numeric,
-              $9::varchar,$10::text,
-              ST_GeomFromText($11::text,4326),
-              $12::uuid
-       WHERE NOT EXISTS (SELECT 1 FROM public.stands WHERE stand_number = $1::varchar)
-       RETURNING id`,
-      [s.n, s.ward, s.zone, s.scale, 1200, 40, 30, s.price, s.status,
-       `${TAG} — demo stand for planner workspace testing.`, rectWkt(s.lng, s.lat), uid]
+      `INSERT INTO land.stand_offer (parcel_id, use_scale, frontage_m, depth_m, price_usd, status, description, created_by)
+       VALUES ($1, $2, 40, 30, $3, $4, $5, $6)
+       ON CONFLICT (parcel_id) DO NOTHING`,
+      [parcel.parcel_id, s.scale, s.price, s.status, `${TAG} — demonstration offer for planner workspace testing.`, uid]
     );
     stands += r.rowCount;
   }
@@ -194,7 +195,7 @@ async function fillRefs(db) {
 
 async function undo(db) {
   const a = await db.query(
-    `DELETE FROM public.stands WHERE description LIKE '%' || $1 || '%'`, [TAG]);
+    `DELETE FROM land.stand_offer WHERE description LIKE '%' || $1 || '%'`, [TAG]);
   const b = await db.query(
     `DELETE FROM spatial_planning.committee_meeting WHERE notes LIKE '%' || $1 || '%'`, [TAG]);
   const c = await db.query(
