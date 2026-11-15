@@ -8,7 +8,8 @@
  *   node scripts/load-master-plan.js [--gpkg path/to/file.gpkg]
  *
  * It runs after the migrations, and does what the migrations cannot do on their own:
- *   1. imports the layers (EPSG:4326): the farm cadastre and parcels into public.vungu_*, and the council's
+ *   1. imports the layers (EPSG:4326): the farm cadastre into public.vungu_farm_cadastre, the farm parcels through a staging
+ *      table into the parcel register (land.parcel, kind farm; public.vungu_parcels is a view since migration 227), and the council's
  *      cemetery and waste sites through a staging table into council_ops.cemetery / waste_facility (their
  *      convention names, migration 220; the old names are views, which ogr2ogr -overwrite cannot replace).
  *      The zones are not loaded here: scripts/load-zones.js fills spatial_planning.zone from the council's files.
@@ -17,6 +18,7 @@
  *   3. runs migration 187 again. On a fresh database it ran before these tables existed and so
  *      filled no farm parcels; it is idempotent and fills them now, with the council set for the
  *      session as the tenancy rules require.
+ *   4. loads the staged farm parcels into land.parcel with scripts/load-parcels-into-land.js (repeat-safe: it finds a parcel by its source row).
  */
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '.env') })
 const fs = require('node:fs')
@@ -32,8 +34,10 @@ const GPKG = (() => {
 // source layer -> public table, as in setup-spatial.mjs
 const LAYERS = [
   ['Zim_national_farm_cadastre_wgs_84', 'vungu_farm_cadastre'],
-  ['parcels', 'vungu_parcels'],
 ]
+
+// the farm parcels: staged here, loaded into land.parcel by scripts/load-parcels-into-land.js (public.vungu_parcels is a view over the register)
+const FARM_PARCELS = ['parcels', 'scratch.vungu_parcels']
 
 // source layer -> the council_ops table it fills (staged in scratch, then copied: TRUNCATE + INSERT of the shared columns)
 const COUNCIL_OPS = [
@@ -72,7 +76,7 @@ function importLayer(srcLayer, qualifiedTable) {
 }
 
 async function main() {
-  console.log(`Loading ${LAYERS.length + COUNCIL_OPS.length} master-plan layers from ${path.basename(GPKG)} (${nativeOgr ? 'ogr2ogr' : 'ogr2ogr in Docker'}) ...`)
+  console.log(`Loading ${LAYERS.length + COUNCIL_OPS.length + 1} master-plan layers from ${path.basename(GPKG)} (${nativeOgr ? 'ogr2ogr' : 'ogr2ogr in Docker'}) ...`)
   const client = new Client({ connectionString: process.env.DATABASE_URL })
   await client.connect()
   try {
@@ -82,6 +86,9 @@ async function main() {
 `)
       importLayer(src, `public.${table}`)
     }
+    process.stdout.write(`  ${FARM_PARCELS[0]} -> ${FARM_PARCELS[1]} (staged; loaded into land.parcel below)
+`)
+    importLayer(FARM_PARCELS[0], FARM_PARCELS[1])
     for (const [src, target] of COUNCIL_OPS) {
       const staging = `scratch.master_plan_${target.split('.')[1]}`
       process.stdout.write(`  ${src} -> ${target} (via ${staging})
@@ -112,8 +119,9 @@ async function main() {
     // Migration 187 opens and commits its own transaction, so the council is set for the session.
     await client.query(`SELECT set_config('app.authority_id', $1, false)`, [String(rows[0].id)])
     await client.query(fs.readFileSync(path.join(__dirname, '..', 'migrations', '187_fill_parcel_register_and_rates.sql'), 'utf8'))
-    const { rows: [n] } = await client.query("SELECT count(*)::int AS n FROM land.parcel WHERE status = 'current'")
-    console.log(`Parcel register: ${n.n} current parcels.`)
+    execFileSync(process.execPath, [path.join(__dirname, 'load-parcels-into-land.js'), '--apply', '--source', FARM_PARCELS[1]], { stdio: 'inherit' })
+    const { rows: [m] } = await client.query("SELECT count(*)::int AS n FROM land.parcel WHERE status = 'current'")
+    console.log(`Parcel register: ${m.n} current parcels.`)
   } finally {
     await client.end()
   }

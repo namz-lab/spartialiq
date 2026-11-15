@@ -299,7 +299,7 @@ async function findParcels(pg, q) {
               fid::text AS id,
               COALESCE(NULLIF(name,''), name_cfu, 'Parcel ' || fid) AS stand_number,
               status::text AS status,
-              NULLIF(area_ha, '')::numeric AS area_ha,
+              NULLIF(area_ha::text, '')::numeric AS area_ha,
               district::text AS district,
               ST_X(ST_Centroid(geom)) AS lng, ST_Y(ST_Centroid(geom)) AS lat,
               ST_XMin(geom) AS minx, ST_YMin(geom) AS miny,

@@ -371,6 +371,9 @@ const MIGRATIONS = [
   '225_parcel_zoning_kept_current.sql',
   // Rollback: migrations/rollback/226_zone_effective_parts.down.sql.
   '226_zone_effective_parts.sql',
+  // One parcel register: farm parcels are a kind of land.parcel; vungu_parcels becomes a view.
+  // Rollback: migrations/rollback/227_single_parcel_register.down.sql.
+  '227_single_parcel_register.sql',
 ]
 
 function createPool(env = process.env) {

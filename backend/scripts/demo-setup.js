@@ -4,6 +4,7 @@
  *
  *   npm run demo:setup
  *   npm run demo:setup -- --wards "C:/path/vungu wards.gpkg"
+ *   npm run demo:setup -- --districts <districts.geojson>        (district boundaries, so a location names its district)
  *   npm run demo:setup -- --wards <file> --township-dxf "C:/path/combined hertfordshire.dxf" --township HERTS
  *
  * Steps, each of which can be run on its own:
@@ -47,6 +48,7 @@ const dxf = arg('township-dxf')
 const township = arg('township')
 if (dxf && !township) fail('--township-dxf needs --township <CODE> (for example HERTS).')
 const wards = arg('wards')
+const districts = arg('districts')
 const wardsParent = arg('wards-parent') || 'ZW1704'
 
 function step(title, script, args = [], env = {}) {
@@ -68,10 +70,14 @@ else {
   // Colour the zones by type, from the council GIS's QGIS styles, through the GIS symbology registry.
   step('2/6 Zones: colours by type', 'publish-zone-styles.js')
 }
+if (districts) step('2/6 Districts (ADM2 boundaries)', 'load-districts.js', ['--file', districts, '--apply'])
+else console.log('\n── 2/6 Districts: skipped (give --districts <file> to load the district boundaries; the parcel lookup then names the district) ──')
 if (wards) {
   step('3/6 Wards, linked provisionally', 'load-wards.js', ['--file', wards, '--parent', wardsParent])
   // Polling areas place into the wards just loaded, and give each its registered voters (a denominator, not population).
   step('3/6 Reference layers: polling areas, chiefdoms, business centres, rivers', 'load-reference-layers.js')
+  // The farm parcels were loaded before the wards existed: give them their wards (repeat-safe; boundaries are never touched).
+  step('3/6 Farm parcels: wards', 'load-parcels-into-land.js', ['--apply'])
 }
 else console.log('\n── 3/6 Wards: skipped (give --wards <file> to load the council\'s ward boundaries) ──')
 step('4/6 Demo accounts and data', 'seed-all-demo.js')
