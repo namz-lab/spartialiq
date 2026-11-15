@@ -21,6 +21,7 @@ import { addVunguBasemap, setBasemapLayerVisible } from '@/map/vunguBasemap'
 import { searchMap, type SearchResult } from '@/services/vectorTiles'
 import { useCitizenCase } from '@/composables/useCitizenCase'
 import api from '@/services/api'
+import PlanLegend from '@/components/map/PlanLegend.vue'
 import {
   Search, MapPin, FilePlus, Phone, Mail, Layers, X, Loader2,
   Plus, Minus, LocateFixed, Info, Map as MapIcon,
@@ -388,11 +389,7 @@ onBeforeUnmount(() => {
 
       <!-- Legend (desktop) -->
       <div class="ms-legend">
-        <h3>Map legend</h3>
-        <div class="ms-leg-row"><span class="ms-sw res"></span> Residential</div>
-        <div class="ms-leg-row"><span class="ms-sw com"></span> Commercial</div>
-        <div class="ms-leg-row"><span class="ms-sw agr"></span> Agricultural</div>
-        <div class="ms-leg-row"><span class="ms-sw und"></span> Undeveloped</div>
+        <PlanLegend />
       </div>
 
       <!-- Loading / error -->
@@ -606,7 +603,7 @@ onBeforeUnmount(() => {
 .ms-tool-layers { display:none; }
 
 /* Legend */
-.ms-legend { position:absolute; left:14px; bottom:14px; z-index:6; width:11rem; padding:0.75rem;
+.ms-legend { position:absolute; left:14px; bottom:14px; z-index:6; width:14rem; padding:0.75rem;
   background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:var(--cp-radius); box-shadow:var(--cp-shadow); }
 .ms-legend h3 { margin:0 0 0.5rem; font-size:0.62rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--cp-muted); }
 .ms-leg-row { display:flex; align-items:center; gap:0.5rem; font-size:0.78rem; color:var(--cp-text-2); margin-bottom:0.3rem; }

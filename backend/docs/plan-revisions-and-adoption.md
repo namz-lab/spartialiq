@@ -25,3 +25,7 @@ An authority with no signatory roles behaves as before (one current sign-off to 
 ## Identity
 `revision_label`, `revision_date`, `map_scale` carry the sheet's "Rev 005, July 2026, 1:120 000" (`POST …/identity`). The Vungu plan has them; revisions 001 to 004 were paper issues and are not held.
 **Nothing is marked adopted or approved**: no council resolution or ministerial approval number is in the sources; the council enters them.
+
+## The public map's legend and plan identity
+`GET /api/plan-lookup/identity` (public, rate limited, follows plan visibility) returns the plan the map shows: title, authority, revision label, date and scale, whether it is in force, whether the council adopted it and the Minister approved it (not their numbers), and the zones it holds with hectares.
+The citizen map's `PlanLegend` shows that title block and one swatch per zone, coloured from the **published zone style** (the symbology registry), not hand-typed colours; a plan not yet in force is labelled "Not yet in force: shown for information".

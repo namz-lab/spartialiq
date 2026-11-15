@@ -158,3 +158,27 @@ describe('lookup', () => {
     expect(d.results[1].plan.title).toBe('Other plan')
   })
 })
+
+describe('plan identity', () => {
+  test('is public and rate limited, and reports revision, scale, standing and zones; never ownership', async () => {
+    const plan = { id: 'p1', title: 'Vungu plan', version: 1, status: 'gazetted', revision_label: 'Rev 005', revision_date: '2026-07-01', map_scale: 120000,
+      gazette_ref: 'SI 9', effective_from: '2026-09-01', council_adopted_on: '2026-08-01', ministerial_approval_no: 'MLG/1', authority_name: 'Vungu RDC', provisional: false, governs: true }
+    const { call, routes } = await setup(async (sql) => {
+      if (/FROM plan_instrument/.test(sql)) return { rows: [plan] }
+      if (/FROM spatial_planning.zone/.test(sql)) return { rows: [{ name: 'Cemetery', polygons: 1, hectares: '3.2' }] }
+      return { rows: [] }
+    })
+    expect(routes['GET /plan-lookup/identity'].opts.config.rateLimit.max).toBeLessThanOrEqual(60)
+    const { reply } = await call('GET /plan-lookup/identity', {})
+    expect(reply.body.data.published).toBe(true)
+    expect(reply.body.data.plans[0]).toMatchObject({ revision_label: 'Rev 005', map_scale: 120000, adopted_by_council: true, approved_by_minister: true, authority: 'Vungu RDC',
+      zones: [{ name: 'Cemetery', polygons: 1, hectares: 3.2 }] })
+    expect(JSON.stringify(reply.body)).not.toMatch(/MLG\/1|resolution/)   // the numbers stay with the council; the public sees that it was done
+  })
+  test('a plan still in preparation is marked provisional and does not make the plan "published"', async () => {
+    const { call } = await setup(async (sql) => (/FROM plan_instrument/.test(sql) ? { rows: [{ id: 'p1', title: 't', status: 'draft', provisional: true }] } : { rows: [] }))
+    const { reply } = await call('GET /plan-lookup/identity', {})
+    expect(reply.body.data).toMatchObject({ published: false })
+    expect(reply.body.data.plans[0].provisional).toBe(true)
+  })
+})
