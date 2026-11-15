@@ -18,8 +18,11 @@
  * (it serves Noto Sans and Open Sans); the glyph request fails, and MapLibre then drops the WHOLE tile, so the zones were not drawn
  * at all ("Unimplemented type: 4"). The portal draws its own centroid labels for these layers (vunguBasemap.ts, `-master-label`).
  *
- * A zone with no category in the QGIS style ("Densification Zone [MDR]", added by the council's newer file) is drawn with
- * the style's own "other" colour, not a colour chosen here.
+ * Two zones of the council's newer file had no category in the QGIS style and were drawn in the style's "other" colour:
+ *   "Light and General Industry"   the QGIS category "Light Industry" under the plan's current name (same colour, the council's own)
+ *   "Densification Zone [MDR]"     a colour chosen here, NOT the council's: one step deeper than the Densification Zone [LDR] tan
+ *                                  (#efe0b8 -> #e5cc94), so the two densification zones read as one family and stay apart from
+ *                                  Medium Density Residential (#f1dd7c). The GIS Branch should confirm or replace it.
  *
  * The registry's lifecycle is draft -> review -> approved -> published, each step audited. This script takes a style through
  * all of it in one go, recording the actor as "MVP demonstration": it is a demonstration shortcut, not a review by the GIS
@@ -44,7 +47,9 @@ const LAYERS = [
     description: 'The zones of the Vungu RDC peri-urban local plan, coloured by zone type.',
     dataSource: 'public.zones_master',
     qgisLayer: 'proposed_peri_urban_zones',
-    renames: { Cemetry: 'Cemetery' },
+    renames: { Cemetry: 'Cemetery', 'Light Industry': 'Light and General Industry' },
+    // categories the QGIS style lacks: a copy of an existing category's symbol with the colour given (chosen here, see the header)
+    extra: [{ value: 'Densification Zone [MDR]', like: 'Densification Zone [LDR]', fill: '#e5cc94' }],
   },
   {
     layerId: 'vungu_beyond_peri_urban_zones',
@@ -65,12 +70,17 @@ const LAYERS = [
 const NEXT = { draft: 'review', review: 'approved', approved: 'published' }
 const dryRun = process.argv.includes('--dry-run')
 
-function renamed(doc, renames) {
+function renamed(doc, renames, extra = []) {
   // Colours only: see the header on why the QGIS label is dropped.
   const categories = doc.renderer.categories.map((c) => {
     const to = renames[c.value]
     return to ? { ...c, value: to, label: to } : c
   })
+  for (const x of extra) {
+    const at = categories.findIndex((c) => c.value === x.like)
+    if (at < 0) throw new Error(`no category "${x.like}" to take the symbol of "${x.value}" from`)
+    categories.splice(at + 1, 0, { ...categories[at], value: x.value, label: x.value, symbol: { ...categories[at].symbol, fill: x.fill } })
+  }
   return { ...doc, labels: null, renderer: { ...doc.renderer, categories } }
 }
 
@@ -81,7 +91,7 @@ async function main() {
     for (const l of LAYERS) {
       const imported = qgisImport.importQml(path.join(QML_DIR, l.qml), { layerId: l.layerId, geometry: 'polygon' })
       if (imported.error) throw new Error(`${l.layerId}: ${imported.error}`)
-      const doc = renamed(imported.doc, l.renames)
+      const doc = renamed(imported.doc, l.renames, l.extra)
       const mapping = doc.renderer.categories.map((c) => `${c.value || '(other)'} ${c.symbol?.fill ?? ''}`)
       console.log(`[zone-styles] ${l.layerId} by "${doc.renderer.attribute}": ${mapping.join('; ')}`)
       if (dryRun) continue
@@ -95,7 +105,7 @@ async function main() {
       const { style, unchanged } = await registry.createDraft(db, {
         layerId: l.layerId, doc, styleName: `${l.displayName}: by zone type`, source: 'qgis',
         sourcePath: `qgis-projects/canonical-qml/${l.qml}`, sourceChecksum: imported.checksum,
-        changeSummary: `Colours from the council GIS's QGIS style; category values follow the zone names now in the database (${Object.entries(l.renames).map(([a, b]) => `${a} -> ${b}`).join(', ') || 'none renamed'}).`,
+        changeSummary: `Colours from the council GIS's QGIS style; category values follow the zone names now in the database (${Object.entries(l.renames).map(([a, b]) => `${a} -> ${b}`).join(', ') || 'none renamed'}).${l.extra?.length ? ` Added: ${l.extra.map((x) => `${x.value} ${x.fill}`).join(', ')} (colour chosen, awaiting GIS Branch confirmation).` : ''}`,
         actor: ACTOR, actorRole: ACTOR_ROLE,
       })
       let status = style.status

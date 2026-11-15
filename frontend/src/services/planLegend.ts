@@ -25,16 +25,19 @@ export async function getPlanIdentity(): Promise<{ plans: PlanIdentity[]; publis
 }
 
 interface Category { label?: string; value?: string; symbol?: { fill?: string } }
+interface ZoneStyle { definition?: { renderer?: { categories?: Category[]; fallback?: { symbol?: { fill?: string } } } } }
 
 /**
  * One legend row for each zone the plan holds, coloured as the map paints it (the published style's category for that zone name).
  * A zone the style does not know about is listed with the style's fallback colour, so the legend never claims a colour the map does not use.
  */
-export function legendFor(style: { definition?: { renderer?: { categories?: Category[]; fallback?: { symbol?: { fill?: string } } } } } | null, plan: PlanIdentity | null): LegendEntry[] {
-  const renderer = style?.definition?.renderer
-  if (!renderer || !plan) return []
-  const byValue = new Map((renderer.categories ?? []).map((c) => [String(c.value ?? c.label), c.symbol?.fill ?? '']))
-  const fallback = renderer.fallback?.symbol?.fill ?? '#efeadf'
+export function legendFor(styles: Array<ZoneStyle | null> | ZoneStyle | null, plan: PlanIdentity | null): LegendEntry[] {
+  const list = (Array.isArray(styles) ? styles : [styles]).filter((s): s is ZoneStyle => Boolean(s?.definition?.renderer))
+  if (!list.length || !plan) return []
+  // the zones are drawn by more than one layer (the peri-urban zones, and the areas beyond them), each with its own published style
+  const byValue = new Map<string, string>()
+  for (const st of list) for (const c of st.definition!.renderer!.categories ?? []) byValue.set(String(c.value ?? c.label), c.symbol?.fill ?? '')
+  const fallback = list[0].definition!.renderer!.fallback?.symbol?.fill ?? '#efeadf'
   return plan.zones.map((z) => ({ label: z.name, fill: byValue.get(z.name) || fallback, hectares: z.hectares }))
 }
 

@@ -5,7 +5,8 @@ import { computed, onMounted, ref } from 'vue'
 import { getPublishedStyle } from '@/services/gisStyles'
 import { getPlanIdentity, legendFor, identityLine, standing, type PlanIdentity, type LegendEntry } from '@/services/planLegend'
 
-const ZONE_LAYER = 'vungu_proposed_peri_urban_zones'
+// the two layers that draw the plan's zones, each with its own published style
+const ZONE_LAYERS = ['vungu_proposed_peri_urban_zones', 'vungu_beyond_peri_urban_zones']
 const plan = ref<PlanIdentity | null>(null)
 const entries = ref<LegendEntry[]>([])
 const failed = ref(false)
@@ -15,7 +16,7 @@ onMounted(async () => {
   try {
     const { plans } = await getPlanIdentity()
     plan.value = plans[0] ?? null
-    entries.value = legendFor(await getPublishedStyle(ZONE_LAYER) as never, plan.value)
+    entries.value = legendFor(await Promise.all(ZONE_LAYERS.map((l) => getPublishedStyle(l))) as never, plan.value)
   } catch {
     failed.value = true
   }
