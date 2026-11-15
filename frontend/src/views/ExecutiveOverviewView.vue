@@ -15,7 +15,8 @@ import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { UnitKey } from '@/services/units'
 import { auditGroup, engineeringGroup, hrGroup, landGroup, missing, planningGroup, socialGroup, type Group } from '@/views/units/unitStats'
-import { executiveApi, type ExecutiveOverview } from '@/services/executiveOverview'
+import { executiveApi, type ExecutiveOverview, type MasterPlan } from '@/services/executiveOverview'
+import { identityLine } from '@/services/planLegend'
 import { executiveDash } from '@/modules/finance/workspaces/executive/dashboard'
 import { byCurrency, pctText } from '@/modules/finance/workspaces/shared/useDashboard'
 import { formatMoney, type Currency } from '@/modules/finance/composables/useMoney'
@@ -24,6 +25,7 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const overview = ref<ExecutiveOverview | null>(null)
+const masterPlan = ref<MasterPlan | null>(null)
 const overviewError = ref<string | null>(null)
 const loading = ref(true)
 
@@ -34,6 +36,8 @@ async function load() {
     executiveApi.overview().then((o) => { overview.value = o }).catch(() => {
       overviewError.value = 'The overview could not be read. Try again in a moment.'
     }),
+    // the master plan's standing is an extra on the Planning card: if it cannot be read the card simply does without it
+    Promise.resolve().then(() => executiveApi.masterPlan()).then((m) => { masterPlan.value = m }).catch(() => { masterPlan.value = null }),
     executiveDash.load(),
   ])
   loading.value = false
@@ -82,6 +86,24 @@ const financeGroup = computed<Group>(() => {
   }
 })
 
+// The master plan on the Planning card: which plan, whether it is in force, how far its adoption has got, and how much of the register it covers.
+const planGroup = computed<Group | null>(() => {
+  const m = masterPlan.value
+  if (!m?.plan) return null
+  const cov = m.coverage
+  const ad = m.adoption
+  const stats: Group['stats'] = [
+    { label: 'Plan', value: [m.plan.revision_label, identityLine({ revision_label: null, revision_date: m.plan.revision_date, map_scale: m.plan.map_scale })].filter(Boolean).join(' · ') || m.plan.title },
+    { label: 'Standing', value: m.plan.in_force ? 'In force' : 'Not in force', tone: m.plan.in_force ? 'good' : 'warn' },
+  ]
+  if (ad) stats.push({ label: 'Adoption steps done', value: `${ad.done} of ${ad.of}`, tone: ad.done < ad.of ? 'warn' : 'good' })
+  if (cov) stats.push({ label: 'Parcels under a zone of the plan', value: `${cov.zoned.toLocaleString('en-GB')} of ${cov.parcels.toLocaleString('en-GB')}`, tone: cov.unzoned ? 'warn' : undefined })
+  return {
+    heading: 'Master plan', loaded: true, stats,
+    footnote: m.decisions?.tested_on_affirmation ? 'Some decisions in the plan are affirmed for testing only, not agreed by the council.' : undefined,
+  }
+})
+
 const cards = computed<Card[]>(() => {
   const o = overview.value
   const miss = (note: string, heading?: string) => () => missing(overviewError.value ?? note, !!overviewError.value, heading)
@@ -96,8 +118,10 @@ const cards = computed<Card[]>(() => {
       key: 'planning', unit: 'planning', title: 'Planning and Environment', post: 'Executive Officer, Planner', icon: Building2,
       groups: [
         planningGroup(o?.planning, miss('Development control could not be read.', 'Development control')),
+        ...(planGroup.value ? [planGroup.value] : []),
         landGroup(o?.land, miss('The land register could not be read.', 'Land register')),
       ],
+      link: { to: '/executive/master-plan', label: 'Master plan: map and detail' },
     },
     {
       key: 'engineering', unit: 'engineering', title: 'Engineering and Works', post: 'Engineer', icon: HardHat,

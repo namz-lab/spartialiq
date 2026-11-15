@@ -116,3 +116,26 @@ describe('GET /api/executive/overview', () => {
     expect(res.json().data.hr).toEqual({ loaded: false, note: 'Staff and payroll are not yet in the system.' })
   })
 })
+
+describe('GET /api/executive/master-plan', () => {
+  test('refuses an anonymous caller', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/executive/master-plan' })).statusCode).toBe(401)
+  })
+
+  test.each(['planner', 'admin', 'finance_officer'])('refuses the %s role', async (role) => {
+    expect((await app.inject({ method: 'GET', url: '/api/executive/master-plan', headers: headersOf(role) })).statusCode).toBe(403)
+  })
+
+  test('gives the accounting officer the plan, its adoption, zones and coverage, and nothing can be written to it', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/executive/master-plan', headers: headersOf('accounting_officer') })
+    expect(res.statusCode).toBe(200)
+    const d = res.json().data
+    expect(d.plan.title).toMatch(/Vungu/)
+    expect(d.adoption.steps.length).toBeGreaterThan(0)
+    expect(d.zones.length).toBeGreaterThan(0)
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      const w = await app.inject({ method, url: '/api/executive/master-plan', headers: headersOf('accounting_officer'), payload: {} })
+      expect([404, 405]).toContain(w.statusCode)
+    }
+  })
+})

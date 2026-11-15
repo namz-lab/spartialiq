@@ -732,6 +732,17 @@ const router = createRouter({
         roles: ['accounting_officer'],
       }
     },
+    // The master plan for the Chief Executive: read-only, the plan's standing, adoption, zones, coverage and use, with an interactive map.
+    {
+      path: '/executive/master-plan',
+      name: 'executive-master-plan',
+      component: () => import('@/views/executive/ExecutiveMasterPlanView.vue'),
+      meta: {
+        title: 'Master plan - Vungu RDC',
+        requiresAuth: true,
+        roles: ['accounting_officer'],
+      }
+    },
     // A unit's dashboard (migration 216): the chief executive opens any of the five; a unit's head opens only their own.
     // The API enforces the same rule (backend src/config/units.js canSeeUnit); this guard saves a head the refused screen.
     {

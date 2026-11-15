@@ -8,8 +8,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const api = vi.hoisted(() => ({ overview: vi.fn() }))
-vi.mock('@/services/executiveOverview', () => ({ executiveApi: { overview: api.overview } }))
+const api = vi.hoisted(() => ({ overview: vi.fn(), masterPlan: vi.fn() }))
+vi.mock('@/services/executiveOverview', () => ({ executiveApi: { overview: api.overview, masterPlan: api.masterPlan } }))
 
 const dash = vi.hoisted(() => ({
   state: { data: null as unknown, error: null as string | null, loading: false },
@@ -62,6 +62,8 @@ async function mountPage() {
 
 beforeEach(() => {
   api.overview.mockReset()
+  api.masterPlan.mockReset()
+  api.masterPlan.mockRejectedValue(new Error('not read'))   // the master plan is an extra: the page works without it
   dash.state.data = FINANCE
   dash.state.error = null
 })
@@ -187,5 +189,32 @@ describe('ExecutiveOverviewView', () => {
     const wrapper = await mountPage()
     const link = wrapper.findAll('a').find((a) => a.text().includes('Finance in detail'))!
     expect(link.attributes('href')).toBe('/finance/accounting')
+  })
+
+  it('shows the master plan on the Planning card: standing, adoption and coverage, and links to the map', async () => {
+    api.overview.mockResolvedValue(FULL)
+    api.masterPlan.mockResolvedValue({
+      as_of: '2026-11-15T10:00:00Z',
+      plan: { id: 'p', title: 'Vungu plan', version: 1, status: 'unknown', authority: 'Vungu RDC', revision_label: 'Rev 005', revision_date: '2026-07-01', map_scale: 120000, gazette_ref: null, effective_from: null, in_force: false, provisional: true },
+      adoption: { formal: true, steps: [], done: 0, of: 9 },
+      decisions: { uses_in_plan: 38, decided: 817, proposed: 0, affirmed_for_testing: 414, tested_on_affirmation: true },
+      coverage: { parcels: 2320, zoned: 2269, unzoned: 51 },
+    })
+    const wrapper = await mountPage()
+    const planning = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Planning and Environment')!
+    expect(planning.text()).toContain('Master plan')
+    expect(planning.text()).toContain('Not in force')
+    expect(planning.text()).toContain('0 of 9')
+    expect(planning.text()).toContain('2,269 of 2,320')
+    expect(planning.text()).toContain('affirmed for testing')
+    expect(planning.findAll('a').map((a) => a.attributes('href'))).toContain('/executive/master-plan')
+  })
+
+  it('still shows the Planning card, without the plan, when the master plan cannot be read', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    const planning = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Planning and Environment')!
+    expect(planning.text()).toContain('Development control')
+    expect(planning.text()).not.toContain('Not in force')
   })
 })
