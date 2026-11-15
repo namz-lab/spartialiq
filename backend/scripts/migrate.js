@@ -383,6 +383,8 @@ const MIGRATIONS = [
   '230_parcel_change_import.sql',
   // Applications read the plan: the matrix views restored, the parcel found once, a decision's authority carried. Rollback: migrations/rollback/231_applications_read_the_plan.down.sql.
   '231_applications_read_the_plan.sql',
+  // Plan revisions keep their shapes; the adoption record (council, signatories, Minister). Rollback: migrations/rollback/232_plan_revisions_and_adoption.down.sql.
+  '232_plan_revisions_and_adoption.sql',
 ]
 
 function createPool(env = process.env) {

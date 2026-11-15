@@ -10,6 +10,11 @@
  *   POST /api/workbench/plans/:id/zone-types/:code/review  { status, reviewer }  record where a zone column stands in review
  *   POST /api/workbench/plans/:id/status         { status, gazette_ref, effective_from }  one step along the chain
  *   POST /api/workbench/plans/:id/version        start the next version of an approved or gazetted plan
+ *   GET  /api/workbench/plans/:id/checklist      the adoption steps and who has done what (migration 232)
+ *   GET  /api/workbench/plans/:id/revision-changes?from=  what changed between two revisions (decisions and zone shapes)
+ *   POST /api/workbench/plans/:id/identity       { revision_label, revision_date, map_scale }  the sheet's revision and scale
+ *   POST /api/workbench/plans/:id/adoption       { adopted_on, resolution_ref }  the Full Council's adoption
+ *   POST /api/workbench/plans/:id/ministerial-approval  { approval_no, approved_on, approved_by }  the Minister's approval
  *
  * Every write is attributed to the signed-in user and recorded in the plan's event history.
  * The rules (sign-off must be current to approve; gazette reference and date to gazette; an
@@ -48,7 +53,8 @@ function ruleRefusal(err) {
 const NEXT_SQL = `SELECT to_status FROM plan_status_transition WHERE from_status = $1 ORDER BY to_status`
 
 const PLAN_SQL = `
-  SELECT s.*, i.gazette_ref, i.effective_to, i.supersedes_id, i.derived_from_id, i.source_document, i.notes,
+  SELECT s.*, i.gazette_ref, i.effective_to, i.revision_label, i.revision_date, i.map_scale, i.council_adopted_on, i.council_resolution_ref,
+         i.ministerial_approval_no, i.ministerial_approved_on, i.ministerial_approved_by, plan_governs(i.id) AS governs, i.supersedes_id, i.derived_from_id, i.source_document, i.notes,
          plan_signoff_is_current(i.id) AS signoff_current,
          (SELECT row_to_json(x) FROM (SELECT signer_name, signer_role, comment, signed_at FROM plan_signoff
                                        WHERE plan_instrument_id = i.id ORDER BY signed_at DESC, id LIMIT 1) x) AS last_signoff,
@@ -198,8 +204,9 @@ async function planWorkbenchRoutes(fastify) {
     if (!plan) return
     const a = actorOf(request)
     const comment = typeof (request.body || {}).comment === 'string' ? request.body.comment.slice(0, 2000) : null
+    const signatory = typeof (request.body || {}).signatory === 'string' ? request.body.signatory.slice(0, 80) : null
     try {
-      const { rows } = await db(request).query('SELECT sign_off_plan($1, $2, $3, $4, $5) AS id', [request.params.id, a.id, a.name, a.role, comment])
+      const { rows } = await db(request).query('SELECT sign_off_plan($1, $2, $3, $4, $5, $6) AS id', [request.params.id, a.id, a.name, a.role, comment, signatory])
       return reply.code(201).send({ success: true, data: { id: rows[0].id } })
     } catch (err) { return fail(request, reply, err, 'sign off') }
   })
@@ -241,6 +248,97 @@ async function planWorkbenchRoutes(fastify) {
         [request.params.id, b.status, a.id, a.role, b.gazette_ref || null, b.effective_from || null])
       return reply.send({ success: true, data: { status: rows[0].status } })
     } catch (err) { return fail(request, reply, err, 'set plan status') }
+  })
+
+  // The adoption checklist: each step of the way to a plan in force, its state, and who did it and when.
+  fastify.get('/workbench/plans/:id/checklist', reader, async (request, reply) => {
+    try {
+      const plan = await needPlan(request, reply)
+      if (!plan) return
+      const q = (sql, params) => db(request).query(sql, params)
+      const { rows: [i] } = await q('SELECT * FROM plan_instrument WHERE id = $1', [request.params.id])
+      const roles = (await q(
+        `SELECT r.code, r.label,
+                (SELECT row_to_json(x) FROM (SELECT s.signer_name, s.signed_at FROM plan_signoff s
+                   WHERE s.plan_instrument_id = $1 AND s.signatory_role = r.code AND s.content_hash = plan_content_hash($1)
+                   ORDER BY s.signed_at DESC LIMIT 1) x) AS current_signoff,
+                EXISTS (SELECT 1 FROM plan_signoff s WHERE s.plan_instrument_id = $1 AND s.signatory_role = r.code) AS signed_before
+           FROM plan_signatory_role r WHERE r.authority_id = $2 ORDER BY r.display_order`, [request.params.id, i.authority_id])).rows
+      const order = ['unknown', 'draft', 'public_notice', 'approved', 'gazetted']
+      const reached = (st) => order.indexOf(i.status) >= order.indexOf(st) || i.status === 'superseded'
+      const steps = [
+        { code: 'public_notice', label: 'Public notice', done: reached('public_notice') },
+        { code: 'council_adoption', label: 'Adopted by the Full Council', done: Boolean(i.council_adopted_on),
+          detail: i.council_adopted_on ? { on: i.council_adopted_on, resolution: i.council_resolution_ref } : null },
+        ...roles.map((r) => ({ code: 'signature:' + r.code, label: r.label, done: Boolean(r.current_signoff),
+          stale: !r.current_signoff && r.signed_before, detail: r.current_signoff })),
+        { code: 'approved', label: 'Approved', done: reached('approved') },
+        { code: 'ministerial_approval', label: 'Approved by the Minister', done: Boolean(i.ministerial_approval_no),
+          detail: i.ministerial_approval_no ? { number: i.ministerial_approval_no, on: i.ministerial_approved_on, by: i.ministerial_approved_by } : null },
+        { code: 'gazetted', label: 'Gazetted and in force', done: i.status === 'gazetted' || i.status === 'superseded',
+          detail: i.gazette_ref ? { gazette_ref: i.gazette_ref, effective_from: i.effective_from } : null },
+      ]
+      return reply.send({ success: true, data: { status: i.status, formal: roles.length > 0, roles: roles.map((r) => ({ code: r.code, label: r.label })), steps } })
+    } catch (err) { return fail(request, reply, err, 'plan checklist') }
+  })
+
+  // What changed from an earlier revision (default: the one this revision replaces).
+  fastify.get('/workbench/plans/:id/revision-changes', reader, async (request, reply) => {
+    try {
+      const plan = await needPlan(request, reply)
+      if (!plan) return
+      let from = request.query?.from
+      if (from !== undefined && !isUuid(from)) return reply.code(400).send({ success: false, error: 'bad_from' })
+      if (!from) {
+        const { rows: [i] } = await db(request).query('SELECT supersedes_id FROM plan_instrument WHERE id = $1', [request.params.id])
+        from = i.supersedes_id
+      }
+      if (!from) return reply.send({ success: true, data: { from: null, changes: [] } })
+      const { rows } = await db(request).query('SELECT kind, zone_type_code, land_use_code, change, detail FROM plan_revision_changes($1, $2)', [from, request.params.id])
+      return reply.send({ success: true, data: { from, changes: rows } })
+    } catch (err) { return fail(request, reply, err, 'revision changes') }
+  })
+
+  const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+  const text = (v, max = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
+
+  fastify.post('/workbench/plans/:id/identity', writer, async (request, reply) => {
+    const plan = await needPlan(request, reply)
+    if (!plan) return
+    const b = request.body || {}
+    const scale = b.map_scale === undefined || b.map_scale === null || b.map_scale === '' ? null : Number(b.map_scale)
+    if (scale !== null && (!Number.isInteger(scale) || scale <= 0)) return reply.code(400).send({ success: false, error: 'bad_map_scale' })
+    if (b.revision_date && !isDate(b.revision_date)) return reply.code(400).send({ success: false, error: 'bad_revision_date' })
+    const a = actorOf(request)
+    try {
+      await db(request).query('SELECT set_plan_identity($1, $2, $3, $4, $5, $6)', [request.params.id, text(b.revision_label, 40), b.revision_date || null, scale, a.id, a.role])
+      return reply.send({ success: true })
+    } catch (err) { return fail(request, reply, err, 'set plan identity') }
+  })
+
+  fastify.post('/workbench/plans/:id/adoption', writer, async (request, reply) => {
+    const plan = await needPlan(request, reply)
+    if (!plan) return
+    const b = request.body || {}
+    if (!isDate(b.adopted_on) || !text(b.resolution_ref)) return reply.code(400).send({ success: false, error: 'adoption_needs_date_and_resolution' })
+    const a = actorOf(request)
+    try {
+      await db(request).query('SELECT record_council_adoption($1, $2::date, $3, $4, $5)', [request.params.id, b.adopted_on, text(b.resolution_ref), a.id, a.role])
+      return reply.send({ success: true })
+    } catch (err) { return fail(request, reply, err, 'record council adoption') }
+  })
+
+  fastify.post('/workbench/plans/:id/ministerial-approval', writer, async (request, reply) => {
+    const plan = await needPlan(request, reply)
+    if (!plan) return
+    const b = request.body || {}
+    if (!text(b.approval_no, 100) || !isDate(b.approved_on)) return reply.code(400).send({ success: false, error: 'approval_needs_number_and_date' })
+    const a = actorOf(request)
+    try {
+      await db(request).query('SELECT record_ministerial_approval($1, $2, $3::date, $4, $5, $6)',
+        [request.params.id, text(b.approval_no, 100), b.approved_on, text(b.approved_by), a.id, a.role])
+      return reply.send({ success: true })
+    } catch (err) { return fail(request, reply, err, 'record ministerial approval') }
   })
 
   fastify.post('/workbench/plans/:id/version', writer, async (request, reply) => {

@@ -7,7 +7,7 @@ vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { role: h.role },
 
 const api = vi.hoisted(() => ({
   listPlans: vi.fn(), getPlan: vi.fn(), listAuthorities: vi.fn(), addAuthority: vi.fn(), adopt: vi.fn(),
-  importSheet: vi.fn(), signOff: vi.fn(), setStatus: vi.fn(), newVersion: vi.fn(), audit: vi.fn(), reviewZone: vi.fn(),
+  importSheet: vi.fn(), signOff: vi.fn(), setStatus: vi.fn(), newVersion: vi.fn(), audit: vi.fn(), reviewZone: vi.fn(), checklist: vi.fn(), revisionChanges: vi.fn(), recordAdoption: vi.fn(), recordMinisterialApproval: vi.fn(), setIdentity: vi.fn(),
 }))
 vi.mock('@/services/planWorkbench', async (orig) => {
   const actual = await (orig as any)()
@@ -49,6 +49,8 @@ beforeEach(() => {
   h.name = 'Pat Planner'
   Object.values(api).forEach((f) => f.mockReset())
   api.audit.mockResolvedValue({ errors: 0, warnings: 0, reviews: 0, findings: [] })
+  api.checklist.mockRejectedValue(new Error('none'))
+  api.revisionChanges.mockResolvedValue({ from: null, changes: [] })
 })
 
 const column = (over: any = {}) => ({
@@ -146,7 +148,7 @@ describe('PlanWorkbenchView', () => {
     const w = await mountOpen(detail({ status: 'approved', frozen: true, signoff_current: true }, ['gazetted']))
     expect(w.text()).not.toContain('Check the sheet')
     expect(w.text()).toContain('A change needs a new version')
-    expect(w.findAll('button').map((b) => b.text())).toContain('Start a new version')
+    expect(w.findAll('button').map((b) => b.text())).toContain('Start a new revision')
   })
 
   it('a template shows no steps or sheet import', async () => {
@@ -320,5 +322,22 @@ describe('PlanWorkbenchView', () => {
     await create().trigger('click')
     await flushPromises()
     expect(api.adopt).toHaveBeenCalledWith({ authority_id: 2, profile: 'urban', title: 'Chipinge RDC district master plan', plan_type: 'local' })
+  })
+
+  it('shows the revision, the adoption checklist with the missing signatures, and the changes since the previous revision', async () => {
+    api.checklist.mockResolvedValue({ status: 'public_notice', formal: true, roles: [{ code: 'district_planner', label: 'District Planner' }], steps: [
+      { code: 'council_adoption', label: 'Adopted by the Full Council', done: false },
+      { code: 'signature:district_planner', label: 'District Planner', done: false, stale: true },
+    ] })
+    api.revisionChanges.mockResolvedValue({ from: 'p0', changes: [{ kind: 'zone', zone_type_code: 'Alpha', land_use_code: null, change: 'reshaped', detail: { hectares_changed: 12.5 } }] })
+    const w = await mountOpen(detail({ status: 'public_notice', revision_label: 'Rev 005', revision_date: '2026-07-01', map_scale: 120000, governs: false }, ['approved']))
+    expect(w.find('[data-testid="plan-identity"]').text()).toContain('Rev 005')
+    expect(w.find('[data-testid="plan-identity"]').text()).toContain('1:120 000')
+    const list = w.find('[data-testid="adoption-checklist"]').text()
+    expect(list).toContain('Adopted by the Full Council')
+    expect(list).toContain('sign again')
+    expect(w.find('[data-testid="revision-changes"]').text()).toContain('Alpha reshaped (12.5 ha)')
+    // a formal authority cannot sign without naming who is signing
+    expect((w.findAll('button').find((b) => b.text().startsWith('Sign off'))!.element as HTMLButtonElement).disabled).toBe(true)
   })
 })
