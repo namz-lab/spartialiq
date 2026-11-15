@@ -22,6 +22,11 @@ describe('legendFor', () => {
     expect(legendFor(style, plan()).map((e) => [e.label, e.fill])).toEqual([['Cemetery', '#8a8a8a'], ['Unmapped', '#efeadf']])
     expect(legendFor(null, plan())).toEqual([])
   })
+  it('reads every layer that draws the zones of the plan, so a farm zone is not shown in the fallback colour', () => {
+    const beyond = { definition: { renderer: { fallback: { symbol: { fill: '#efeadf' } }, categories: [{ label: 'Communal', value: 'Communal', symbol: { fill: '#aeb178' } }] } } }
+    const p = plan({ zones: [{ name: 'Cemetery', polygons: 1, hectares: 3 }, { name: 'Communal', polygons: 1, hectares: 5 }] })
+    expect(legendFor([style, beyond], p).map((e) => [e.label, e.fill])).toEqual([['Cemetery', '#8a8a8a'], ['Communal', '#aeb178']])
+  })
   it('writes the sheet\'s title block line', () => {
     expect(identityLine({ revision_label: 'Rev 005', revision_date: '2026-07-01', map_scale: 120000 })).toBe('Rev 005 · July 2026 · 1:120 000')
   })
