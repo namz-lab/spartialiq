@@ -28,12 +28,14 @@
  *                                 left out); dams -> basemap.waterbody (138 polygons, a name for 14, no use). The demonstration
  *                                 water points give way to the real ones.
  *
- *   police_posts, dip_tanks, network_boosters, irrigation_schemes, recreational_sites
+ *   network_boosters, irrigation_schemes, recreational_sites
  *                            the Vungu Master Plan Geo Package of 16 October 2024 (out of date: no newer file has been supplied for these):
- *                                 -> admin.community_facility (points; kind police_post, dip_tank, network_booster) and admin.land_feature (polygons;
- *                                 kind irrigation_scheme, recreational_site).
- *   schools, quarries, mines, new_city, railways
- *                            the council's updated files (supplied 15 November 2026), which replace the package for these:
+ *                                 -> admin.community_facility (kind network_booster) and admin.land_feature (kind irrigation_scheme, recreational_site).
+ *   business_centres, police_posts, dip_tanks, health_centres, schools, quarries, mines, new_city, railways
+ *                            the council's updated files (supplied 15 November 2026), which replace the earlier ones:
+ *                                 business_centres -> admin.business_centre (sector BC / RSC / GP, and for a BC its level 1 to 3); police_posts and dip_tanks
+ *                                 (with the village where the source gives it) -> admin.community_facility; health_centres -> council_ops.health_facility
+ *                                 (every attribute as the Ministry file gives it; a facility with no id there is numbered from 900001);
  *                                 schools -> admin.community_facility (level incl. University, grant class); quarries -> land_feature kinds quarry and
  *                                 sand_working (by the source's own Use); mines -> kind mine (Use: Gold, or none); new_city -> kind proposed_new_city;
  *                                 railways -> admin.railway_line. Whatever lies wholly outside the planning boundary is not the council's and is left
@@ -108,21 +110,36 @@ async function main() {
     report.chiefdoms = await replaceLayer(db, 'admin.chiefdom', ['chief', 'ward_number', 'local_authority', 'source'],
       read('chiefdoms').map(feat).map(({ p, geometry }) => ({ geometry, values: [txt(p.chief), int(p.ward_number), txt(p.local_authority), LEGACY] })), 'MultiPolygon')
 
-    report.business_centres = await replaceLayer(db, 'admin.business_centre', ['sector', 'ward_number', 'village', 'source'],
-      read('business_centres').map(feat).map(({ p, geometry }) => ({ geometry, values: [txt(p.sector), int(p.ward_number), txt(p.village), LEGACY] })), 'Point')
+    report.business_centres = await replaceLayer(db, 'admin.business_centre', ['sector', 'level', 'ward_number', 'village', 'source'],
+      read('business_centres').map(feat).map(({ p, geometry }) => ({ geometry, values: [txt(p.sector), int(p.level), int(p.ward_number), txt(p.village), NOV('businesscentres')] })), 'Point')
 
     report.rivers = await replaceLayer(db, 'admin.river', ['name', 'river_type', 'source'],
       read('rivers').map(feat).map(({ p, geometry }) => ({ geometry, values: [txt(p.name), txt(p.river_type), LEGACY] })), 'MultiLineString')
 
     // ── The facilities and land features of the printed sheet (migration 233) ──
-    const FAC = ['kind', 'name', 'subtype', 'grade', 'school_number', 'operator', 'source']
-    const fac = (kind, file, pick) => read(file).map(feat).map(({ p, geometry }) => ({ geometry, values: [kind, txt(p.name), ...pick(p), PACKAGE] }))
+    const FAC = ['kind', 'name', 'subtype', 'grade', 'school_number', 'operator', 'village', 'source']
+    const fac = (kind, file, pick, src = PACKAGE) => read(file).map(feat).map(({ p, geometry }) => ({ geometry, values: [kind, txt(p.name), ...pick(p), src] }))
     await db.query('DELETE FROM admin.community_facility')
     const f1 = await replaceLayer(db, 'admin.community_facility', FAC,
-      read('schools').map(feat).map(({ p, geometry }) => ({ geometry, values: ['school', txt(p.name), txt(p.level), txt(p.grant_class), txt(p.school_number), null, NOV('educational_institutions')] })), 'Point', { clear: false })
-    const f2 = await replaceLayer(db, 'admin.community_facility', FAC, fac('police_post', 'police_posts', (p) => [txt(p.type), null, null, null]), 'Point', { clear: false })
-    const f3 = await replaceLayer(db, 'admin.community_facility', FAC, fac('dip_tank', 'dip_tanks', () => [null, null, null, null]), 'Point', { clear: false })
-    const f4 = await replaceLayer(db, 'admin.community_facility', FAC, fac('network_booster', 'network_boosters', (p) => [null, null, null, txt(p.operator)]), 'Point', { clear: false })
+      read('schools').map(feat).map(({ p, geometry }) => ({ geometry, values: ['school', txt(p.name), txt(p.level), txt(p.grant_class), txt(p.school_number), null, null, NOV('educational_institutions')] })), 'Point', { clear: false })
+    const f2 = await replaceLayer(db, 'admin.community_facility', FAC, fac('police_post', 'police_posts', (p) => [txt(p.type), null, null, null, null], NOV('police')), 'Point', { clear: false })
+    const f3 = await replaceLayer(db, 'admin.community_facility', FAC, fac('dip_tank', 'dip_tanks', (p) => [null, null, null, null, txt(p.village)], NOV('diptanks')), 'Point', { clear: false })
+    const f4 = await replaceLayer(db, 'admin.community_facility', FAC, fac('network_booster', 'network_boosters', (p) => [null, null, null, txt(p.operator), null]), 'Point', { clear: false })
+    // the health facilities, every attribute as the Ministry file gives it (the table keeps the file's own column names)
+    const hcols = new Set((await db.query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'council_ops' AND table_name = 'health_facility'")).rows.map((r) => r.column_name))
+    await db.query('DELETE FROM council_ops.health_facility')
+    let hn = 0
+    for (const { p, geometry } of read('health_centres').map(feat)) {
+      const { id, ...rest } = p
+      const unknown = Object.keys(rest).filter((k) => !hcols.has(k))
+      if (unknown.length) throw new Error(`health_centres has columns the table does not: ${unknown.join(', ')}`)
+      const keys = Object.keys(rest)
+      hn += 1
+      await db.query(
+        `INSERT INTO council_ops.health_facility (id, ${keys.join(', ')}, source, geom) VALUES ($1, ${keys.map((_, i) => `$${i + 2}`).join(', ')}, $${keys.length + 2}, ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($${keys.length + 3}), 4326)))`,
+        [id ?? 900000 + hn, ...keys.map((k) => rest[k]), NOV('healthcentres'), JSON.stringify(geometry)])
+    }
+    report.health_facilities = hn
     report.community_facilities = { schools: f1, police_posts: f2, dip_tanks: f3, network_boosters: f4 }
 
     await db.query('DELETE FROM admin.land_feature')
@@ -142,7 +159,9 @@ async function main() {
     const haveBoundary = (await db.query('SELECT 1 FROM admin.planning_boundary LIMIT 1')).rowCount > 0   // loaded below on a fresh database: nothing to cut against yet
     const insideBoundary = 'SELECT 1 FROM admin.planning_boundary b WHERE ST_Intersects(b.geom, x.geom)'
     if (haveBoundary) {
-    cut.schools = (await db.query(`DELETE FROM admin.community_facility x WHERE kind = 'school' AND NOT EXISTS (${insideBoundary})`)).rowCount
+    cut.facilities = (await db.query(`DELETE FROM admin.community_facility x WHERE kind IN ('school', 'police_post', 'dip_tank') AND NOT EXISTS (${insideBoundary})`)).rowCount
+    cut.health_facilities = (await db.query(`DELETE FROM council_ops.health_facility x WHERE source = ${'$1'} AND NOT EXISTS (${insideBoundary})`, [NOV('healthcentres')])).rowCount
+    cut.business_centres = (await db.query(`DELETE FROM admin.business_centre x WHERE NOT EXISTS (${insideBoundary})`)).rowCount
     cut.workings_and_mines = (await db.query(`DELETE FROM admin.land_feature x WHERE kind IN ('quarry', 'sand_working', 'mine') AND NOT EXISTS (${insideBoundary})`)).rowCount
     cut.railway_lines = (await db.query(`DELETE FROM admin.railway_line x WHERE NOT EXISTS (${insideBoundary})`)).rowCount
     }

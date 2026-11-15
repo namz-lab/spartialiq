@@ -389,6 +389,8 @@ const MIGRATIONS = [
   '233_facilities_and_land_features.sql',
   // Mines, the proposed new city and the plan's railway lines. Rollback: migrations/rollback/234_mines_new_city_railway.down.sql.
   '234_mines_new_city_railway.sql',
+  // Business-centre levels, dip-tank villages, a source for the health facilities. Rollback: migrations/rollback/235_business_centre_levels_health_source.down.sql.
+  '235_business_centre_levels_health_source.sql',
 ]
 
 function createPool(env = process.env) {

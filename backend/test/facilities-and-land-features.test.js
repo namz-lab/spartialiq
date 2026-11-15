@@ -14,7 +14,7 @@ describe('community facilities', () => {
     const { rows } = await pool.query('SELECT kind, count(*)::int AS n, count(*) FILTER (WHERE source IS NULL OR source = \'\')::int AS no_source FROM admin.community_facility GROUP BY kind')
     const by = Object.fromEntries(rows.map((r) => [r.kind, r]))
     expect(by.school.n).toBe(102)
-    expect(by.police_post.n).toBe(7)
+    expect(by.police_post.n).toBe(6)   // Holy Cross prison lies outside the planning boundary
     expect(by.dip_tank.n).toBe(15)
     expect(by.network_booster.n).toBe(14)
     expect(rows.every((r) => r.no_source === 0)).toBe(true)
@@ -29,6 +29,10 @@ describe('community facilities', () => {
     expect(r.secondary_n).toBe(30)
     expect(r.no_level).toBe(1)
     expect(r.no_grade).toBe(6)   // the source gives no grant class to the university, the technical college, one primary, two secondaries and the unnamed point
+  })
+  test('a dip tank keeps the village the source gives, and a police post its type', async () => {
+    const r = await one("SELECT count(*) FILTER (WHERE kind = 'dip_tank' AND village IS NOT NULL)::int AS dip_villages, count(*) FILTER (WHERE kind = 'police_post' AND subtype = 'Prison')::int AS prisons FROM admin.community_facility")
+    expect(r).toEqual({ dip_villages: 7, prisons: 1 })
   })
   test('keeps a university and a technical college as the source names them', async () => {
     const { rows } = await pool.query("SELECT name, subtype FROM admin.community_facility WHERE kind = 'school' AND subtype IN ('University', 'Technical and Vocational') ORDER BY name")
@@ -63,5 +67,27 @@ describe('railway lines', () => {
   test('the seven lines of the plan are loaded with their source, and are valid', async () => {
     const r = await one("SELECT count(*)::int AS n, count(*) FILTER (WHERE source IS NULL)::int AS no_source, count(*) FILTER (WHERE NOT ST_IsValid(geom))::int AS invalid FROM admin.railway_line")
     expect(r).toEqual({ n: 7, no_source: 0, invalid: 0 })
+  })
+})
+
+describe('business centres', () => {
+  test('carry the grade 1 to 3 the council gives each BC, and none for a rural service centre or growth point', async () => {
+    const { rows } = await pool.query('SELECT sector, level, count(*)::int AS n FROM admin.business_centre GROUP BY sector, level ORDER BY sector, level')
+    expect(rows).toEqual([{ sector: 'BC', level: 1, n: 17 }, { sector: 'BC', level: 2, n: 31 }, { sector: 'BC', level: 3, n: 12 },
+      { sector: 'GP', level: null, n: 1 }, { sector: 'RSC', level: null, n: 5 }])
+  })
+  test('a level belongs only to a BC (the table refuses otherwise)', async () => {
+    await expect(pool.query("INSERT INTO admin.business_centre (sector, level, source, geom) VALUES ('RSC', 2, 'x', ST_SetSRID(ST_MakePoint(29.5, -19.3), 4326))")).rejects.toThrow(/business_centre_level_known/)
+  })
+})
+
+describe('health facilities', () => {
+  test('are loaded from the Ministry file with their source; a facility the council added has a name and a position only', async () => {
+    const { rows } = await pool.query('SELECT count(*)::int AS n, count(*) FILTER (WHERE source IS NULL)::int AS no_source, count(*) FILTER (WHERE typeoffaci IS NULL)::int AS no_type, count(*) FILTER (WHERE nameoffaci IS NULL)::int AS no_name FROM council_ops.health_facility')
+    expect(rows[0]).toEqual({ n: 24, no_source: 0, no_type: 6, no_name: 0 })
+  })
+  test('every facility has a position', async () => {
+    const r = await one('SELECT count(*) FILTER (WHERE geom IS NULL)::int AS none FROM council_ops.health_facility')
+    expect(r.none).toBe(0)
   })
 })
