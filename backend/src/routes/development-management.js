@@ -11,6 +11,9 @@
  *   GET    /permit-applications/:id/rule-snapshots   (the rules the permit was judged under)
  *   PUT    /permit-applications/:id/parcel           (staff set or correct the parcel)
  *   POST   /permit-applications/:id/rule-snapshot    (planner picks the land use; server computes)
+ *   GET    /permit-applications/:id/zoning           (what the plan allows on the parcel: zone, every use, who decided it)
+ *   POST   /permit-applications/:id/relodge          (staff: find the parcel again for an application not linked)
+ *   GET    /permit-applications/:id/plan-gate        (EO: what the plan asks for before this determination)
  *   PATCH  /permit-applications/:id/status
  *   POST   /permit-applications/:id/consultations
  *   GET    /permit-applications/:id/consultations
@@ -56,6 +59,7 @@ const { canTransition, allowedTransitions } = require('../config/permitWorkflow'
 const { scanBuffer } = require('../services/malwareScan')
 const { validateFileSignature } = require('../utils/fileSignature')
 const { parseParcelRef, parseUseCode } = require('../utils/ruleSnapshot')
+const planGates = require('../services/planGates')
 
 /**
  * Statutory transition gate, shared by every status write. Returns null when
@@ -223,7 +227,22 @@ function escapeHtml(s) {
 // generated_document.content and served via GET /generated-documents/:id —
 // the council's authoritative copy of the decision communicated to the citizen.
 // decision ∈ approve | approve_with_conditions | refuse.
-function renderDecisionLetter({ decision, permit, conditions, notes, officerName }) {
+/** The plan basis of a determination, for the decision letter: the zone, the plan and its status, the plan's decision and who made it, and the reasons recorded. */
+function planBasisHtml(basis, record) {
+  if (!basis || !basis.zone) return ''
+  const DECISION = { permitted: 'permitted', special_consent: 'permitted only with special consent', prohibited: 'prohibited' }
+  const use = basis.land_use ? `${basis.land_use.description || ''} (${basis.land_use.code})`.trim() : null
+  const lines = [`The land lies in the <strong>${escapeHtml(basis.zone.name)}</strong> zone of ${escapeHtml(basis.plan?.title || 'the plan')}${basis.plan?.provisional ? ' (not yet in force)' : ''}.`]
+  if (use) {
+    lines.push(basis.decision
+      ? `The plan makes ${escapeHtml(use)} ${DECISION[basis.decision] || escapeHtml(basis.decision)} in this zone${basis.authority ? ` (${escapeHtml(basis.authority)})` : ''}.`
+      : `The plan has not decided ${escapeHtml(use)} in this zone.`)
+  }
+  const reasons = (record || []).filter((r) => r.detail && r.detail.reason).map((r) => `<li>${escapeHtml(r.detail.reason)}</li>`).join('')
+  return `<h3>Plan basis</h3><p>${lines.join(' ')}</p>${reasons ? `<p>Reasons recorded for departing from the plan:</p><ul>${reasons}</ul>` : ''}`
+}
+
+function renderDecisionLetter({ decision, permit, conditions, notes, officerName, planBasis, planRecord }) {
   const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const ref = permit.dev_register_no || permit.tpd_reference || String(permit.id).slice(0, 8).toUpperCase()
   const title = {
@@ -254,6 +273,7 @@ function renderDecisionLetter({ decision, permit, conditions, notes, officerName
        ${verb}.</p>
     ${condHtml}
     ${reasonsHtml}
+    ${planBasisHtml(planBasis, planRecord)}
     <p>Should you be aggrieved by this decision, you may appeal to the Administrative
        Court within the period prescribed by the Act.</p>
     <p>Yours faithfully,</p>
@@ -327,6 +347,26 @@ async function developmentManagementRoutes(fastify) {
       request.log.error({ err }, 'permit_event insert failed')
     }
   }
+
+  /**
+   * The plan's gate on an approval (services/planGates.js). Sends the 409 and returns { stop: true } when the plan asks for something the request did not
+   * supply; otherwise returns { stop: false, record } where record are the case-history events to write once the determination is made.
+   */
+  async function planGate(request, reply, permitId, decision) {
+    const basis = await planGates.loadBasis(db(request), permitId)
+    if (!basis) { reply.code(404).send({ success: false, error: 'not_found' }); return { stop: true } }
+    const gate = planGates.evaluate(decision, basis, request.body || {})
+    if (gate.missing.length) {
+      reply.code(409).send({
+        success: false, error: 'plan_requirements',
+        message: 'The plan asks for more before this determination: ' + gate.missing.map((m) => m.message).join(' '),
+        requirements: gate.requirements, missing: gate.missing, basis: planGates.describeBasis(basis),
+      })
+      return { stop: true }
+    }
+    return { stop: false, record: gate.record, basis: planGates.describeBasis(basis) }
+  }
+  const recordPlanBasis = async (permitId, request, record) => { for (const e of record) await logEvent(permitId, e.event, request, e.detail) }
 
   // ── Inspector work queue ──────────────────────────────────────────
   fastify.get('/inspector/work-queue', {
@@ -627,6 +667,93 @@ async function developmentManagementRoutes(fastify) {
     }
   })
 
+  // ── What this land allows, from the plan (migration 231) ─────────────
+  // The parcel the application is linked to, each plan covering it with its status, the governing zone, and every land use of the plan with the
+  // decision for that zone and WHO decided it (EO | proposed | not decided). Read from the register and the plan: nothing here comes from the client.
+  fastify.get('/permit-applications/:id/zoning', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    try {
+      const { rows: [permit] } = await db(request).query(
+        `SELECT id, created_by, parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1`, [request.params.id])
+      if (!permit) return reply.code(404).send({ success: false, error: 'not_found' })
+      if (!STAFF_ROLES.includes(request.user.role) && permit.created_by !== request.user.id) return reply.code(404).send({ success: false, error: 'not_found' })
+      const out = { permit_id: permit.id, match: permit.parcel_match, parcel: null, plans: [], assessment: null }
+      if (!permit.parcel_id) return reply.send({ success: true, data: out })
+
+      const { rows: [parcel] } = await db(request).query(
+        `SELECT parcel_id, stand_no, parcel_kind, township_code, round(area_m2) AS area_m2 FROM land.parcel WHERE parcel_id = $1`, [permit.parcel_id])
+      out.parcel = parcel ? { layer: permit.parcel_layer, id: parcel.parcel_id, stand_no: parcel.stand_no, kind: parcel.parcel_kind, township: parcel.township_code, area_m2: Number(parcel.area_m2) } : null
+
+      const { rows: [{ snapshot }] } = await db(request).query('SELECT rule_snapshot($1, $2, NULL) AS snapshot', [permit.parcel_layer, permit.parcel_id])
+      const byPlan = new Map()
+      for (const r of snapshot.results || []) {
+        if (!byPlan.has(r.plan.id)) byPlan.set(r.plan.id, { plan: r.plan, zones: [] })
+        byPlan.get(r.plan.id).zones.push({ zone: r.zone, share_pct: r.share_pct, governing: r.governing })
+      }
+      for (const entry of byPlan.values()) {
+        const governing = entry.zones.find((z) => z.governing) ?? entry.zones[0]
+        const { rows: uses } = await db(request).query(
+          `SELECT g.group_code AS code, g.description, g.group_category AS category, c.control_type AS decision, c.authority, c.conditions, c.notes, c.pathway_code
+             FROM land_use_groups g
+             LEFT JOIN zone_effective_controls c ON c.zone_id = $1 AND c.land_use_group_id = g.id
+            WHERE g.plan_instrument_id = $2 AND g.is_active
+            ORDER BY g.display_order, g.group_code`, [governing.zone.id, entry.plan.id])
+        out.plans.push({
+          ...entry,
+          governing_zone: governing.zone,
+          chosen: entry.plan.id === permit.plan_instrument_id,
+          uses: uses.map((u) => ({
+            ...u,
+            decided_by: !u.decision ? 'not_decided' : /^PROPOSED/i.test(u.authority || '') ? 'proposed' : 'council',
+          })),
+        })
+      }
+      const basis = await planGates.loadBasis(db(request), permit.id)
+      if (basis?.assessment) out.assessment = planGates.describeBasis(basis)
+      return reply.send({ success: true, data: out })
+    } catch (err) {
+      request.log.error({ err }, 'application zoning failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // Staff re-run the lodgement of an application whose parcel was not found. A parcel set by hand is never overwritten.
+  fastify.post('/permit-applications/:id/relodge', {
+    preHandler: requireRole(fastify, SNAPSHOT_STAFF),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    try {
+      const { rows: [r] } = await db(request).query('SELECT spatial_planning.relodge_permit_zoning($1) AS match', [request.params.id])
+      await logEvent(request.params.id, 'relodged', request, { match: r.match })
+      const { rows: [p] } = await db(request).query(
+        'SELECT parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+      return reply.send({ success: true, data: p })
+    } catch (err) {
+      if (/unknown permit/.test(err.message)) return reply.code(404).send({ success: false, error: 'not_found' })
+      request.log.error({ err }, 'relodge failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // What the plan asks for before this determination, so the screen asks for it up front. ?decision=approve | approve_with_conditions | refuse
+  fastify.get('/permit-applications/:id/plan-gate', {
+    preHandler: requireRole(fastify, ['eo', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    try {
+      const basis = await planGates.loadBasis(db(request), request.params.id)
+      if (!basis) return reply.code(404).send({ success: false, error: 'not_found' })
+      const decision = request.query?.decision || 'approve'
+      const g = planGates.evaluate(decision, basis, {})
+      return reply.send({ success: true, data: { decision, basis: planGates.describeBasis(basis), requirements: g.requirements } })
+    } catch (err) {
+      request.log.error({ err }, 'plan gate failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
   // ── Planner case file (migration 082) ────────────────────────────
   // Persist the planner's working record ON the permit so it is the shared
   // system-of-record, not browser localStorage: proposal detail, due-diligence
@@ -810,6 +937,14 @@ async function developmentManagementRoutes(fastify) {
         }
       }
 
+      // A determination reaches here only by an admin's override: the plan's gate applies to it as well.
+      let planRecord = []
+      if (DECIDED.includes(status)) {
+        const gate = await planGate(request, reply, request.params.id, { approved: 'approve', approved_with_conditions: 'approve_with_conditions', refused: 'refuse' }[status])
+        if (gate.stop) return
+        planRecord = gate.record
+      }
+
       if (rejectUnlawfulTransition(reply, request, fromStatus, status)) return
 
       const { rows } = await db(request).query(
@@ -840,6 +975,7 @@ async function developmentManagementRoutes(fastify) {
           data: current.rows[0],
         })
       }
+      await recordPlanBasis(request.params.id, request, planRecord)
       await logEvent(request.params.id, 'status_changed', request, {
         status,
         from_status: fromStatus,
@@ -1396,6 +1532,10 @@ async function developmentManagementRoutes(fastify) {
         'SELECT status FROM spatial_planning.permit_application WHERE id = $1', [id])
       if (!cur.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
       const fromStatus = cur.rows[0].status
+      // The plan's gate (services/planGates.js): an approval that departs from the plan, or rests on a rule the EO has not agreed, needs a recorded reason.
+      const planned = await planGate(request, reply, id, b.decision)
+      if (planned.stop) return
+
       if (rejectUnlawfulTransition(reply, request, fromStatus, status)) return
 
       // Committee gate (H2): a determination must be backed by a committee
@@ -1433,6 +1573,7 @@ async function developmentManagementRoutes(fastify) {
           message: 'This case was changed by another officer since you loaded it.',
         })
       }
+      await recordPlanBasis(id, request, planned.record)
       // Close the latest open handoff package as decided (best-effort).
       try {
         await db(request).query(
@@ -1454,6 +1595,7 @@ async function developmentManagementRoutes(fastify) {
         const { title, html } = renderDecisionLetter({
           decision: b.decision, permit: rows[0],
           conditions: b.conditions, notes, officerName: offRow.rows[0]?.n || null,
+          planBasis: planned.basis, planRecord: planned.record,
         })
         const docType = b.decision === 'refuse' ? 'refusal_letter' : 'outcome_letter'
         const bytes = Buffer.byteLength(html, 'utf8')

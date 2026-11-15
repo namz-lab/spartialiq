@@ -885,7 +885,43 @@ export interface RuleSnapshot {
   results: RuleSnapshotResult[]
 }
 
+/** What the plan asks for before an approval, and the basis it rests on (GET /permit-applications/:id/plan-gate). */
+export interface PlanRequirement { code: string; field: 'departure_reason' | 'rules_acknowledged' | 'plan_note'; message: string }
+export interface PlanBasis {
+  parcel: { layer: string; id: string; match: string | null } | null
+  assessed: boolean
+  land_use: { code: string; description: string | null } | null
+  zone: { id: number; name: string; type_code: string | null } | null
+  plan: { id: string; title: string; status: string; provisional?: boolean } | null
+  decision: 'permitted' | 'special_consent' | 'prohibited' | null
+  authority: string | null
+  provisional_decision: boolean
+  pathway: { name: string; requires_public_notice?: boolean } | null
+  public_notice_complete: boolean
+}
+export interface PlanGate { decision: string; basis: PlanBasis; requirements: PlanRequirement[] }
+/** The plan's own words the determination must carry when it departs from the plan or rests on an unagreed rule. */
+export interface PlanReasons { departure_reason?: string; rules_acknowledged?: boolean; plan_note?: string }
+
 export const dmApi = {
+  /** The parcel an application is linked to and what the plan allows on it: every use with its decision and who made it. */
+  async getZoning(permitId: string): Promise<any> {
+    const r = await api.get(`/permit-applications/${encodeURIComponent(permitId)}/zoning`)
+    return r.data.data
+  },
+
+  /** Staff: look for the application's parcel again (an application that was not linked). */
+  async relodge(permitId: string): Promise<{ parcel_layer: string | null; parcel_id: string | null; parcel_match: string | null }> {
+    const r = await api.post(`/permit-applications/${encodeURIComponent(permitId)}/relodge`)
+    return r.data.data
+  },
+
+  /** EO: what the plan asks for before this determination. */
+  async getPlanGate(permitId: string, decision: string): Promise<PlanGate> {
+    const r = await api.get(`/permit-applications/${encodeURIComponent(permitId)}/plan-gate`, { params: { decision } })
+    return r.data.data
+  },
+
   /** Staff: compute and store the rules for the land use the planner picked (append-only). */
   async takeRuleSnapshot(permitId: string, landUseCode: string): Promise<RuleSnapshot> {
     const r = await api.post(`/permit-applications/${permitId}/rule-snapshot`, { land_use_code: landUseCode })
@@ -1554,7 +1590,7 @@ export const dmApi = {
   // Returns the updated permit plus the council decision letter generated for it.
   async submitEoDecision(
     permitId: string,
-    data: { decision: EoDecisionAction; notes?: string; conditions?: PermitCondition[] },
+    data: { decision: EoDecisionAction; notes?: string; conditions?: PermitCondition[] } & PlanReasons,
   ): Promise<{ permit: PermitApplication; document: GeneratedDocumentRef | null }> {
     const r = await api.post(`/permit-applications/${encodeURIComponent(permitId)}/eo-decision`, data)
     return r.data?.data ?? r.data

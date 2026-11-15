@@ -18,7 +18,7 @@ import { MAP_BACKGROUND } from '@/map/vunguBasemapStyle'
 import {
   dmApi,
   type EoCase, type DecisionPackage, type CaseMessage,
-  type SpecialistFinding, type ReturnRole, type PermitCondition,
+  type SpecialistFinding, type ReturnRole, type PermitCondition, type PlanGate,
   type GeneratedDocumentRef, type PermitEvent,
 } from '@/services/developmentManagementService'
 import { normalizeStatus } from '@/composables/useApplicationPipeline'
@@ -57,6 +57,29 @@ const viewingDoc = ref(false)
 
 // ─── Working decision state (for the selected case) ───────────────────
 const decisionNotes = ref('')
+
+// The plan's gate on an approval (migration 231): what the plan decides for the use assessed, and what an approval must say when it departs from it
+// or rests on a rule the Executive Officer has not agreed. The server enforces the same; this asks for it up front.
+const planGate = ref<PlanGate | null>(null)
+const departureReason = ref('')
+const rulesAck = ref(false)
+const planNote = ref('')
+const isReason = (v: string) => v.trim().length >= 10
+const planMissing = computed(() => (planGate.value?.requirements ?? []).filter((r) =>
+  r.field === 'rules_acknowledged' ? !rulesAck.value
+    : r.field === 'departure_reason' ? !isReason(departureReason.value)
+      : !isReason(planNote.value)))
+const DECISION_WORDS: Record<string, string> = { permitted: 'Permitted', special_consent: 'Special consent', prohibited: 'Prohibited' }
+const planBasisLine = computed(() => {
+  const b = planGate.value?.basis
+  if (!b) return null
+  if (!b.parcel) return 'This application is not linked to a parcel of the register.'
+  if (!b.assessed) return 'No land use has been assessed against the plan for this application.'
+  const use = b.land_use ? `${b.land_use.description ?? ''} (${b.land_use.code})`.trim() : 'the use'
+  return b.decision
+    ? `${use} is ${DECISION_WORDS[b.decision].toLowerCase()} in the ${b.zone?.name ?? 'zone'} zone.`
+    : `The plan has not decided ${use} in the ${b.zone?.name ?? 'zone'} zone.`
+})
 const conditions = ref<{ text: string }[]>([])
 const newCondition = ref('')
 const returnRole = ref<ReturnRole>('planner')
@@ -127,12 +150,18 @@ async function loadPackage(id: string) {
   decisionNotes.value = ''
   newCondition.value = ''
   newMessage.value = ''
+  planGate.value = null
+  departureReason.value = ''
+  rulesAck.value = false
+  planNote.value = ''
   try {
-    const [p, m, ev] = await Promise.all([
+    const [p, m, ev, gate] = await Promise.all([
       dmApi.getDecisionPackage(id),
       dmApi.listMessages(id).catch(() => [] as CaseMessage[]),
       dmApi.listEvents(id).catch(() => [] as PermitEvent[]),
+      dmApi.getPlanGate(id, 'approve').catch(() => null),
     ])
+    planGate.value = gate
     pkg.value = p
     messages.value = m
     events.value = ev
@@ -183,6 +212,11 @@ async function decide(decision: 'approve' | 'approve_with_conditions' | 'refuse'
     flash('error', 'Add at least one condition before approving with conditions.')
     return
   }
+  const approving = decision !== 'refuse'
+  if (approving && planMissing.value.length) {
+    flash('error', 'The plan asks for more before an approval: ' + planMissing.value.map((r) => r.message).join(' '))
+    return
+  }
   busy.value = decision
   try {
     const res = await dmApi.submitEoDecision(selectedId.value, {
@@ -190,6 +224,11 @@ async function decide(decision: 'approve' | 'approve_with_conditions' | 'refuse'
       notes: decisionNotes.value.trim() || undefined,
       conditions: decision === 'approve_with_conditions'
         ? (conditions.value as PermitCondition[]) : undefined,
+      ...(approving ? {
+        departure_reason: isReason(departureReason.value) ? departureReason.value.trim() : undefined,
+        rules_acknowledged: rulesAck.value || undefined,
+        plan_note: isReason(planNote.value) ? planNote.value.trim() : undefined,
+      } : {}),
     })
     lastDoc.value = res.document
     flash('success', decision === 'refuse'
@@ -774,16 +813,38 @@ const deemed = computed(() =>
             <section class="eodr-card eodr-decide">
               <header><Gavel :size="13" /> EO determination</header>
               <div class="eodr-card-body">
+                <!-- What the plan says about this application, and what an approval must record -->
+                <div v-if="planGate" class="eodr-plan" data-testid="plan-basis">
+                  <p class="eodr-plan-line">
+                    <strong>Plan basis.</strong> {{ planBasisLine }}
+                    <template v-if="planGate.basis.decision">
+                      <span v-if="planGate.basis.provisional_decision" class="eodr-plan-prop">Proposed, not yet agreed by the EO</span>
+                      <span v-else-if="planGate.basis.authority" class="eodr-muted">({{ planGate.basis.authority }})</span>
+                    </template>
+                    <template v-if="planGate.basis.plan?.provisional"> The plan is not yet in force.</template>
+                  </p>
+                  <template v-for="r in planGate.requirements" :key="r.code">
+                    <p class="eodr-plan-ask">{{ r.message }}</p>
+                    <label v-if="r.field === 'rules_acknowledged'" class="eodr-plan-ack">
+                      <input v-model="rulesAck" type="checkbox" /> I accept this for this determination
+                    </label>
+                    <textarea v-else-if="r.field === 'departure_reason'" v-model="departureReason" rows="2" aria-label="Reason for departing from the plan"
+                              placeholder="Reason, at least a sentence (recorded on the case and in the letter)"></textarea>
+                    <textarea v-else v-model="planNote" rows="2" aria-label="Why the plan could not be applied"
+                              placeholder="Why the plan could not be applied, at least a sentence"></textarea>
+                  </template>
+                </div>
+
                 <label class="eodr-label">Decision notes / reason</label>
                 <textarea v-model="decisionNotes" rows="4"
                           placeholder="Reasons for the decision, refusal grounds, return instructions, or the request to the applicant…"></textarea>
 
                 <div class="eodr-actions">
-                  <button class="eodr-btn ok" :disabled="!!busy" @click="decide('approve')">
+                  <button class="eodr-btn ok" :disabled="!!busy || planMissing.length > 0" :title="planMissing.length ? 'The plan asks for more before an approval' : undefined" @click="decide('approve')">
                     <component :is="busy === 'approve' ? Loader2 : CheckCircle2" :size="14" :class="{ spin: busy === 'approve' }" />
                     Approve
                   </button>
-                  <button class="eodr-btn ok-alt" :disabled="!!busy" @click="decide('approve_with_conditions')">
+                  <button class="eodr-btn ok-alt" :disabled="!!busy || planMissing.length > 0" :title="planMissing.length ? 'The plan asks for more before an approval' : undefined" @click="decide('approve_with_conditions')">
                     <component :is="busy === 'approve_with_conditions' ? Loader2 : CheckCircle2" :size="14" :class="{ spin: busy === 'approve_with_conditions' }" />
                     Approve with conditions
                   </button>
@@ -947,6 +1008,12 @@ const deemed = computed(() =>
   background:var(--ent-surface); border:1px solid var(--ent-line);
   color:var(--ent-text-2); font-size:var(--ent-fs-micro); font-weight:var(--ent-fw-semibold);
   font-variant-numeric:tabular-nums; }
+.eodr-plan { margin-bottom: var(--ent-s3); padding: var(--ent-s2) var(--ent-s3); border: 1px solid var(--ent-line-strong); border-radius: var(--ent-r-sm); display: flex; flex-direction: column; gap: var(--ent-s1); }
+.eodr-plan-line { margin: 0; }
+.eodr-plan-prop { margin-left: 0.4rem; padding: 0.05rem 0.4rem; border: 1px dashed #b54708; border-radius: 4px; color: #b54708; font-size: 0.75rem; }
+.eodr-plan-ask { margin: var(--ent-s1) 0 0; color: var(--ent-danger); }
+.eodr-plan-ack { display: flex; align-items: center; gap: 0.4rem; }
+.eodr-plan textarea { width: 100%; font: inherit; }
 .eodr-card-body { padding:var(--ent-s3) var(--ent-s4); font-size:var(--ent-fs-sm); color:var(--ent-text-2); }
 /* The determination card is the one thing on this screen that changes a
    statutory record, so it is the one card the accent is spent on. */
