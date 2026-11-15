@@ -204,6 +204,7 @@ describe('migration plan', () => {
       '231_applications_read_the_plan.sql',
       '232_plan_revisions_and_adoption.sql',
       '233_facilities_and_land_features.sql',
+      '234_mines_new_city_railway.sql',
     ])
 
     for (const filename of MIGRATIONS) {

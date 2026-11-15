@@ -387,6 +387,8 @@ const MIGRATIONS = [
   '232_plan_revisions_and_adoption.sql',
   // The facilities and land features the printed sheet shows (schools, police posts, quarries, irrigation schemes ...). Rollback: migrations/rollback/233_facilities_and_land_features.down.sql.
   '233_facilities_and_land_features.sql',
+  // Mines, the proposed new city and the plan's railway lines. Rollback: migrations/rollback/234_mines_new_city_railway.down.sql.
+  '234_mines_new_city_railway.sql',
 ]
 
 function createPool(env = process.env) {
