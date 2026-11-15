@@ -374,6 +374,13 @@ const MIGRATIONS = [
   // One parcel register: farm parcels are a kind of land.parcel; vungu_parcels becomes a view.
   // Rollback: migrations/rollback/227_single_parcel_register.down.sql.
   '227_single_parcel_register.sql',
+  // Stand sales as a thin table over the parcel register; the demo stands are dropped.
+  // Rollback: migrations/rollback/228_stand_offer.down.sql.
+  '228_stand_offer.sql',
+  // Stand boundary changes as proposals to the Survey Section. Rollback: migrations/rollback/229_parcel_change_requests.down.sql.
+  '229_parcel_change_requests.sql',
+  // The survey import closes a stand-change proposal. Rollback: migrations/rollback/230_parcel_change_import.down.sql.
+  '230_parcel_change_import.sql',
 ]
 
 function createPool(env = process.env) {

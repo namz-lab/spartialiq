@@ -6,7 +6,7 @@
 //   GET   /parcels/:parcel_id             viewInternal   parcel profile
 //   PATCH /gms/parcels/:parcel_id         editLayers     attributes only, never the boundary
 //   GET   /wards/:ward_code/summary       viewInternal
-//   POST  /gms/imports/general-plan       importSurvey   validation report; commit:true writes
+//   POST  /gms/imports/general-plan       importSurvey   validation report; commit:true writes; change_request_id closes a stand-change proposal
 //   GET   /gms/public/parcels/:parcel_id  anyone         public identify, no personal data
 //   GET   /gms/key-registry               viewInternal
 //   GET   /gms/dashboard                  viewInternal
@@ -194,6 +194,8 @@ async function gmsRoutes(fastify) {
       source_srid: Number(b.source_srid),
       features: b.features ?? b.feature_collection?.features,
       commit: b.commit === true,
+      // an accepted stand-change proposal this import closes (migrations 229 and 230); absent for an ordinary import
+      change_request_id: typeof b.change_request_id === 'string' && b.change_request_id.trim() ? b.change_request_id.trim() : null,
     }, request.user)
     if (!result.ok) return reply.code(422).send({ success: false, error: 'validation_failed', ...result })
     return { success: true, ...result }

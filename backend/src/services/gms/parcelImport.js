@@ -20,11 +20,17 @@
 //   - no stand-number match, but an authority PLOT (a council survey with no township) whose boundary agrees (IoU >= ADOPT_PLOT_IOU) -> ADOPT, and the
 //     plot becomes a stand of this township; more than one candidate either way -> an error (ambiguous_match)
 //   - no match, but overlapping an authority parcel of another number -> an error (overlaps_authority_parcel)
+// A STAND-CHANGE PROPOSAL (change_request_id, migrations 229 and 230) changes the rules: every feature must match an item of the accepted proposal, the proposal's
+// stands are replaced rather than conflicting, every OTHER current parcel (custodian included) is checked for overlap, and on commit the proposal's parents are
+// retired or revised, lineage is written and the proposal is marked applied (services/gms/parcelChangeImport.js). Without it an import behaves exactly as above.
 // Authority parcels the plan does not account for are listed as ORPHANS and left alone. Boundaries are compared in the survey CRS, so no datum shift
 // enters the comparison. What an adopted parcel was is kept in land.parcel_event.
 // ─────────────────────────────────────────────────────────────────────────
 
 const { enqueue } = require('./outbox')
+const changeImport = require('./parcelChangeImport')
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Two parcels sharing an edge touch; anything overlapping by more than this is
 // an overlap. Survey coordinates are to the centimetre.
@@ -39,8 +45,9 @@ const ADOPT_PLOT_IOU = 0.99
 const AUTHORITY_OVERLAP_M2 = 0.05
 
 async function importGeneralPlan(pg, input, user) {
-  const { sg_ref, township_code, source_srid, features, commit } = input
+  const { sg_ref, township_code, source_srid, features, commit, change_request_id } = input
   const errors = []
+  if (change_request_id && !UUID.test(String(change_request_id))) errors.push({ code: 'bad_change_request_id' })
   if (!sg_ref) errors.push({ code: 'missing_sg_ref' })
   if (!township_code) errors.push({ code: 'missing_township_code' })
   if (!Array.isArray(features) || features.length === 0) errors.push({ code: 'no_features' })
@@ -93,11 +100,21 @@ async function importGeneralPlan(pg, input, user) {
        WHERE stand_no IS NOT NULL GROUP BY stand_no HAVING count(*) > 1`)) {
       errors.push({ code: 'duplicate_stand_no_in_plan', stand_no: r.stand_no, features: r.features })
     }
+    // --- a stand-change proposal: its own checks replace the adoption and conflict checks below
+    const skipRegister = Boolean(change_request_id)
+    let changeCtx = null
+    let changeReport = null
+    if (skipRegister && !errors.some((e) => ['invalid_geometry', 'not_a_polygon', 'missing_stand_no'].includes(e.code))) {
+      const prep = await changeImport.prepare(client, q, { requestId: change_request_id, township_code, source_srid })
+      errors.push(...prep.errors)
+      changeCtx = prep.ctx ?? null
+      changeReport = prep.report ?? null
+    }
     // --- parcels already in the register for these stands: refuse, adopt, or report a conflict --------------------------------------------
     const validPoly = `i.g IS NOT NULL AND GeometryType(i.g) IN ('POLYGON', 'MULTIPOLYGON') AND ST_IsValid(i.g)`
     const adopt = []                       // { idx, parcel_id, matched_by, deviation_m }
     const claimed = new Set()              // feature indexes decided below (adopted, refused or in conflict)
-    for (const r of await q(`
+    for (const r of skipRegister ? [] : await q(`
       SELECT i.idx, i.stand_no, p.parcel_id, p.origin, p.sg_ref,
              CASE WHEN ${validPoly}
                   THEN ST_HausdorffDistance(ST_Boundary(ST_Transform(i.g, p.source_srid)), ST_Boundary(p.geom_source), 0.25) END AS deviation_m,
@@ -120,7 +137,7 @@ async function importGeneralPlan(pg, input, user) {
     }
     // plots: no township, so matched by boundary alone
     const planGeometryOk = !errors.some((e) => e.code === 'invalid_geometry' || e.code === 'not_a_polygon')   // GEOS throws on invalid input
-    const plotRows = !planGeometryOk ? [] : await q(`
+    const plotRows = (!planGeometryOk || skipRegister) ? [] : await q(`
       SELECT i.idx, i.stand_no, p.parcel_id, x.iou, x.deviation_m
         FROM gp_in i
         JOIN land.parcel p ON p.origin = 'authority' AND p.status = 'current' AND p.parcel_kind = 'plot' AND p.township_code IS NULL AND p.sg_ref IS NULL
@@ -146,7 +163,7 @@ async function importGeneralPlan(pg, input, user) {
     }
     // a stand that matched nothing but sits on an authority parcel of another number: a numbering conflict, never two parcels on one piece of ground
     const adoptedIds = adopt.map((a) => a.parcel_id)
-    for (const r of !planGeometryOk ? [] : await q(`
+    for (const r of (!planGeometryOk || skipRegister) ? [] : await q(`
       SELECT i.idx, i.stand_no, p.parcel_id, p.stand_no AS parcel_stand_no, x.overlap_m2
         FROM gp_in i
         JOIN land.parcel p ON p.origin = 'authority' AND p.status = 'current' AND p.parcel_kind IN ('stand', 'plot')
@@ -177,7 +194,7 @@ async function importGeneralPlan(pg, input, user) {
 
     // authority parcels this plan does not account for: reported, never touched
     const conflicted = new Set(errors.filter((e) => e.parcel_id).map((e) => e.parcel_id))
-    const orphans = (await q(`
+    const orphans = skipRegister ? [] : (await q(`
       SELECT p.parcel_id, p.stand_no, p.parcel_kind, p.township_code
         FROM land.parcel p
        WHERE p.origin = 'authority' AND p.status = 'current' AND p.parcel_kind IN ('stand', 'plot') AND p.sg_ref IS NULL
@@ -201,6 +218,13 @@ async function importGeneralPlan(pg, input, user) {
       adopt,
       orphans,
       errors,
+    }
+
+    if (changeCtx) {
+      report.summary = { new: changeCtx.childIdx.length, revised: changeCtx.revisedIdx.length, retired: changeCtx.retiring.length, adopt: 0, conflicts: 0, orphans: 0 }
+      report.change_request = changeReport
+    } else if (changeReport) {
+      report.change_request = changeReport
     }
 
     if (!commit || errors.length) {
@@ -247,7 +271,7 @@ async function importGeneralPlan(pg, input, user) {
              'A', 'general_plan', 'Survey Section approved general plan ' || $5, $7
         FROM gp_in i WHERE i.idx <> ALL($8::int[]) ORDER BY i.idx
       RETURNING parcel_id, stand_no, area_m2, ward_code, sg_ref`,
-    [township_code, source_srid, crs.transform_method, crs.accuracy_m, sg_ref, gp.import_id, user?.id ?? null, adopt.map((a) => a.idx)])
+    [township_code, source_srid, crs.transform_method, crs.accuracy_m, sg_ref, gp.import_id, user?.id ?? null, [...adopt.map((a) => a.idx), ...(changeCtx ? changeCtx.revisedIdx : [])]])
 
     for (const p of created) {
       await enqueue(client, 'ParcelCreated', {
@@ -268,6 +292,11 @@ async function importGeneralPlan(pg, input, user) {
       }, `ParcelApproved:${p.parcel_id}:${p.sg_ref}`)
     }
 
+    // the proposal named by the import is closed in the same transaction
+    const change = changeCtx
+      ? await changeImport.apply(client, q, changeCtx, { gp, crs, sg_ref, source_srid, township_code, user, created })
+      : null
+
     await client.query('COMMIT')
     return {
       ok: true,
@@ -276,6 +305,7 @@ async function importGeneralPlan(pg, input, user) {
       import_id: gp.import_id,
       parcel_ids: created.map((p) => p.parcel_id),
       adopted_ids: adopt.map((a) => a.parcel_id),
+      ...(change ? { change_request: { id: change_request_id, ...change } } : {}),
     }
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})

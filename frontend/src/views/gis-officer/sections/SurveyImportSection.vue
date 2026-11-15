@@ -3,12 +3,13 @@
 // enters the register. Validate first; commit only a clean report. Phase 1
 // takes GeoJSON in the survey CRS as supplied (a Lo belt); Shapefile, DXF and
 // GeoPackage readers come with the full import screen.
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { FileCheck2, Upload } from 'lucide-vue-next'
 import UiPanel from '@/components/ui/UiPanel.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { gmsApi, SURVEY_CRS, type ImportResult, type ImportIssue } from '@/services/gms'
+import { parcelChangeApi, KIND_LABEL, type ProposalSummary } from '@/services/parcelChangeService'
 
 const router = useRouter()
 
@@ -21,6 +22,23 @@ const fileError = ref('')
 const busy = ref(false)
 const result = ref<ImportResult | null>(null)
 const error = ref('')
+
+// A stand-change proposal this plan closes (migrations 229 and 230): optional; only proposals the Survey Section has accepted are offered.
+const proposals = ref<ProposalSummary[]>([])
+const changeRequestId = ref('')
+onMounted(async () => {
+  try { proposals.value = await parcelChangeApi.list({ status: ['accepted'] }) } catch { proposals.value = [] }
+})
+async function onProposal() {
+  reset()
+  if (!changeRequestId.value) return
+  try {
+    // the proposal's stands name the township the plan belongs to
+    const p = await parcelChangeApi.get(changeRequestId.value)
+    const code = p.parents[0]?.township_code
+    if (code && !township.value.trim()) township.value = code
+  } catch { /* the import itself will say what is wrong */ }
+}
 
 const report = computed(() => result.value?.report ?? null)
 const issues = computed<ImportIssue[]>(() => result.value?.report?.errors ?? result.value?.errors ?? [])
@@ -56,6 +74,7 @@ async function run(commit: boolean) {
     result.value = await gmsApi.importGeneralPlan({
       sg_ref: sgRef.value.trim(), township_code: township.value.trim().toUpperCase(),
       source_srid: srid.value, features: features.value!, commit,
+      ...(changeRequestId.value ? { change_request_id: changeRequestId.value } : {}),
     })
   } catch (e: any) {
     error.value = e?.response?.status === 403
@@ -77,6 +96,17 @@ const ISSUE_TEXT: Record<string, (i: ImportIssue) => string> = {
   ambiguous_match: (i) => `Stand ${i.stand_no} fits more than one of the council's plots (${i.parcel_ids?.join(', ')}), or one plot fits more than one stand. Nothing is guessed`,
   overlaps_authority_parcel: (i) => `Stand ${i.stand_no} lies on the council's stand ${i.parcel_stand_no} (${i.parcel_id}) by ${i.overlap_m2?.toFixed(2)} m²: the numbering differs`,
   not_a_survey_crs: () => 'The chosen coordinate system is not a registered survey CRS',
+  unknown_change_request: () => 'That proposal could not be found.',
+  bad_change_request_id: () => 'That is not a proposal reference.',
+  change_request_not_accepted: (i) => `The proposal is ${i.status}: only an accepted proposal can be closed by an import.`,
+  parent_not_current: (i) => `Stand ${i.stand_no} is no longer current, so the proposal cannot be applied to it.`,
+  parent_in_other_township: (i) => `Stand ${i.stand_no} is in township ${i.township_code}, not the township of this plan.`,
+  proposal_item_unmatched: (i) => `No surveyed boundary agrees with the proposed boundary ${i.label ?? '#' + i.seq} (at least ${Math.round((i.needed_iou ?? 0.8) * 100)}% is needed).`,
+  feature_matches_no_item: (i) => `Feature ${i.feature} (stand ${i.stand_no}) matches none of the proposal's boundaries.`,
+  proposal_ambiguous: (i) => i.features ? `The proposed boundary ${i.label ?? '#' + i.seq} fits more than one surveyed feature (${i.features.join(', ')}).` : `Feature ${i.feature} fits more than one proposed boundary.`,
+  revised_stand_no_differs: (i) => `Feature ${i.feature}: a revised stand keeps its number (${i.expected}), not ${i.stand_no}.`,
+  overlaps_register_parcel: (i) => `Feature ${i.feature} overlaps stand ${i.stand_no} (${i.parcel_id}) by ${i.overlap_m2?.toFixed(2)} m², and that stand is not part of the proposal.`,
+  surveyed_boundaries_do_not_match_parents: (i) => `The surveyed boundaries and the stand(s) they replace differ by ${i.mismatch_m2?.toFixed(1)} m² (the stands cover ${i.parent_m2?.toFixed(0)} m²).`,
 }
 const describe = (i: ImportIssue) => (ISSUE_TEXT[i.code]?.(i) ?? i.code)
 </script>
@@ -98,6 +128,13 @@ const describe = (i: ImportIssue) => (ISSUE_TEXT[i.code]?.(i) ?? i.code)
           <span>Survey coordinate system</span>
           <select v-model.number="srid" @change="reset">
             <option v-for="c in SURVEY_CRS" :key="c.srid" :value="c.srid">{{ c.code }} (Gauss Conform, Arc 1950)</option>
+          </select>
+        </label>
+        <label v-if="proposals.length" class="imp-field">
+          <span>Closes a stand-change proposal (optional)</span>
+          <select v-model="changeRequestId" @change="onProposal">
+            <option value="">None: an ordinary import</option>
+            <option v-for="p in proposals" :key="p.id" :value="p.id">{{ KIND_LABEL[p.kind] }} · stand {{ (p.stands ?? []).join(', ') }}</option>
           </select>
         </label>
         <label class="imp-field imp-file">
@@ -129,11 +166,33 @@ const describe = (i: ImportIssue) => (ISSUE_TEXT[i.code]?.(i) ?? i.code)
           <dt>WGS84 copy</dt><dd>{{ report.transform_method }} · ±{{ report.transform_accuracy_m }} m</dd>
           <template v-if="report.summary">
             <dt>New stands</dt><dd class="imp-mono">{{ report.summary.new }}</dd>
+            <template v-if="report.change_request">
+              <dt>Stands retired</dt><dd class="imp-mono">{{ report.summary.retired ?? 0 }}</dd>
+              <dt>Boundaries revised</dt><dd class="imp-mono">{{ report.summary.revised ?? 0 }}</dd>
+            </template>
             <dt>Council stands adopted</dt><dd class="imp-mono">{{ report.summary.adopt }}<span v-if="report.summary.adopt" class="imp-hint"> (same parcel, now approved)</span></dd>
             <dt>Conflicts</dt><dd class="imp-mono">{{ report.summary.conflicts }}</dd>
             <dt>Council stands not in this plan</dt><dd class="imp-mono">{{ report.summary.orphans }}</dd>
           </template>
         </dl>
+        <div v-if="report?.change_request" class="imp-change">
+          <p class="imp-hint">
+            Proposal: {{ KIND_LABEL[report.change_request.kind] }}. Each surveyed feature is matched to a proposed boundary by agreement
+            (at least {{ Math.round(report.change_request.match_threshold * 100) }}%).
+          </p>
+          <ul>
+            <li v-for="m in report.change_request.matches" :key="m.seq">
+              {{ m.label ?? 'Boundary ' + m.seq }} ← stand {{ m.stand_no }} · {{ Math.round(m.agreement * 1000) / 10 }}% · {{ m.role === 'revised' ? 'revises the stand' : 'new stand' }}
+            </li>
+          </ul>
+          <p v-if="report.change_request.retire.length" class="imp-hint">
+            Retired when committed: {{ report.change_request.retire.map((r) => r.stand_no).join(', ') }}. Their history and lineage are kept.
+          </p>
+        </div>
+        <p v-if="result.committed && result.change_request" class="imp-ok">
+          The proposal is applied: {{ result.change_request.created.length }} new stand(s), {{ result.change_request.revised.length }} boundary revised,
+          {{ result.change_request.retired.length }} stand(s) retired.
+        </p>
         <p v-if="result.committed" class="imp-ok">
           {{ result.parcel_ids?.length }} parcels created with accuracy class A, and {{ result.parcel_ids?.length }}
           ParcelCreated events queued for the ERP.
@@ -175,6 +234,8 @@ const describe = (i: ImportIssue) => (ISSUE_TEXT[i.code]?.(i) ?? i.code)
 .imp-dl dt { color:var(--ent-text-3); }
 .imp-dl dd { margin:0; }
 .imp-mono { font-family:var(--ent-font-mono); }
+.imp-change { margin-top:var(--ent-s3); font-size:var(--ent-fs-sm); color:var(--ent-text-2); }
+.imp-change ul { margin:var(--ent-s1) 0 0; padding-left:1.1rem; }
 .imp-orphans { margin-top:var(--ent-s3); font-size:var(--ent-fs-sm); color:var(--ent-text-2); }
 .imp-orphans ul { margin:var(--ent-s1) 0 0; padding-left:1.1rem; }
 .imp-issues { margin:var(--ent-s3) 0 0; padding-left:1.1rem; display:flex; flex-direction:column; gap:var(--ent-s1);

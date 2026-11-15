@@ -21,6 +21,17 @@ const VUNGU_Y = -19.2456
 const OUTSIDE_X = 29.7894
 const OUTSIDE_Y = -19.4612
 
+let standSeq = 0
+/** A stand of the register: a land.parcel of kind stand, in a ward, with the given geometry expression. Township `ZZGIS` unless given. */
+async function mkStand(client, no, wardCode, geomSql, township = 'ZZGIS') {
+  await client.query(
+    `INSERT INTO land.parcel (parcel_id, stand_no, township_code, ward_code, geom_source, source_srid, geom_wgs84, area_m2, source, custodian_dept, status,
+                              allocation_status, valid_from, parcel_kind, origin)
+     SELECT $1, $2, $3, $4, g, 4326, g, 1200, 'jest', 'Survey Section', 'current', 'allocated', CURRENT_DATE, 'stand', 'custodian'
+       FROM (SELECT ST_Multi(${geomSql}) AS g) x`,
+    ['JEST-GIS-' + (++standSeq), no, township, wardCode])
+}
+
 describe('geofenceVerdict', () => {
   test('a fix on the stand is on site', () => {
     expect(geofenceVerdict({ precision: 'boundary', distanceM: 0, accuracyM: 5 })).toBe('on_site')
@@ -100,16 +111,12 @@ describe('site resolution against the registers', () => {
        RETURNING id`,
     )
     permitId = p.rows[0].id
-    // stands are tenant data: say whose these fixtures are (an insert with no authority is refused)
-    await client.query("SELECT set_config('app.authority_id', (SELECT id::text FROM public.local_authorities WHERE code = 'VUNGU'), true)")
+    // stands are parcels of the register (land.parcel, kind stand; migration 228): the fixtures are register rows with a ward
     const d = 0.00028
     const e = 0.00038
     const env = (x0) => `ST_SetSRID(ST_MakeEnvelope(${x0}, ${VUNGU_Y - e / 2}, ${x0 + d}, ${VUNGU_Y + e / 2}), 4326)`
-    await client.query(
-      `INSERT INTO stands (stand_number, ward, area_sqm, geom, status)
-       VALUES ('ZZ-GIS-1', 'Ward 6', 1200, ${env(VUNGU_X - d / 2)}, 'allocated'),
-              ('ZZ-GIS-2', 'Ward 6', 1200, ${env(VUNGU_X + d / 2)}, 'allocated')`,
-    )
+    await mkStand(client, 'ZZ-GIS-1', 'ZEC23-VUNGU-06', env(VUNGU_X - d / 2))
+    await mkStand(client, 'ZZ-GIS-2', 'ZEC23-VUNGU-06', env(VUNGU_X + d / 2))
   }, 30000)
 
   afterAll(async () => {
@@ -127,11 +134,7 @@ describe('site resolution against the registers', () => {
 
   test('an ambiguous stand number is not guessed', async () => {
     await client.query('SAVEPOINT amb')
-    await client.query(
-      `INSERT INTO stands (stand_number, ward, area_sqm, geom, status)
-       VALUES ('ZZ-GIS-1', 'Ward 9', 1200,
-               ST_SetSRID(ST_MakeEnvelope(29.30, -19.30, 29.3003, -19.2996), 4326), 'allocated')`,
-    )
+    await mkStand(client, 'ZZ-GIS-1', 'ZEC23-VUNGU-09', 'ST_SetSRID(ST_MakeEnvelope(29.30, -19.30, 29.3003, -19.2996), 4326)', 'ZZGIS2')
     await client.query(`UPDATE spatial_planning.permit_application SET suburb_ward = NULL WHERE id = $1`, [permitId])
     const site = await spatial.resolvePermitSite(client, permitId)
     expect(site.source).not.toBe('stands_register')

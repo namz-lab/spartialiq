@@ -198,6 +198,9 @@ describe('migration plan', () => {
       '225_parcel_zoning_kept_current.sql',
       '226_zone_effective_parts.sql',
       '227_single_parcel_register.sql',
+      '228_stand_offer.sql',
+      '229_parcel_change_requests.sql',
+      '230_parcel_change_import.sql',
     ])
 
     for (const filename of MIGRATIONS) {
