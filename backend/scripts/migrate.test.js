@@ -195,6 +195,8 @@ describe('migration plan', () => {
       '222_authority_area_one_outline.sql',
       '223_register_completeness.sql',
       '224_water_sources.sql',
+      '225_parcel_zoning_kept_current.sql',
+      '226_zone_effective_parts.sql',
     ])
 
     for (const filename of MIGRATIONS) {

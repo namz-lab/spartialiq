@@ -68,6 +68,9 @@ async function main() {
   const report = { peri: peri.length, beyond: beyond.length }
   try {
     await db.query('BEGIN')
+    // The loader inserts zone by zone: switch the parcel-link triggers off (migrations 225/226) and derive the effective parts
+    // once at the end. Parcels are linked afterwards by scripts/link-parcel-zones.js.
+    await db.query("SET LOCAL lamis.skip_parcel_zoning = 'on'")
     const { rows: [plan] } = await db.query('SELECT id FROM public.plan_instrument WHERE title = $1', [PLAN_TITLE])
     if (!plan) throw new Error(`The plan "${PLAN_TITLE}" does not exist (migration 139).`)
 
@@ -150,6 +153,7 @@ async function main() {
 
     report.peri_area_ha_in_file = Math.round(peri.reduce((s, f) => s + (Number(f.properties.Area_ha) || 0), 0))
 
+    await db.query('SELECT spatial_planning.refresh_zone_effective($1)', [plan.id])
     if (dryRun) { await db.query('ROLLBACK'); report.dry_run = true } else await db.query('COMMIT')
   } catch (err) {
     await db.query('ROLLBACK').catch(() => {})

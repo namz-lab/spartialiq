@@ -1,0 +1,70 @@
+no,kind,overlap_ha,mean_width_m,zone_a_id,a_zone,zone_b_id,b_zone,kept_by_zone_id,kept_by_zone,rule,lon,lat
+1,overlap,344.95,292.2,204,Residential Agricultural Plots,216,Economic Corridor [Mixed Business],216,Economic Corridor [Mixed Business],overlay zone keeps it,29.939881,-19.411926
+2,overlap,102.21,200.3,187,Residential Agricultural Plots,216,Economic Corridor [Mixed Business],216,Economic Corridor [Mixed Business],overlay zone keeps it,29.910291,-19.429462
+3,overlap,31.73,26.0,219,Model A2,229,Resettlement Area,229,Resettlement Area,the smaller zone keeps it,29.588012,-19.439148
+4,overlap,28.98,9.4,204,Residential Agricultural Plots,227,Large Scale Commercial Farms,204,Residential Agricultural Plots,the smaller zone keeps it,29.647294,-19.493272
+5,overlap,11.67,16.8,196,Medium Density Residential,204,Residential Agricultural Plots,196,Medium Density Residential,the smaller zone keeps it,29.735127,-19.375764
+6,overlap,10.09,15.9,204,Residential Agricultural Plots,229,Resettlement Area,229,Resettlement Area,the smaller zone keeps it,29.602698,-19.475404
+7,overlap,9.94,10.7,202,Densification Zone [LDR],220,Large Scale Commercial Farms,202,Densification Zone [LDR],the smaller zone keeps it,29.969286,-19.518922
+8,overlap,8.25,3.7,197,Mixed Density Residential,220,Large Scale Commercial Farms,220,Large Scale Commercial Farms,the smaller zone keeps it,29.893224,-19.547963
+9,overlap,4.65,12.7,216,Economic Corridor [Mixed Business],226,Model A2,216,Economic Corridor [Mixed Business],overlay zone keeps it,29.951423,-19.396734
+10,overlap,4.29,20.3,163,Economic Corridor [Mixed Business],178,Economic Corridor [Mixed Business],178,Economic Corridor [Mixed Business],the smaller zone keeps it,29.823797,-19.387678
+11,overlap,3.71,6.0,217,Resettlement Area,224,Small Scale Commercial Farms,224,Small Scale Commercial Farms,the smaller zone keeps it,30.026934,-19.260523
+12,overlap,3.04,3.9,204,Residential Agricultural Plots,220,Large Scale Commercial Farms,220,Large Scale Commercial Farms,the smaller zone keeps it,29.992431,-19.450012
+13,overlap,3.03,7.6,161,Mixed Density Residential,175,Mixed Density Residential,161,Mixed Density Residential,the smaller zone keeps it,29.779106,-19.509098
+14,sliver,2.90,1.7,198,High Density Residential,204,Residential Agricultural Plots,204,Residential Agricultural Plots,sliver: the larger zone keeps it,29.715908,-19.494107
+15,overlap,2.45,5.5,196,Medium Density Residential,223,Model A1,196,Medium Density Residential,the smaller zone keeps it,29.780635,-19.312144
+16,overlap,2.00,7.6,205,Cemetery,220,Large Scale Commercial Farms,205,Cemetery,the smaller zone keeps it,29.821071,-19.625426
+17,overlap,1.71,3.1,196,Medium Density Residential,199,Economic Corridor [Mixed Business],199,Economic Corridor [Mixed Business],overlay zone keeps it,29.800093,-19.354332
+18,overlap,1.64,4.6,169,Densification Zone [MDR],186,Low Density Residential,169,Densification Zone [MDR],the smaller zone keeps it,29.908154,-19.451235
+19,overlap,1.37,2.4,199,Economic Corridor [Mixed Business],201,Railways Common User Facilities,199,Economic Corridor [Mixed Business],overlay zone keeps it,29.781514,-19.529745
+20,overlap,1.33,2.2,224,Small Scale Commercial Farms,226,Model A2,224,Small Scale Commercial Farms,the smaller zone keeps it,30.036214,-19.313781
+21,sliver,1.10,1.4,192,Institutional,193,Residential Agricultural Plots,192,Institutional,sliver: the larger zone keeps it,29.721677,-19.522975
+22,overlap,0.67,4.1,196,Medium Density Residential,219,Model A2,196,Medium Density Residential,the smaller zone keeps it,29.749634,-19.354043
+23,overlap,0.59,7.5,163,Economic Corridor [Mixed Business],188,Densification Zone [LDR],163,Economic Corridor [Mixed Business],overlay zone keeps it,29.828770,-19.399432
+24,sliver,0.59,1.6,169,Densification Zone [MDR],187,Residential Agricultural Plots,187,Residential Agricultural Plots,sliver: the larger zone keeps it,29.906224,-19.436233
+25,overlap,0.55,5.4,171,Low Density Residential,178,Economic Corridor [Mixed Business],178,Economic Corridor [Mixed Business],overlay zone keeps it,29.829911,-19.390077
+26,sliver,0.54,0.8,198,High Density Residential,203,Institutional,198,High Density Residential,sliver: the larger zone keeps it,29.737781,-19.493529
+27,sliver,0.45,1.6,222,Small Scale Commercial Farms,227,Large Scale Commercial Farms,227,Large Scale Commercial Farms,sliver: the larger zone keeps it,29.491512,-19.451204
+28,overlap,0.27,3.1,165,Economic Corridor [Mixed Business],187,Residential Agricultural Plots,165,Economic Corridor [Mixed Business],overlay zone keeps it,29.901595,-19.432529
+29,overlap,0.27,2.6,199,Economic Corridor [Mixed Business],200,Low Density Residential,199,Economic Corridor [Mixed Business],overlay zone keeps it,29.829818,-19.389959
+30,sliver,0.25,1.4,164,Economic Corridor [Mixed Business],180,Densification Zone [LDR],180,Densification Zone [LDR],sliver: the larger zone keeps it,29.870422,-19.490130
+31,overlap,0.22,2.5,165,Economic Corridor [Mixed Business],216,Economic Corridor [Mixed Business],165,Economic Corridor [Mixed Business],the smaller zone keeps it,29.901603,-19.432529
+32,sliver,0.21,0.5,227,Large Scale Commercial Farms,230,Model A2,227,Large Scale Commercial Farms,sliver: the larger zone keeps it,29.437232,-19.398629
+33,sliver,0.20,1.8,199,Economic Corridor [Mixed Business],204,Residential Agricultural Plots,204,Residential Agricultural Plots,sliver: the larger zone keeps it,29.810705,-19.345375
+34,overlap,0.19,7.2,156,Medium Density Residential,190,Medium Density Residential,156,Medium Density Residential,the smaller zone keeps it,29.791746,-19.391897
+35,sliver,0.19,1.0,219,Model A2,232,Communal,232,Communal,sliver: the larger zone keeps it,29.440342,-19.173383
+36,sliver,0.19,0.3,230,Model A2,232,Communal,230,Model A2,sliver: the larger zone keeps it,29.391343,-19.321262
+37,sliver,0.18,0.2,226,Model A2,231,Communal,226,Model A2,sliver: the larger zone keeps it,29.932971,-19.296608
+38,sliver,0.14,0.8,204,Residential Agricultural Plots,223,Model A1,223,Model A1,sliver: the larger zone keeps it,29.816053,-19.291690
+39,sliver,0.13,0.5,191,High Density Residential,192,Institutional,192,Institutional,sliver: the larger zone keeps it,29.723030,-19.505695
+40,sliver,0.13,1.2,197,Mixed Density Residential,211,Mixed Density Residential,197,Mixed Density Residential,sliver: the larger zone keeps it,29.909078,-19.520108
+41,overlap,0.12,3.4,179,Mixed Density Residential,190,Medium Density Residential,179,Mixed Density Residential,the smaller zone keeps it,29.763130,-19.403638
+42,sliver,0.11,0.5,176,Economic Corridor [Mixed Business],177,Railways Common User Facilities,176,Economic Corridor [Mixed Business],sliver: the larger zone keeps it,29.780273,-19.520694
+43,sliver,0.10,0.3,197,Mixed Density Residential,199,Economic Corridor [Mixed Business],197,Mixed Density Residential,sliver: the larger zone keeps it,29.811437,-19.349028
+44,overlap,0.07,2.8,169,Densification Zone [MDR],216,Economic Corridor [Mixed Business],216,Economic Corridor [Mixed Business],overlay zone keeps it,29.903775,-19.434251
+45,sliver,0.06,0.4,197,Mixed Density Residential,200,Low Density Residential,197,Mixed Density Residential,sliver: the larger zone keeps it,29.867160,-19.514029
+46,sliver,0.05,0.4,182,Institutional,183,High Density Residential,182,Institutional,sliver: the larger zone keeps it,29.851244,-19.508491
+47,overlap,0.05,3.6,196,Medium Density Residential,197,Mixed Density Residential,196,Medium Density Residential,the smaller zone keeps it,29.763546,-19.404379
+48,sliver,0.05,1.3,204,Residential Agricultural Plots,226,Model A2,226,Model A2,sliver: the larger zone keeps it,29.946530,-19.401625
+49,sliver,0.04,0.4,159,Mixed Density Residential,179,Mixed Density Residential,179,Mixed Density Residential,sliver: the larger zone keeps it,29.762220,-19.439107
+50,sliver,0.03,0.1,161,Mixed Density Residential,176,Economic Corridor [Mixed Business],176,Economic Corridor [Mixed Business],sliver: the larger zone keeps it,29.766895,-19.531464
+51,sliver,0.03,0.8,184,Mixed Density Residential,195,Low Density Residential,195,Low Density Residential,sliver: the larger zone keeps it,29.868337,-19.509728
+52,sliver,0.02,0.6,174,Economic Corridor [Mixed Business],175,Mixed Density Residential,175,Mixed Density Residential,sliver: the larger zone keeps it,29.783930,-19.501601
+53,sliver,0.02,0.3,223,Model A1,231,Communal,223,Model A1,sliver: the larger zone keeps it,29.900555,-19.201700
+54,sliver,0.01,0.4,174,Economic Corridor [Mixed Business],177,Railways Common User Facilities,177,Railways Common User Facilities,sliver: the larger zone keeps it,29.784954,-19.501940
+55,sliver,0.01,0.0,181,Mixed Density Residential,182,Institutional,181,Mixed Density Residential,sliver: the larger zone keeps it,29.822055,-19.511744
+56,sliver,0.01,0.1,182,Institutional,185,Mixed Density Residential,182,Institutional,sliver: the larger zone keeps it,29.853130,-19.511378
+57,sliver,0.00,0.1,158,Mixed Density Residential,179,Mixed Density Residential,179,Mixed Density Residential,sliver: the larger zone keeps it,29.764854,-19.440552
+58,sliver,0.00,0.0,180,Densification Zone [LDR],210,Low Density Residential,180,Densification Zone [LDR],sliver: the larger zone keeps it,29.887736,-19.486589
+59,sliver,0.00,0.0,180,Densification Zone [LDR],186,Low Density Residential,186,Low Density Residential,sliver: the larger zone keeps it,29.902317,-19.475700
+60,sliver,0.00,0.1,183,High Density Residential,185,Mixed Density Residential,183,High Density Residential,sliver: the larger zone keeps it,29.851572,-19.506174
+61,sliver,0.00,0.1,191,High Density Residential,193,Residential Agricultural Plots,193,Residential Agricultural Plots,sliver: the larger zone keeps it,29.718820,-19.508952
+62,sliver,0.00,0.0,197,Mixed Density Residential,208,Mixed Density Residential,197,Mixed Density Residential,sliver: the larger zone keeps it,29.791796,-19.550394
+63,sliver,0.00,0.0,197,Mixed Density Residential,209,Institutional,197,Mixed Density Residential,sliver: the larger zone keeps it,29.831020,-19.530763
+64,sliver,0.00,0.0,197,Mixed Density Residential,214,Economic Corridor [Mixed Business],197,Mixed Density Residential,sliver: the larger zone keeps it,29.905298,-19.519166
+65,sliver,0.00,0.0,197,Mixed Density Residential,204,Residential Agricultural Plots,204,Residential Agricultural Plots,sliver: the larger zone keeps it,29.821519,-19.354583
+66,sliver,0.00,0.2,199,Economic Corridor [Mixed Business],206,Residential Agricultural Plots,206,Residential Agricultural Plots,sliver: the larger zone keeps it,29.729475,-19.586659
+67,sliver,0.00,0.0,199,Economic Corridor [Mixed Business],203,Institutional,199,Economic Corridor [Mixed Business],sliver: the larger zone keeps it,29.732125,-19.565493
+68,sliver,0.00,0.0,202,Densification Zone [LDR],204,Residential Agricultural Plots,204,Residential Agricultural Plots,sliver: the larger zone keeps it,29.994686,-19.504664
+69,sliver,0.00,0.0,206,Residential Agricultural Plots,218,Large Scale Commercial Farms,218,Large Scale Commercial Farms,sliver: the larger zone keeps it,29.673531,-19.604148

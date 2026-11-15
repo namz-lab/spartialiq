@@ -82,6 +82,8 @@ if (dxf) {
 } else {
   console.log('\n── 5/6 Township: skipped (give --township-dxf <file> --township <CODE> to add one) ──')
 }
+// Every parcel (the farm parcels, the stands from the township) learns its zone; later edits keep it current (migration 225).
+step('5/6 Parcels linked to their zones', 'link-parcel-zones.js')
 // Last, so the measures see everything above: the parcels, the stands, the water points and the finance lines.
 step('6/6 Ward measures for the Chief Executive\'s maps', 'refresh-spatial-engine.js')
 
