@@ -117,9 +117,9 @@ async function recordResolution() {
     </section>
 
     <section class="r3-card r3-deleg" :class="{ committee: delegation.committee }">
-      <header>{{ delegation.committee ? 'Outside delegation — report to committee' : 'Within delegated authority' }}</header>
+      <header>{{ delegation.committee ? 'Reserved to the committee' : 'Report to the committee' }}</header>
       <ul v-if="delegation.reasons.length"><li v-for="r in delegation.reasons" :key="r">{{ r }}</li></ul>
-      <p v-else>No objections, and the proposal is not a reserved type. You may decide under delegation: record the authority on the Decision tab and skip the agenda.</p>
+      <p>The committee decides. The EO may decide alone only when the council has recorded its delegation to the EO (the EO's screen shows whether it has); until then, take the case to the agenda.</p>
     </section>
 
     <!-- Committee agenda scheduling + hearing recording (backend agenda_item). -->

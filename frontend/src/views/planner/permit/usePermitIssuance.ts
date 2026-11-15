@@ -236,19 +236,16 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
       serverEnforced: false,
     })
 
-    // 9. Decision authority — a committee resolution, or a recorded delegation.
+    // 9. Decision authority — the committee's resolution. A typed 'delegated authority' no longer stands in for it: the EO's own lane opens only when
+    // the council's delegation is recorded as switches (working workflow, section 7), and the server decides that.
     const resolved = meetings.value.filter(m => m.outcome && m.outcome !== 'pending' && m.resolution)
-    const delegated = (c?.permit.decisionAuthority ?? '').trim()
     out.push({
       id: 'authority',
       label: 'Decision authority',
-      status: resolved.length || delegated ? 'complete' : 'outstanding',
+      status: resolved.length ? 'complete' : 'outstanding',
       detail: resolved.length
         ? `Committee resolution recorded (${resolved[0].title}, ${toDateOnly(resolved[0].meeting_date)}).`
-        : delegated
-          ? `Recorded as a delegated-authority decision: ${delegated}.`
-          : 'No committee resolution is recorded and no delegated authority has been stated. '
-            + 'One or the other must back a determination.',
+        : 'No committee resolution is recorded. A determination rests on one that matches it, unless the council has recorded its delegation to the EO.',
       // The backend enforces this on /eo-decision only, which planners cannot call.
       serverEnforced: false,
     })
@@ -585,8 +582,13 @@ function describeError(e: unknown, fallback: string): string {
     invalid_transition:
       'The application is not in a state from which a permit may be issued.',
     committee_resolution_required:
-      'A committee resolution is required before this determination, or it must be recorded '
-      + 'as a delegated-authority decision.',
+      'A committee resolution is required before this determination.',
+    delegation_not_open:
+      "The EO's own lane is closed until the council's delegation is recorded.",
+    resolution_mismatch:
+      "The committee's resolution does not match this decision.",
+    deemed_refused:
+      'The application is deemed refused (s.26(7)); it cannot now be approved.',
     forbidden:
       'You do not have authority to issue this permit. A determination must be recorded by '
       + 'an authorised officer.',

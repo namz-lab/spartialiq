@@ -140,14 +140,19 @@ Day 0 is receipt; **A** is the acknowledgement date, from which the statutory cl
 - [ ] A permit states its purpose and the period for implementation, with a subdivision's survey-record requirement where it applies.
 - [ ] Copies are listed: abutting owners, objectors, consultees, and the Registrar or Surveyor-General where the Act requires.
 
-## 9. Interim controls on the software **[code]**
+## 9. What the software now enforces, and what is still by hand **[code]**
 
-Until the software enforces the lanes, staff follow these rules by hand:
+Migration 239 and the decision route enforce these; the switches are in the EO console under "Referrals & switches".
 
-1. **Do not use the "delegated authority" reason** on the EO decision screen. It lets any decision through on a typed sentence, with no register behind it. Record a **committee resolution** first (the committee gate already requires one).
-2. **Do not decide a subdivision, a special consent or a refusal alone.**
-3. **Record each Department referral and each ministerial direction as a case note** (the referral log in section 3), until it has a place of its own.
-4. **Treat the plan gate's "provisional" banner as true**: the Vungu plan is not in force, so nothing is decided "as of right" under it.
+1. **The delegated lane is closed until switches S1 and S3 are on** (and S5 for a refusal). A typed "delegated authority" is refused. Even with them on, a case with objections, a special consent or an applicable direction goes to the committee.
+2. **A decision must match the committee's resolution.** A refused resolution does not authorise an approval.
+3. **A subdivision, consolidation or rezoning is not decided** until S2 records the Minister's instrument.
+4. **An approval after the deemed-refusal date is refused.** The date counts to the applicant's written extension, recorded with where the letter is filed.
+5. **Step 5 is recorded.** The EO records the check against the ministerial directions; a direction that refers cases to the Minister, or restricts them, stops the decision it covers.
+6. **A refusal gives its reasons**, and an outstanding blocking reply from the circulation stops a decision.
+7. **The referral log** holds each Department referral, with a 21-day reply-by, the advice, what the council did, or "no reply".
+
+Still by hand: the s.26(2)(c) and s.40 statutory referrals (the log records them; nothing prompts for them); the s.26(3) public-notice triggers other than special consent; the A+2 months and A+2 months 15 days reminders; the Registrar and Surveyor-General copies; and treating the plan gate's "provisional" banner as true, because the Vungu plan is not in force.
 
 ## 10. Questions that change this procedure
 
@@ -163,6 +168,6 @@ These are unanswered; the procedure assumes the stated default until they are.
 | **Q10** The committee's meeting cycle | **Assumed monthly**; if it is less often, the stop-dates in section 5 move earlier, and a long gap between meetings is itself a reason to seek the council's agreement to a special sitting |
 | **Q11** The Department's name and contact | The Midlands provincial planning officer |
 
-## 11. What this means for the next step
+## 11. What has been built, and what is next
 
-Once the EO and the council have read this, the software follows it in this order: (1) the **delegation register and the lane check** (so a case can only take a lane its switches allow, with the reason shown); (2) the **clock with the stop-dates** of section 5; (3) the **referral log** for the Department, the Minister's directions and the statutory referrals; (4) the **EO's desk** reorganised around the steps the EO owns (3, 4, 5, 11, 12, 14, 15, 17), with the planner's and clerk's steps leaving the EO's menu. No screen is changed until this is agreed.
+Built (migration 239): (1) the **delegation register and the lane check**; (3) the **referral log** for the Department, the Minister's directions and the statutory referrals; and the decision gates of section 9. Not yet built: (2) the **clock's stop-date reminders** of section 5 (the Act's date is enforced; the internal prompts are not); (4) the **EO's desk** reorganised around the steps the EO owns (3, 4, 5, 11, 12, 14, 15, 17), with the planner's and clerk's steps leaving the EO's menu; and automatic prompts for the section 4 referrals. See [the gap report](eo-planning-code-gap-report.md).

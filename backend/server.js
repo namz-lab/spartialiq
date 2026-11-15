@@ -69,6 +69,7 @@ const { planReviewRoutes } = require('./src/routes/plan-review')
 // Turn E: DM Handbook 2021 v1.2 — permit applications, enforcement, building plans,
 // stage inspections, and certificates of occupation (spatial_planning schema).
 const { developmentManagementRoutes } = require('./src/routes/development-management')
+const { eoWorkflowRoutes } = require('./src/routes/eo-workflow')
 const { inspectorGisRoutes } = require('./src/routes/inspector-gis')
 const { inspectorRoutingRoutes } = require('./src/routes/inspector-routing')
 // Statutory appeals against a determination (RTCP Act s.38, migration 070).
@@ -673,6 +674,8 @@ async function build() {
   // stage inspections (Annexures 12/14), and certificates of occupation.
   try {
     await server.register(developmentManagementRoutes, { prefix: '/api' })
+    // The EO Planning working workflow: switches, lanes, referral log, directions, extensions.
+    await server.register(eoWorkflowRoutes, { prefix: '/api' })
     // Building Inspector GIS: site resolution, site checks, identify, field
     // events with server-side geofence, evidence geo-verification.
     await server.register(inspectorGisRoutes, { prefix: '/api' })

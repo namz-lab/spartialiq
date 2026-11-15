@@ -60,6 +60,7 @@ const { scanBuffer } = require('../services/malwareScan')
 const { validateFileSignature } = require('../utils/fileSignature')
 const { parseParcelRef, parseUseCode } = require('../utils/ruleSnapshot')
 const planGates = require('../services/planGates')
+const eoWorkflow = require('../services/eoWorkflow')
 
 /**
  * Statutory transition gate, shared by every status write. Returns null when
@@ -76,28 +77,6 @@ function rejectUnlawfulTransition(reply, request, fromStatus, toStatus) {
     from: fromStatus,
     allowed: allowedTransitions(fromStatus),
   })
-}
-
-/**
- * Has this permit been heard by a quorate committee that recorded a resolution?
- * True when a live agenda_item for the permit has a non-pending outcome AND a
- * resolution, on a live (non-deleted) meeting. This is what a statutory
- * determination must normally be backed by (RTCP Act committee resolution).
- */
-async function hasCommitteeResolution(pg, permitId) {
-  const { rows } = await pg.query(
-    `SELECT 1
-       FROM spatial_planning.agenda_item a
-       JOIN spatial_planning.committee_meeting m ON m.id = a.meeting_id
-      WHERE a.permit_app_id = $1
-        AND a.outcome <> 'pending'
-        AND a.resolution IS NOT NULL
-        AND a.deleted_at IS NULL
-        AND m.deleted_at IS NULL
-      LIMIT 1`,
-    [permitId],
-  )
-  return rows.length > 0
 }
 
 const STAFF_ROLES = [
@@ -775,7 +754,6 @@ async function developmentManagementRoutes(fastify) {
       classification:         isStr(b.classification, 40) ? b.classification : undefined,
       recommendation:         isStr(b.recommendation, 40) ? b.recommendation : undefined,
       recommendation_reasons: typeof b.recommendation_reasons === 'string' ? b.recommendation_reasons : undefined,
-      statutory_due_date:     isDate(b.statutory_due_date) ? b.statutory_due_date : undefined,
       assigned_to:            isUuid(b.assigned_to) ? b.assigned_to : undefined,
     }
     // JSONB columns.
@@ -1538,22 +1516,15 @@ async function developmentManagementRoutes(fastify) {
 
       if (rejectUnlawfulTransition(reply, request, fromStatus, status)) return
 
-      // Committee gate (H2): a determination must be backed by a committee
-      // resolution — UNLESS the decider records it as a delegated-authority
-      // decision (a reason string, audited), or an admin overrides. This blocks
-      // the "approved with no committee having heard it" hole while still
-      // allowing lawful delegated decisions for minor applications.
+      // The working workflow's gates (services/eoWorkflow.js): the lane is open, the case is not deemed refused, no ministerial direction stops it,
+      // no blocking reply is outstanding, a refusal gives reasons, and the decision rests on a committee resolution that MATCHES it, or on a
+      // delegation the council has recorded (switches S1, S3, S5), or on an administrator's written override.
       const delegated = isStr(b.delegated_authority, 2000) ? b.delegated_authority : null
       const adminOverride = request.user.role === 'admin' && b.override === true
-      if (!delegated && !adminOverride && !(await hasCommitteeResolution(db(request), id))) {
-        return reply.code(409).send({
-          success: false,
-          error: 'committee_resolution_required',
-          message: 'A committee resolution is required before this determination. '
-            + 'Table the application on a committee agenda and record the resolution, '
-            + 'or record this as a delegated-authority decision.',
-        })
-      }
+      const verdict = await eoWorkflow.checkDetermination(db(request), id, {
+        decision: b.decision, notes, delegated, adminOverride, overrideReason: b.override_reason,
+      })
+      if (verdict.halt) return reply.code(verdict.halt.status).send(verdict.halt.body)
 
       const { rows } = await db(request).query(
         `UPDATE spatial_planning.permit_application
@@ -1562,10 +1533,12 @@ async function developmentManagementRoutes(fastify) {
                 decision_at         = CURRENT_DATE,
                 decision_officer    = $4,
                 permit_conditions   = COALESCE($5::jsonb, permit_conditions),
+                delegation_basis    = $7,
                 updated_at          = NOW()
           WHERE id = $1 AND status = $6
           RETURNING *`,
-        [id, status, notes, request.user.id, conditions, fromStatus],
+        [id, status, notes, request.user.id, conditions, fromStatus,
+         verdict.basis.kind === 'delegation' ? verdict.basis.reference : null],
       )
       if (!rows[0]) {
         return reply.code(409).send({
@@ -1617,6 +1590,7 @@ async function developmentManagementRoutes(fastify) {
         document_id: generatedDoc ? generatedDoc.id : null,
         // Statutory backing for the determination: committee resolution, an
         // audited delegated-authority decision, or an admin override.
+        basis: verdict.basis,
         delegated_authority: delegated || undefined,
         admin_override: adminOverride || undefined,
       })
@@ -2936,7 +2910,7 @@ async function developmentManagementRoutes(fastify) {
     return reply.send({ success: true, data: rows })
   })
 
-  fastify.patch('/agenda-items/:aid', { preHandler: requireRole(fastify, ['eo', 'planner', 'admin']) }, async (request, reply) => {
+  fastify.patch('/agenda-items/:aid', { preHandler: requireRole(fastify, ['eo', 'planning_clerk', 'admin']) }, async (request, reply) => {
     if (!isUuid(request.params.aid)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const b = request.body || {}
     const VALID = ['pending', 'approved', 'approved_with_conditions', 'refused', 'deferred', 'noted']

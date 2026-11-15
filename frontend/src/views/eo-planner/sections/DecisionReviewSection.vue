@@ -23,6 +23,7 @@ import {
 } from '@/services/developmentManagementService'
 import { normalizeStatus } from '@/composables/useApplicationPipeline'
 import { useEoCase } from '@/eo-planner/useEoCase'
+import WorkflowGatePanel from '@/views/eo-planner/WorkflowGatePanel.vue'
 import { useEoPreferences } from '@/eo-planner/useEoPreferences'
 import '@/views/inspector/inspector.css'
 import {
@@ -434,8 +435,8 @@ const DEV_TYPE_LABELS: Record<string, string> = {
 }
 
 function errMsg(e: unknown, fallback: string): string {
-  const ax = e as { response?: { data?: { error?: string } }; message?: string }
-  return ax?.response?.data?.error ?? ax?.message ?? fallback
+  const ax = e as { response?: { data?: { error?: string; message?: string } }; message?: string }
+  return ax?.response?.data?.message ?? ax?.response?.data?.error ?? ax?.message ?? fallback
 }
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—'
@@ -808,6 +809,9 @@ const deemed = computed(() =>
                 </div>
               </div>
             </section>
+
+            <!-- The lane, the committee, the clock, the directions and the referrals (working workflow) -->
+            <WorkflowGatePanel :permit-id="selectedId" />
 
             <!-- Decision notes + actions -->
             <section class="eodr-card eodr-decide">

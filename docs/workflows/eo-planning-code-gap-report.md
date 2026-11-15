@@ -4,6 +4,25 @@
 
 **Not checked:** whether the clerk dispatch register sends the Registrar and Surveyor-General copies; the enforcement routes against section 6; the EO portal screens beyond a search for "delegated"; whether the clock-event table is written to.
 
+## 0. What has been done since (migration 239, `services/eoWorkflow.js`, `routes/eo-workflow.js`)
+
+| # | Now |
+|---|---|
+| 1, 2 | **Done.** The server refuses a typed "delegated authority" unless the council's confirmations are recorded as switches S1 and S3 (S5 for a refusal), and never for a case the workflow keeps for the committee. The planner screens no longer say "within delegated authority". |
+| 3 | **Done.** The committee's latest resolution must match the decision (`resolution_mismatch`). Deferred and noted outcomes no longer authorise anything. |
+| 4 | **Done for L3 and L7.** A subdivision, consolidation or rezoning is not decided until switch S2 records the Minister's instrument (`lane_closed`). |
+| 5 | **Done, except the reminders.** An approval after the deemed-refusal date is refused (`deemed_refused`); the date counts to the applicant's written extension, which needs its evidence and cannot revive a case already deemed refused; the planner save no longer writes the due date. The A+2 months and A+2 months 15 days **prompts** are not built. |
+| 6 | **Done.** A refusal without written reasons is refused. |
+| 7 | **Done.** An outstanding blocking reply stops the decision. |
+| 8 | **Not done.** The s.26(3) notice triggers, the front-end notice rule and the applicant's 14 days to comment on objections are as before. |
+| 9 | **Done.** An administrator override needs a written reason, and the basis of every decision is written to the case history. |
+| 10 | **Done.** Recording a committee outcome is the EO's, the planning clerk's or an administrator's; a planner can no longer. (The planning clerk stands in for the Committee Clerk, which has no role of its own.) |
+| Section 3 | **Done.** The delegation switches S1 to S8 (the CEO or an administrator turns one on with its evidence), the step 5 direction check, the register of ministerial directions, and the referral log with a 21-day reply-by and "no reply" recorded. The EO sees them in the decision screen ("Before you decide") and in a new "Referrals & switches" section. |
+| Section 4 | **Partly.** Referrals to the roads, aviation, agriculture and neighbouring authorities, and the Registrar and Surveyor-General copies, can be recorded in the referral log (kind "statutory"), but nothing prompts for them, because the software does not know a site's distance to a State road or an obstacle limitation area. |
+| Section 11, step 4 | **Not done.** The EO's desk is not reorganised around the steps the EO owns. |
+
+Sections 1 to 4 below describe the code **before** this change.
+
 ## 1. What the code already does
 
 | Workflow | In the code |

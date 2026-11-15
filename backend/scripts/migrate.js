@@ -397,6 +397,8 @@ const MIGRATIONS = [
   '237_targeted_farms_retained_zones.sql',
   // The rates-account coverage measure counts stands; farm parcels are reported apart. Rollback: migrations/rollback/238_account_coverage_counts_stands.down.sql.
   '238_account_coverage_counts_stands.sql',
+  // The controls of the EO Planning working workflow: switches, referral log, directions, extensions. Rollback: migrations/rollback/239_eo_workflow_controls.down.sql.
+  '239_eo_workflow_controls.sql',
 ]
 
 function createPool(env = process.env) {

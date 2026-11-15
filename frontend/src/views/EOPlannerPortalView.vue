@@ -69,13 +69,14 @@ import BuildingPlanAppraisalSection from './eo-planner/sections/BuildingPlanAppr
 import ReportsSection       from './eo-planner/sections/ReportsSection.vue'
 import PolicyReferenceSection from './eo-planner/sections/PolicyReferenceSection.vue'
 import SettingsSection      from './eo-planner/sections/SettingsSection.vue'
+import WorkflowRegistersSection from './eo-planner/sections/WorkflowRegistersSection.vue'
 import DevelopmentMatrixManager from '@/components/admin/land-use/DevelopmentMatrixManager.vue'
 
 import {
   Briefcase, LayoutDashboard, Library, Inbox, FileSearch, Megaphone, Send,
   Users, Gavel, FileCheck2, ShieldAlert, Scale, Building, BarChart3, BookOpen,
   Settings, Menu, X, Search, CornerDownLeft, RefreshCw, FolderOpen, Clock,
-  AlertTriangle, Table2,
+  AlertTriangle, Table2, GitBranch,
 } from 'lucide-vue-next'
 
 // `embedded` suppresses this view's own brand block and profile menu when it
@@ -122,6 +123,8 @@ const SECTIONS: readonly Omit<Section, 'badge'>[] = [
     desc: 'Appeals to the Administrative Court under s.38' },
   { key: 'plans',        label: 'Building plans',   short: 'Plans',    icon: Building,
     desc: 'Site, floor, sections and elevations against the by-laws' },
+  { key: 'workflow',     label: 'Referrals & switches', short: 'Referrals', icon: GitBranch,
+    desc: 'What was sent to the Department and the Minister, the directions in force, and what the council has confirmed in writing' },
   { key: 'reports',      label: 'Reports',          short: 'Reports',  icon: BarChart3,
     desc: 'Quarterly returns to province and council statistics' },
   { key: 'matrix',       label: 'Development matrix', short: 'Matrix', icon: Table2,
@@ -141,7 +144,7 @@ const GROUP_LABEL: Record<string, string> = {
 const MOBILE_ORDER: SectionKey[] = [
   'dashboard', 'decision', 'register', 'intake',
   'diligence', 'notification', 'circulation', 'committee', 'permits',
-  'enforcement', 'appeals', 'plans', 'reports', 'matrix', 'reference', 'settings',
+  'enforcement', 'appeals', 'plans', 'workflow', 'reports', 'matrix', 'reference', 'settings',
 ]
 
 const sections = computed<Section[]>(() =>
@@ -161,6 +164,7 @@ const SECTION_COMPONENTS: Record<SectionKey, Component> = {
   decision: DecisionReviewSection, permits: PermitsSection, enforcement: EnforcementSection,
   appeals: AppealsSection, plans: BuildingPlanAppraisalSection, reports: ReportsSection,
   matrix: DevelopmentMatrixManager, reference: PolicyReferenceSection, settings: SettingsSection,
+  workflow: WorkflowRegistersSection,
 }
 
 // ── The open case follows the URL ─────────────────────────────────────

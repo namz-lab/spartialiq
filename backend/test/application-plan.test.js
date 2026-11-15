@@ -20,6 +20,10 @@ describe('applications and the plan', () => {
     sys = systemOf(app.pg)
     // the EO's pending decisions may be affirmed for testing; these tests pin the behaviour of a PROPOSED rule, so put the proposals back for the length of the file
     restoreAffirmation = await suspendAffirmation(sys)
+    // these tests pin the PLAN's gate, and take the EO's own lane to reach it: the council's delegation (S1, S3, S5) is recorded for the length of the file
+    await sys.query(`INSERT INTO spatial_planning.delegation_switch (authority_id, switch_key, is_on, evidence, confirmed_at)
+                     SELECT 1, k, true, 'test fixture: delegation recorded for application-plan.test.js', now() FROM unnest(ARRAY['S1','S3','S5']) k
+                     ON CONFLICT (authority_id, switch_key) DO UPDATE SET is_on = true, evidence = EXCLUDED.evidence`)
     eo = await loginAs(app, 'demo.eo@vungu.test', 'demo1234')
     planner = await loginAs(app, 'demo.planner@vungu.test', 'demo1234')
     const pick = async (zone) => (await sys.query(
@@ -40,6 +44,7 @@ describe('applications and the plan', () => {
       await sys.query('DELETE FROM spatial_planning.generated_document WHERE permit_app_id = $1', [id]).catch(() => {})
       await sys.query('DELETE FROM spatial_planning.permit_application WHERE id = $1', [id])
     }
+    await sys.query(`DELETE FROM spatial_planning.delegation_switch WHERE evidence LIKE 'test fixture:%'`)
     await restoreAffirmation()
     await app.close()
   }, 30000)
@@ -57,6 +62,8 @@ describe('applications and the plan', () => {
         const r = await app.inject({ method: 'PATCH', url: `/api/permit-applications/${id}/status`, headers: auth(planner), payload: { status: step, expectedRevision: rev } })
         rev = r.json().data.revision
       }
+      const chk = await app.inject({ method: 'POST', url: `/api/permit-applications/${id}/direction-check`, headers: auth(eo) })
+      expect(chk.statusCode).toBe(200)
     }
     return id
   }

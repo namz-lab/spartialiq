@@ -41,7 +41,7 @@ export const SECTION_KEYS = [
   'dashboard', 'register', 'intake', 'diligence', 'notification',
   'circulation', 'committee', 'decision',
   // Records — registers the EO keeps, which outlive any single application.
-  'permits', 'enforcement', 'appeals', 'plans',
+  'permits', 'enforcement', 'appeals', 'plans', 'workflow',
   // Office
   'reports', 'matrix', 'reference', 'settings',
 ] as const
@@ -53,7 +53,7 @@ export type SectionGroup = 'casework' | 'records' | 'office'
 export const SECTION_GROUP: Readonly<Record<SectionKey, SectionGroup>> = Object.freeze({
   dashboard: 'casework', register: 'casework', intake: 'casework', diligence: 'casework',
   notification: 'casework', circulation: 'casework', committee: 'casework', decision: 'casework',
-  permits: 'records', enforcement: 'records', appeals: 'records', plans: 'records',
+  permits: 'records', enforcement: 'records', appeals: 'records', plans: 'records', workflow: 'records',
   reports: 'office', matrix: 'office', reference: 'office', settings: 'office',
 })
 
