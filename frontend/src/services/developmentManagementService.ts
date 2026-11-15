@@ -82,6 +82,16 @@ export interface PermitApplication {
   permit_conditions?: unknown | null
   assigned_to?: string | null
   statutory_due_date?: string | null
+  /** The permit's own fields, held by the council (migration 240). */
+  permit_no?: string | null
+  use_class?: string | null
+  permitted_description?: string | null
+  implementation_period_months?: number | null
+  annexure7_notes?: string | null
+  notification_date?: string | null
+  /** What the decision rested on, set by the server: committee_resolution, delegation or admin_override. */
+  decision_basis?: 'committee_resolution' | 'delegation' | 'admin_override' | null
+  delegation_basis?: string | null
   // Optimistic-lock counter (migration 097). The /case and /status PATCH routes
   // REQUIRE the caller's expectedRevision to match this before writing, and bump
   // it by 1 on success. A mismatch is a 409 conflict, not a silent overwrite.

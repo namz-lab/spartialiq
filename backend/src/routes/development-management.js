@@ -756,6 +756,19 @@ async function developmentManagementRoutes(fastify) {
       recommendation_reasons: typeof b.recommendation_reasons === 'string' ? b.recommendation_reasons : undefined,
       assigned_to:            isUuid(b.assigned_to) ? b.assigned_to : undefined,
     }
+    // The permit's own fields (migration 240). An empty value clears the field. Locked once the permit is issued, except the notification date,
+    // which is recorded after issue and starts the appeal window.
+    const text = (v, max) => (typeof v === 'string' && v.length <= max ? (v.trim() || null) : undefined)
+    const permitFields = {
+      permit_no:                    text(b.permit_no, 60),
+      use_class:                    b.use_class === '' ? null : (['I', 'II', 'III', 'IV', 'V', 'VI'].includes(b.use_class) ? b.use_class : undefined),
+      permitted_description:        text(b.permitted_description, 4000),
+      implementation_period_months: Number.isInteger(b.implementation_period_months) && b.implementation_period_months >= 1 && b.implementation_period_months <= 120 ? b.implementation_period_months : undefined,
+      annexure7_notes:              text(b.annexure7_notes, 4000),
+    }
+    const notification = b.notification_date === null ? null : (isDate(b.notification_date) ? b.notification_date : undefined)
+    Object.assign(scalar, permitFields)
+    if (notification !== undefined) scalar.notification_date = notification
     // JSONB columns.
     const json = {
       due_diligence:     b.due_diligence,
@@ -792,10 +805,16 @@ async function developmentManagementRoutes(fastify) {
 
     try {
       const before = await db(request).query(
-        'SELECT assigned_to, revision FROM spatial_planning.permit_application WHERE id = $1',
+        'SELECT assigned_to, revision, status, permit_no, use_class, permitted_description, implementation_period_months, annexure7_notes FROM spatial_planning.permit_application WHERE id = $1',
         [request.params.id],
       )
       if (!before.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+      // the permit is issued: its wording is no longer the officer's to change (an amendment is a new application, s.26(12)).
+      // The screen resends every field on each save, so only a field whose value CHANGES is refused.
+      const changed = Object.entries(permitFields).filter(([k, v]) => v !== undefined && v !== before.rows[0][k])
+      if (['approved', 'approved_with_conditions', 'refused'].includes(before.rows[0].status) && changed.length) {
+        return reply.code(409).send({ success: false, error: 'permit_locked', message: 'This permit has been issued; its number, class, description, period and notes can no longer be changed.', fields: changed.map(([k]) => k) })
+      }
       if (before.rows[0].revision !== expectedRevision) {
         const current = await db(request).query(
           'SELECT *, ST_X(location) AS lng, ST_Y(location) AS lat FROM spatial_planning.permit_application WHERE id = $1',
@@ -840,6 +859,9 @@ async function developmentManagementRoutes(fastify) {
       }
       return reply.send({ success: true, data: rows[0] })
     } catch (err) {
+      if (err.code === '23505' && /uq_permit_no_per_authority/.test(err.constraint || err.message || '')) {
+        return reply.code(409).send({ success: false, error: 'permit_no_taken', message: 'Another permit already carries that number. Permit numbers are unique.' })
+      }
       request.log.error({ err }, 'patch permit case failed')
       return reply.code(500).send({ success: false, error: 'internal' })
     }
@@ -1534,11 +1556,12 @@ async function developmentManagementRoutes(fastify) {
                 decision_officer    = $4,
                 permit_conditions   = COALESCE($5::jsonb, permit_conditions),
                 delegation_basis    = $7,
+                decision_basis      = $8,
                 updated_at          = NOW()
           WHERE id = $1 AND status = $6
           RETURNING *`,
         [id, status, notes, request.user.id, conditions, fromStatus,
-         verdict.basis.kind === 'delegation' ? verdict.basis.reference : null],
+         verdict.basis.kind === 'delegation' ? verdict.basis.reference : null, verdict.basis.kind],
       )
       if (!rows[0]) {
         return reply.code(409).send({

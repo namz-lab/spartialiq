@@ -193,6 +193,14 @@ function pushRecent(c: CaseFile) {
 
 // Serialise the planner case file into the backend /case patch (migration 082)
 // so the planning record is the shared system-of-record, not just localStorage.
+/** What the decision rested on, in words, from the server's record. It is never typed. */
+export function decisionAuthorityOf(p: { decision_basis?: string | null; delegation_basis?: string | null }): string {
+  if (p.decision_basis === 'committee_resolution') return 'Committee resolution'
+  if (p.decision_basis === 'delegation') return p.delegation_basis ? `Delegation: ${p.delegation_basis}` : 'Delegation to the EO'
+  if (p.decision_basis === 'admin_override') return 'Administrator override'
+  return ''
+}
+
 function caseToPatch(c: CaseFile): Record<string, unknown> {
   const patch: Record<string, unknown> = {
     // Optimistic lock (migration 097). Without this the route 400s with
@@ -211,7 +219,14 @@ function caseToPatch(c: CaseFile): Record<string, unknown> {
   }
   if (c.property.titleDeedNo) patch.title_deed_no = c.property.titleDeedNo
   if (c.dueDiligence.zoningAssessment) patch.zoning_assessment = c.dueDiligence.zoningAssessment
-  if (c.expiryDate) patch.statutory_due_date = c.expiryDate.slice(0, 10)
+  // The permit's own fields are the council's record (migration 240), saved with the case. The decision authority is not among them: the server
+  // sets it from what the decision rested on.
+  patch.permit_no = c.permit.permitNo
+  patch.use_class = c.permit.useClass
+  patch.permitted_description = c.permit.permittedDescription
+  patch.annexure7_notes = c.permit.annexure7Notes
+  if (c.permit.implementationPeriodMonths > 0) patch.implementation_period_months = c.permit.implementationPeriodMonths
+  if (c.permit.notificationDate) patch.notification_date = c.permit.notificationDate.slice(0, 10)
   // GIS: persist the application's map location (centroid is [lng, lat]).
   if (c.property.centroid) { patch.lng = c.property.centroid[0]; patch.lat = c.property.centroid[1] }
   return patch
@@ -394,13 +409,23 @@ export function providePlannerCase(): PlannerCaseContext {
                        proofOfFunding: false, justification: '' },
           classification: (server.classification ?? 'routine_26_1') as unknown as Classification,
           applicationDate: server.created_at,
-          acknowledgedDate: server.received_at,
+          // the council's acknowledgement, which starts the Act's clock; the date of receipt is not it
+          acknowledgedDate: server.acknowledged_at ?? null,
           expiryDate: server.statutory_due_date ?? null,
           dueDiligence:    (server.due_diligence as CaseFile['dueDiligence'])    ?? cached?.dueDiligence    ?? emptyCase().dueDiligence,
           committeeReport: (server.committee_report as CaseFile['committeeReport']) ?? cached?.committeeReport ?? emptyCase().committeeReport,
           permit: {
             ...(cached?.permit ?? emptyCase().permit),
             conditions: (server.permit_conditions as CaseFile['permit']['conditions']) ?? cached?.permit?.conditions ?? [],
+            // the permit's own fields come from the council's record; a value held only in this browser (a draft from before they were saved on the permit)
+            // is kept, and the next save sends it to the record
+            permitNo: server.permit_no ?? cached?.permit?.permitNo ?? '',
+            useClass: (server.use_class ?? cached?.permit?.useClass ?? '') as CaseFile['permit']['useClass'],
+            permittedDescription: server.permitted_description ?? cached?.permit?.permittedDescription ?? '',
+            annexure7Notes: server.annexure7_notes ?? cached?.permit?.annexure7Notes ?? '',
+            implementationPeriodMonths: server.implementation_period_months ?? cached?.permit?.implementationPeriodMonths ?? emptyCase().permit.implementationPeriodMonths,
+            notificationDate: server.notification_date ? String(server.notification_date).slice(0, 10) : (cached?.permit?.notificationDate ?? null),
+            decisionAuthority: decisionAuthorityOf(server),
           },
           notices: cached?.notices ?? emptyCase().notices,
           lastEditedAt: server.updated_at,
