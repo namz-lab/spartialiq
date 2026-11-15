@@ -69,7 +69,7 @@ const committeeLine = computed(() => {
         <p class="wg-line"><strong>Committee.</strong> {{ committeeLine }}
           A decision must match it; without one, only the committee's lane stands until the council's delegation is recorded.</p>
 
-        <p class="wg-line"><strong>Clock.</strong>
+        <p class="wg-line"><strong>Clock.</strong>{{ ' ' }}
           <template v-if="lane.deemed_on">
             Deemed refused after <strong>{{ fmt(lane.deemed_on) }}</strong><template v-if="lane.extension_until"> (the applicant extended it in writing)</template>.
             An approval after that date is refused.
@@ -84,7 +84,7 @@ const committeeLine = computed(() => {
           <button class="eodr-btn ok sm" type="button" :disabled="!extUntil || extEvidence.trim().length < 5 || busy === 'ext'" @click="saveExtension">Record extension</button>
         </div>
 
-        <p class="wg-line"><strong>Ministerial directions.</strong>
+        <p class="wg-line"><strong>Ministerial directions.</strong>{{ ' ' }}
           <template v-if="lane.binding_directions.length">
             <span class="wg-bad">A direction applies:</span>
             <template v-for="d in lane.binding_directions" :key="d.id"> {{ d.reference || d.section }}: {{ d.summary }}</template>
@@ -128,7 +128,18 @@ const committeeLine = computed(() => {
 </template>
 
 <style scoped>
-.wg { display: grid; gap: 0.5rem; font-size: 0.85rem; }
+.eodr-card { background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: var(--ent-r-md); overflow: hidden; }
+.eodr-card > header { padding: var(--ent-s2) var(--ent-s3); background: var(--ent-surface-2); border-bottom: 1px solid var(--ent-line);
+  font-size: var(--ent-fs-xs); font-weight: var(--ent-fw-semibold); color: var(--ent-text); }
+.eodr-card-body { padding: var(--ent-s3) var(--ent-s4); font-size: var(--ent-fs-sm); color: var(--ent-text-2); }
+.eodr-muted { color: var(--ent-text-3); }
+.eodr-btn { display: inline-flex; align-items: center; margin-left: var(--ent-s2); min-height: var(--ent-control-h-sm); padding: 0 var(--ent-s2);
+  border: 1px solid var(--ent-line); border-radius: var(--ent-r); cursor: pointer; background: var(--ent-surface); color: var(--ent-text);
+  font-family: var(--ent-font); font-size: var(--ent-fs-xs); font-weight: var(--ent-fw-medium); }
+.eodr-btn:hover:not(:disabled) { background: var(--ent-surface-2); }
+.eodr-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.eodr-btn.ok { background: var(--ent-success); border-color: transparent; color: var(--ent-text-on-accent); margin-left: 0; }
+.wg { display: grid; gap: var(--ent-s3); }
 .wg-line { margin: 0; line-height: 1.5; }
 .wg-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
 .wg-bad { color: #b3261e; font-weight: 600; }
