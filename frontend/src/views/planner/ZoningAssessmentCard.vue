@@ -17,7 +17,7 @@ import CaseFact from './case/CaseFact.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiStatusBadge from '@/components/ui/UiStatusBadge.vue'
 import {
-  getPermittedUses, getZoningAt, provisionalNotice,
+  getPermittedUses, getZoningAt, provisionalNotice, assessmentFromZoning,
   type ZoneAssessment, type PermittedUseEntry, type Permission, type ZoningApplyPayload,
 } from '@/services/developmentControl'
 import {
@@ -57,10 +57,33 @@ const saved = computed(() => current.value?.dueDiligence?.zoningAssessment ?? nu
 
 onMounted(() => { if (saved.value) state.value = 'loaded' })
 
+// An application that is not linked to a parcel (its stand number matched nothing, or several things) can be looked for again.
+const unlinked = ref(false)
+const relodging = ref(false)
+async function relodge() {
+  const id = current.value?.permitId
+  if (!id) return
+  relodging.value = true
+  try { await dmApi.relodge(id) } catch { /* the check below says what is still missing */ } finally { relodging.value = false }
+  await run()
+}
+
 async function run() {
   if (!current.value) return
   state.value = 'loading'
+  unlinked.value = false
   try {
+    // The application's own parcel and the plan's zone for it: the register and the plan, never the client's guess.
+    const permitId = current.value.permitId
+    if (permitId) {
+      const z = await dmApi.getZoning(permitId)
+      const res = assessmentFromZoning(z)
+      if (!res) { unlinked.value = !z?.parcel; state.value = 'nodata'; return }
+      assessment.value = res
+      selectedGroupCode.value = res.uses.find(u => u.permission !== 'prohibited')?.groupCode ?? res.uses[0].groupCode
+      state.value = 'loaded'
+      return
+    }
     let fid = current.value.property.parcelFid ?? null
     if (fid == null) {
       const c = current.value.property.centroid
@@ -203,6 +226,17 @@ function limitsOf(u: PermittedUseEntry): string[] {
     </div>
 
     <!-- ── No zoning data for this stand ────────────────────────────────── -->
+    <div v-else-if="state === 'nodata' && unlinked" class="zac-note warn" role="status" data-testid="unlinked">
+      <AlertTriangle :size="14" aria-hidden="true" />
+      <div class="zac-note-text">
+        <strong>This application is not linked to a parcel of the register.</strong>
+        Its stand number matched no stand, or more than one. Correct the stand number or location, then look again.
+      </div>
+      <UiButton class="zac-run" size="sm" variant="secondary" :disabled="relodging" @click="relodge">
+        <template #icon><RefreshCw :size="13" /></template>
+        Look for the parcel again
+      </UiButton>
+    </div>
     <div v-else-if="state === 'nodata'" class="zac-note warn" role="status">
       <AlertTriangle :size="14" aria-hidden="true" />
       <div class="zac-note-text">
@@ -247,6 +281,9 @@ function limitsOf(u: PermittedUseEntry): string[] {
         <div class="zac-note-text"><strong>{{ notice.headline }}</strong> {{ notice.detail }}</div>
       </div>
 
+      <p v-if="assessment.undecidedCount" class="zac-undecided" data-testid="undecided">
+        The plan has not decided {{ assessment.undecidedCount }} use(s) in this zone. They are not shown as allowed.
+      </p>
       <fieldset class="zac-uses">
         <legend class="zac-legend">Permitted uses — select the use applied for</legend>
         <table class="zac-table">
@@ -279,6 +316,7 @@ function limitsOf(u: PermittedUseEntry): string[] {
               </td>
               <td>
                 <UiStatusBadge :tone="permMeta[u.permission].tone" :label="permMeta[u.permission].label" />
+                <span v-if="u.decidedBy === 'proposed'" class="zac-proposed" :title="u.authority ?? ''">Proposed, not yet agreed by the EO</span>
               </td>
               <td class="zac-limits">
                 <span v-for="l in limitsOf(u)" :key="l" class="zac-lim">{{ l }}</span>
@@ -328,6 +366,8 @@ function limitsOf(u: PermittedUseEntry): string[] {
 </template>
 
 <style scoped>
+.zac-proposed { display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.4rem; border: 1px dashed #b54708; border-radius: 4px; color: #b54708; font-size: 0.72rem; }
+.zac-undecided { margin: 0.25rem 0; font-size: 0.8rem; color: #475467; }
 /* Enterprise tokens only — see src/styles/enterprise.css. */
 .zac { font-family: var(--ent-font); color: var(--ent-text); }
 

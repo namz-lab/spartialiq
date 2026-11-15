@@ -109,6 +109,9 @@ export interface PermittedUseEntry {
   groupName: string
   category: string | null
   permission: Permission
+  /** Who made the decision: the council (the Executive Officer's matrix) or a PROPOSED best-practice rule not yet agreed by the EO. */
+  decidedBy?: 'council' | 'proposed'
+  authority?: string | null
   conditions: string | null
   maxHeightM: number | null
   minLotSqm: number | null
@@ -126,6 +129,8 @@ export interface RulesStatus {
 }
 
 export interface ZoneAssessment {
+  /** How many uses of the plan this zone has no decision for: they are never shown as allowed. */
+  undecidedCount?: number
   parcelFid: number
   standNumber: string | null
   zoneName: string | null
@@ -212,6 +217,34 @@ function toRulesStatus(r: any): RulesStatus | null {
     provisional: r.provisional === true,
     reviewStatus: rs === 'unreviewed' || rs === 'in_review' || rs === 'reviewed' ? rs : null,
     reviewedBy: str(r.reviewed_by),
+  }
+}
+
+/**
+ * The assessment from GET /permit-applications/:id/zoning: the parcel the application is linked to, the plan covering it and every use of the plan with the
+ * decision for its governing zone and who made it. Null when the application has no parcel or the zone decides nothing.
+ */
+export function assessmentFromZoning(z: any): ZoneAssessment | null {
+  const plan = Array.isArray(z?.plans) ? (z.plans.find((p: any) => p.chosen) ?? z.plans[0]) : null
+  if (!z?.parcel || !plan) return null
+  const decided = (plan.uses as any[]).filter((u) => u.decision)
+  if (!decided.length) return null
+  return {
+    parcelFid: 0,
+    standNumber: str(z.parcel.stand_no),
+    zoneName: str(plan.governing_zone?.name),
+    zoneCode: str(plan.governing_zone?.type_code),
+    undecidedCount: (plan.uses as any[]).length - decided.length,
+    uses: decided.map((u) => ({
+      groupCode: String(u.code), groupName: str(u.description) ?? String(u.code), category: str(u.category), permission: u.decision as Permission,
+      conditions: str(u.conditions), maxHeightM: null, minLotSqm: null, maxUnits: null,
+      decidedBy: u.decided_by === 'proposed' ? 'proposed' : 'council', authority: str(u.authority),
+    })),
+    rulesStatus: {
+      planTitle: str(plan.plan?.title), planStatus: str(plan.plan?.status), provisional: plan.plan?.provisional === true,
+      reviewStatus: ['unreviewed', 'in_review', 'reviewed'].includes(plan.governing_zone?.review_status) ? plan.governing_zone.review_status : null,
+      reviewedBy: str(plan.governing_zone?.reviewed_by),
+    },
   }
 }
 

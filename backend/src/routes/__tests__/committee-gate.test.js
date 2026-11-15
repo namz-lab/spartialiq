@@ -61,7 +61,7 @@ describe('committee gates on eo-decision + resolution recording', () => {
     const res = await app.inject({
       method: 'POST', url: `/api/permit-applications/${id}/eo-decision`,
       headers: { authorization: `Bearer ${eo}` },
-      payload: { decision: 'approve' },
+      payload: { decision: 'approve', plan_note: 'Test application with no parcel of the register.' },
     })
     expect(res.statusCode).toBe(409)
     expect(res.json().error).toBe('committee_resolution_required')
@@ -72,7 +72,7 @@ describe('committee gates on eo-decision + resolution recording', () => {
     const res = await app.inject({
       method: 'POST', url: `/api/permit-applications/${id}/eo-decision`,
       headers: { authorization: `Bearer ${eo}` },
-      payload: { decision: 'approve', delegated_authority: 'Minor works — decided under delegated authority.' },
+      payload: { decision: 'approve', plan_note: 'Test application with no parcel of the register.', delegated_authority: 'Minor works — decided under delegated authority.' },
     })
     expect(res.statusCode).toBe(200)
     expect(res.json().data.permit.status).toBe('approved')
@@ -141,7 +141,7 @@ describe('committee gates on eo-decision + resolution recording', () => {
     const dec = await app.inject({
       method: 'POST', url: `/api/permit-applications/${id}/eo-decision`,
       headers: { authorization: `Bearer ${eo}` },
-      payload: { decision: 'approve' },
+      payload: { decision: 'approve', plan_note: 'Test application with no parcel of the register.' },
     })
     expect(dec.statusCode).toBe(200)
     expect(dec.json().data.permit.status).toBe('approved')
