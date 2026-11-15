@@ -25,6 +25,8 @@ vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ logout: vi.fn(), user: 
 vi.mock('@/components/shared/ProfileDropdown.vue', () => ({ default: { name: 'ProfileDropdown', template: '<div />' } }))
 // The ward map has its own spec; here it is a stand-in so this page's tests make no map request.
 vi.mock('@/views/executive/ExecutiveWardMap.vue', () => ({ default: { name: 'ExecutiveWardMap', template: '<div class="wm-stub" />' } }))
+// The ward tables have their own spec.
+vi.mock('@/components/executive/WardTable.vue', () => ({ default: { name: 'WardTable', template: '<div class="wt-stub" />' } }))
 
 import ExecutiveOverviewView from '../ExecutiveOverviewView.vue'
 import type { ExecutiveOverview } from '@/services/executiveOverview'

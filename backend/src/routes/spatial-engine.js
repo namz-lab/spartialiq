@@ -4,6 +4,7 @@
  *   GET  /api/executive/maps            accounting_officer   the measures, the ward register's state, the last run
  *   GET  /api/executive/maps/:measure   accounting_officer   one measure as GeoJSON over the council's wards
  *   GET  /api/executive/wards/:code     accounting_officer   one ward across every measure, grouped by unit
+ *   GET  /api/executive/ward-table      accounting_officer   every ward as a row, every measure and register count as a column, with totals
  *   POST /api/spatial-engine/refresh    admin, gis_officer, gis_head   recompute every measure
  *
  * A unit head reads their own unit's measures through GET /api/units/:key/maps (src/routes/units.js); both use
@@ -35,6 +36,9 @@ async function spatialEngineRoutes(fastify) {
 
   fastify.get('/executive/maps/:measure', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (request, reply) =>
     send(reply, await maps.map(request.params.measure)))
+
+  fastify.get('/executive/ward-table', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (_request, reply) =>
+    send(reply, await maps.table()))
 
   fastify.get('/executive/wards/:code', { preHandler: requireRole(fastify, EXECUTIVE_ROLES) }, async (request, reply) => {
     if (!WARD_CODE.test(request.params.code)) return reply.code(400).send({ success: false, error: 'bad_ward', message: 'Not a ward code.' })

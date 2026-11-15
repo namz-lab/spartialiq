@@ -13,14 +13,19 @@ vi.mock('@/services/gisStyles', () => ({
 vi.mock('vue-router', () => ({ RouterLink: { name: 'RouterLink', props: ['to'], template: '<a :href="to"><slot /></a>' } }))
 
 // the map is not drawn here: a stand-in that records what the page asks of it
-const mapCalls = vi.hoisted(() => ({ fit: vi.fn(), visible: vi.fn(), handlers: {} as Record<string, (e?: unknown) => void> }))
+const mapCalls = vi.hoisted(() => ({ fit: vi.fn(), visible: vi.fn(), filter: vi.fn(), handlers: {} as Record<string, (e?: unknown) => void> }))
+const exported = vi.hoisted(() => ({ table: null as null | { columns: string[]; rows: unknown[][]; totals?: { label: string; cells: unknown[] }; notes?: string[] } }))
+vi.mock('@/components/shared/ExportMenu.vue', () => ({
+  default: { name: 'ExportMenu', props: ['build', 'filename', 'print'], setup(p: { build: () => never }) { return { grab: () => { exported.table = p.build() } } }, template: '<button data-testid="export" @click="grab">export</button>' },
+}))
 vi.mock('maplibre-gl', () => {
   class Map {
     constructor() { /* nothing drawn */ }
     addControl() {}
     on(ev: string, fn: (e?: unknown) => void) { mapCalls.handlers[ev] = fn }
     fitBounds(...a: unknown[]) { mapCalls.fit(...a) }
-    getLayer() { return null }
+    getLayer() { return {} }
+    setFilter(...a: unknown[]) { mapCalls.filter(...a) }
     queryRenderedFeatures() { return [] }
     getCanvas() { return { style: {} } }
     resize() {}
@@ -59,7 +64,7 @@ async function mountPage() {
   await flushPromises()
   return w
 }
-beforeEach(() => { api.masterPlan.mockReset(); mapCalls.fit.mockReset(); mapCalls.visible.mockReset() })
+beforeEach(() => { api.masterPlan.mockReset(); mapCalls.fit.mockReset(); mapCalls.visible.mockReset(); mapCalls.filter.mockReset(); exported.table = null })
 
 describe('ExecutiveMasterPlanView', () => {
   it('says which plan and revision, and that it is not in force', async () => {
@@ -98,6 +103,9 @@ describe('ExecutiveMasterPlanView', () => {
     const list = w.get('[data-testid=mp-zonelist]')
     expect(list.text()).toContain('Model A2')
     expect(list.text()).toContain('145 parcels')
+    // the list is a table with a total, and no inner scroll hides a zone
+    expect(list.element.tagName).toBe('TABLE')
+    expect(w.get('[data-testid=mp-ztotal]').text()).toContain('3 parcels'.replace('3', '148'))
     expect(w.find('[data-testid=mp-zone-detail]').exists()).toBe(false)
     await list.findAll('button')[1].trigger('click')
     const d = w.get('[data-testid=mp-zone-detail]').text()
@@ -116,13 +124,44 @@ describe('ExecutiveMasterPlanView', () => {
     expect(w.get('[data-testid=mp-held]').text()).toContain('Targeted farms283 (278 linked to the register)')
   })
 
-  it('switches a map layer group on and off from its toggle', async () => {
+  it('keeps the land features on while either of its two switches is on, and filters to the kinds that are', async () => {
+    api.masterPlan.mockResolvedValue(PLAN)
+    const w = await mountPage()
+    const box = (label: string) => w.findAll('input[type=checkbox]').find((c) => c.element.parentElement?.textContent?.includes(label))!
+    // the fill and its outline are filtered together
+    const filtered = (filter: unknown) => expect(mapCalls.filter.mock.calls.slice(-2)).toEqual([['vungu-vungu_land_features', filter], ['vungu-vungu_land_features-outline', filter]])
+    mapCalls.visible.mockReset(); mapCalls.filter.mockReset()
+    await box('Mines, quarries').setValue(false)               // only the proposed new city remains
+    expect(mapCalls.visible).toHaveBeenLastCalledWith(expect.anything(), 'vungu_land_features', true)
+    filtered(['==', ['get', 'kind'], 'proposed_new_city'])
+    await box('Proposed new city').setValue(false)              // neither: the layer is hidden
+    expect(mapCalls.visible).toHaveBeenLastCalledWith(expect.anything(), 'vungu_land_features', false)
+    await box('Mines, quarries').setValue(true)                 // the other kinds, not the city
+    filtered(['!=', ['get', 'kind'], 'proposed_new_city'])
+    await box('Proposed new city').setValue(true)               // both: no filter
+    filtered(null)
+  })
+
+  it('switches another map layer from its toggle', async () => {
     api.masterPlan.mockResolvedValue(PLAN)
     const w = await mountPage()
     mapCalls.visible.mockReset()
-    const box = w.findAll('input[type=checkbox]').find((c) => c.element.parentElement?.textContent?.includes('Mines, quarries'))!
+    const box = w.findAll('input[type=checkbox]').find((c) => c.element.parentElement?.textContent?.includes('Railway lines'))!
     await box.setValue(false)
-    expect(mapCalls.visible).toHaveBeenCalledWith(expect.anything(), 'vungu_land_features', false)
+    expect(mapCalls.visible).toHaveBeenCalledWith(expect.anything(), 'vungu_railway', false)
+  })
+
+  it('exports the zones with the standing, the total and the testing caveat, so the file says what it is', async () => {
+    api.masterPlan.mockResolvedValue(PLAN)
+    const w = await mountPage()
+    const buttons = w.findAll('[data-testid=export]')
+    await buttons[buttons.length - 1].trigger('click')
+    const t = exported.table!
+    expect(t.columns).toEqual(['Zone', 'Area (ha)', 'Share of the plan (%)', 'Parcels', 'Uses permitted', 'By special consent', 'Not allowed', 'Not decided'])
+    expect(t.rows).toHaveLength(2)
+    expect(t.totals?.label).toBe('Total')
+    expect(t.notes!.join(' ')).toContain('Not in force')
+    expect(t.notes!.join(' ')).toContain('affirmed for testing')
   })
 
   it('says so when the council has no plan, and when the plan cannot be read, and has no way to change anything', async () => {
@@ -132,13 +171,13 @@ describe('ExecutiveMasterPlanView', () => {
     api.masterPlan.mockRejectedValue(new Error('x'))
     const failed = await mountPage()
     expect(failed.text()).toContain('could not be read')
-    for (const w of [none, failed]) expect(w.findAll('button').filter((b) => !/try again/i.test(b.text()))).toHaveLength(0)
+    for (const w of [none, failed]) expect(w.findAll('button').filter((b) => !/try again/i.test(b.text()) && b.attributes('data-testid') !== 'export')).toHaveLength(0)
   })
 
   it('offers nothing that changes the plan: no sign, approve or adopt action', async () => {
     api.masterPlan.mockResolvedValue(PLAN)
     const w = await mountPage()
     expect(w.text()).not.toMatch(/\b(sign off|approve this|adopt this|gazette this)\b/i)
-    expect(w.findAll('button').map((b) => b.text()).filter((t) => /sign|approve|adopt|gazette/i.test(t))).toEqual([])
+    expect(w.findAll('button').map((b) => b.text()).filter((t) => /sign|approve|adopt|gazette/i.test(t))).toEqual([])   // exporting is not changing
   })
 })

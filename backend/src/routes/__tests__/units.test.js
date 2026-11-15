@@ -10,6 +10,7 @@
  *     unit's own measures only (no measure of another unit leaks into its maps).
  *   - a unit with no ward measure (internal audit) says so.
  *   - the ward profile groups every measure by unit and is the Chief Executive's alone.
+ *   - the ward table: every ward a row, totals that tie out, a missing figure is null and never zero, a unit's table carries its own measures only.
  *
  * It asserts structure, not figures, so it holds whichever demonstration data is loaded. Test users and their
  * sessions are created here and removed in afterAll (same pattern as executive-overview.test.js).
@@ -225,5 +226,51 @@ describe('a new unit head belongs to the council', () => {
     } finally {
       await sys.query('DELETE FROM users WHERE id = $1', [id])
     }
+  })
+})
+
+describe('the ward table', () => {
+  const sum = (rows, k) => rows.reduce((a, r) => a + r.counts[k], 0)
+
+  test('is for the Chief Executive: every ward a row, every measure a column, and the counts add up to their totals', async () => {
+    const res = await get('/api/executive/ward-table', 'accounting_officer')
+    expect(res.statusCode).toBe(200)
+    const d = res.json().data
+    expect(d.rows.length).toBeGreaterThan(0)
+    expect(d.measures.length).toBeGreaterThan(0)
+    for (const c of d.counts) {
+      // the wards plus what lies in no ward make the register's own total
+      expect(sum(d.rows, c.key) + d.not_in_a_ward[c.key]).toBe(d.totals[c.key])
+      expect(d.not_in_a_ward[c.key]).toBeGreaterThanOrEqual(0)
+    }
+    for (const r of d.rows) for (const m of d.measures) expect(r.measures).toHaveProperty(m.key)
+  })
+
+  test('a figure a ward does not have is null with its reason, never zero', async () => {
+    const d = (await get('/api/executive/ward-table', 'accounting_officer')).json().data
+    const cells = d.rows.flatMap((r) => Object.values(r.measures))
+    for (const c of cells.filter((x) => x.reliability !== 'ok')) expect(c.value).toBeNull()
+    for (const c of cells.filter((x) => x.reliability === 'ok')) expect(typeof c.value).toBe('number')
+  })
+
+  test('the stands measure counts stands only, so the farm parcels are not read as a gap', async () => {
+    const d = (await get('/api/executive/ward-table', 'accounting_officer')).json().data
+    expect(d.measures.find((m) => m.key === 'parcel_account_coverage').label).toBe('Stands with a rates account')
+  })
+
+  test('a table for a unit carries its own measures only, and no register counts unless it is planning', async () => {
+    const eng = (await get('/api/units/engineering/ward-table', 'engineer')).json().data
+    const own = (await get('/api/units/engineering/maps', 'engineer')).json().data.measures.map((m) => m.measure_key).sort()
+    expect(eng.measures.map((m) => m.key).sort()).toEqual(own)
+    expect(eng.counts).toEqual([])
+    const planning = (await get('/api/units/planning/ward-table', 'eo')).json().data
+    expect(planning.counts.length).toBeGreaterThan(0)
+  })
+
+  test('is refused to the head of another unit, other staff and anonymous callers', async () => {
+    expect((await get('/api/units/planning/ward-table', 'engineer')).statusCode).toBe(403)
+    expect((await get('/api/executive/ward-table', 'planner')).statusCode).toBe(403)
+    expect((await get('/api/executive/ward-table', 'engineer')).statusCode).toBe(403)
+    expect((await get('/api/executive/ward-table')).statusCode).toBe(401)
   })
 })

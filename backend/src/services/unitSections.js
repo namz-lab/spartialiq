@@ -56,7 +56,16 @@ function createUnitSections(pg, log) {
         SELECT (SELECT count(*) FROM land.parcel WHERE status = 'current')::int AS parcels,
                (SELECT count(DISTINCT a.parcel_id) FROM revenue_link.account_link a
                   JOIN land.parcel p ON p.parcel_id = a.parcel_id AND p.status = 'current')::int AS parcels_with_account,
+               -- stands and farm parcels apart: every stand has a rates account and no farm parcel does, so one combined share reads as a gap that may not be one
+               (SELECT count(*) FROM land.parcel WHERE status = 'current' AND parcel_kind = 'stand')::int AS stands,
+               (SELECT count(DISTINCT a.parcel_id) FROM revenue_link.account_link a
+                  JOIN land.parcel p ON p.parcel_id = a.parcel_id AND p.status = 'current' AND p.parcel_kind = 'stand')::int AS stands_with_account,
+               (SELECT count(*) FROM land.parcel WHERE status = 'current' AND parcel_kind = 'farm')::int AS farms,
+               (SELECT count(DISTINCT a.parcel_id) FROM revenue_link.account_link a
+                  JOIN land.parcel p ON p.parcel_id = a.parcel_id AND p.status = 'current' AND p.parcel_kind = 'farm')::int AS farms_with_account,
                (SELECT count(*) FROM land.parcel WHERE status = 'current' AND accuracy_basis = 'estimated')::int AS estimated_boundaries`)
+      // The reconciliation of the register with the rates system (integration.reconciliation_item) is NOT read here: it is a system table with no
+      // council column (migration 165), closed to the application role on purpose. Its queues are in the GIS officer's Integration screen.
       // No arrears figure, by design (decision D13): the integration carries status bands, not amounts, and
       // an outstanding-revenue figure must not be approximated from them.
       const loaded = l.parcels > 0

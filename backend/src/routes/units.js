@@ -4,6 +4,7 @@
  *   GET /api/units                      accounting_officer (all five) or a unit head (their own)
  *   GET /api/units/:key                 the unit: head, establishment (posts, holders, vacancies), sections, measures
  *   GET /api/units/:key/maps            the unit's own ward measures
+ *   GET /api/units/:key/ward-table      the unit's wards as a table, with totals
  *   GET /api/units/:key/maps/:measure   one of them as GeoJSON over the council's wards
  *
  * ACCESS (src/config/units.js `canSeeUnit`): the Chief Executive sees every unit; a unit's head sees only
@@ -96,6 +97,14 @@ async function unitRoutes(fastify) {
     const unit = authorise(request, reply)
     if (!unit) return
     return reply.send({ success: true, data: await maps.index(unit.key) })
+  })
+
+  // The unit's wards as a table (its own measures; the planning unit also gets the register counts): the same rules as the Chief Executive's.
+  fastify.get('/units/:key/ward-table', { preHandler: guard }, async (request, reply) => {
+    const unit = authorise(request, reply)
+    if (!unit) return
+    const result = await maps.table(unit.key)
+    return reply.send({ success: true, data: result.data })
   })
 
   fastify.get('/units/:key/maps/:measure', { preHandler: guard }, async (request, reply) => {

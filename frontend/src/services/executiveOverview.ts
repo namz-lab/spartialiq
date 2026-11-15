@@ -29,6 +29,11 @@ export interface PlanningSection extends SectionState {
 export interface LandSection extends SectionState {
   parcels?: number
   parcels_with_account?: number
+  /** Stands and farm parcels apart: every stand has a rates account and no farm parcel does, so one combined share reads as a gap that may not be one. */
+  stands?: number
+  stands_with_account?: number
+  farms?: number
+  farms_with_account?: number
   /** Stand outlines cut from a block rather than drawn (accuracy_basis 'estimated'). */
   estimated_boundaries?: number
 }

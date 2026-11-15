@@ -5,8 +5,27 @@ import type {
 } from '@/services/executiveOverview'
 
 export type Tone = 'warn' | 'bad' | 'good'
+import type { ExportTable } from '@/utils/tableExport'
+
 export interface Stat { label: string; value: string; tone?: Tone }
 export interface Group { heading?: string; loaded: boolean; unavailable?: boolean; note?: string; stats: Stat[]; /** A caveat shown under the figures, e.g. an incomplete register. */ footnote?: string }
+
+/**
+ * The figures of one or more areas as a table to export: one line per figure, with the area and group it belongs to. A group that could not be read
+ * says so in its own line ("Not available" and why); it is never left out, so a gap in the export is a gap the reader can see.
+ */
+export function groupsToTable(title: string, asAt: string, areas: Array<{ area: string; groups: Group[] }>, notes: string[] = []): ExportTable {
+  const rows: ExportTable['rows'] = []
+  for (const a of areas) {
+    for (const g of a.groups) {
+      const heading = g.heading ?? ''
+      if (!g.loaded) rows.push([a.area, heading, 'Not available', g.note ?? 'Not recorded'])
+      else for (const s of g.stats) rows.push([a.area, heading, s.label, s.value])
+      if (g.loaded && g.footnote) rows.push([a.area, heading, 'Note', g.footnote])
+    }
+  }
+  return { title, asAt, source: 'The council registers, as read by the overview.', notes, columns: ['Area', 'Group', 'Figure', 'Value'], rows }
+}
 
 export const n = (v: number | undefined) => (v ?? 0).toLocaleString('en-GB')
 export const share = (part: number | undefined, whole: number | undefined) =>
@@ -30,12 +49,20 @@ export function planningGroup(pl: PlanningSection | undefined, fail: () => Group
   } : fail()
 }
 
+/** Rates accounts: stands and farm parcels apart when the server gives them (an older server gives one combined share). */
+function rates(ld: LandSection): Stat[] {
+  if (ld.stands === undefined) return [{ label: 'With a rates account', value: share(ld.parcels_with_account, ld.parcels) }]
+  const out: Stat[] = [{ label: 'Stands with a rates account', value: `${n(ld.stands_with_account)} of ${n(ld.stands)}` }]
+  if ((ld.farms ?? 0) > 0) out.push({ label: 'Farm parcels with a rates account', value: `${n(ld.farms_with_account)} of ${n(ld.farms)}` })
+  return out
+}
+
 export function landGroup(ld: LandSection | undefined, fail: () => Group): Group {
   return ld ? {
     heading: 'Land register', loaded: ld.loaded, unavailable: ld.unavailable, note: ld.note,
     stats: [
       { label: 'Parcels on the register', value: n(ld.parcels) },
-      { label: 'With a rates account', value: share(ld.parcels_with_account, ld.parcels) },
+      ...rates(ld),
       { label: 'Outlines estimated, not surveyed', value: n(ld.estimated_boundaries), tone: flag(ld.estimated_boundaries, 'warn') },
     ],
   } : fail()

@@ -395,6 +395,8 @@ const MIGRATIONS = [
   '236_plan_feature_tile_views.sql',
   // The council's targeted farms and the retained zones. Rollback: migrations/rollback/237_targeted_farms_retained_zones.down.sql.
   '237_targeted_farms_retained_zones.sql',
+  // The rates-account coverage measure counts stands; farm parcels are reported apart. Rollback: migrations/rollback/238_account_coverage_counts_stands.down.sql.
+  '238_account_coverage_counts_stands.sql',
 ]
 
 function createPool(env = process.env) {
