@@ -367,6 +367,10 @@ const MIGRATIONS = [
   // Water sources: dams as basemap.waterbody, and water-point measures that count water sources only and do not guess a state.
   // Rollback: migrations/rollback/224_water_sources.down.sql.
   '224_water_sources.sql',
+  // Rollback: migrations/rollback/225_parcel_zoning_kept_current.down.sql.
+  '225_parcel_zoning_kept_current.sql',
+  // Rollback: migrations/rollback/226_zone_effective_parts.down.sql.
+  '226_zone_effective_parts.sql',
 ]
 
 function createPool(env = process.env) {
