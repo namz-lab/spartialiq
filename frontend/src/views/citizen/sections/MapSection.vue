@@ -129,6 +129,7 @@ interface LayerDef { key: keyof typeof layers.value; label: string; icon: any }
 const layers = ref({
   wards: true, landuse: true, parcels: false, buildings: false,
   roads: true, places: true, stands: true, acua: true,
+  facilities: true, workings: true,
 })
 const LAYER_DEFS: LayerDef[] = [
   { key: 'wards',     label: 'Ward boundaries', icon: MapIcon },
@@ -137,12 +138,16 @@ const LAYER_DEFS: LayerDef[] = [
   { key: 'buildings', label: 'Buildings', icon: MapIcon },
   { key: 'roads',     label: 'Roads', icon: MapIcon },
   { key: 'places',    label: 'Places & facilities', icon: MapPin },
+  { key: 'facilities', label: 'Schools, clinics & business centres', icon: MapPin },
+  { key: 'workings',  label: 'Mines, quarries & schemes', icon: MapIcon },
   { key: 'stands',    label: 'Stands available', icon: MapPin },
   { key: 'acua',      label: 'Acua 300 m² stands', icon: MapPin },
 ]
 const LAYER_GROUPS: Record<string, string[]> = {
   wards: ['wards'], landuse: ['landuse'], parcels: ['vungu_parcels'],
   buildings: ['buildings'], roads: ['roads'], places: ['places_points', 'pois_points'],
+  // the printed sheet's features: facilities and business centres, the plan's railway lines, mines, quarries, schemes and the new city
+  facilities: ['vungu_facilities', 'vungu_railway'], workings: ['vungu_land_features'],
 }
 function applyLayerToggles() {
   if (!map) return

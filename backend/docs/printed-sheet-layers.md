@@ -32,4 +32,8 @@ If either is meant to be on the plan, say so and it is loaded as an exception.
 ## Still not held, and why
 - **RLU / PLU codes** printed on the zones: on the sheet, not in any file.
 - **Targeted farms.** The farm cadastre is loaded (687 farms); which are "targeted" is the council's list.
-- **Styling.** These layers are not yet published as map tiles or given symbols in the symbology registry.
+
+## On the map
+Migration 236 adds three tile views (`vungu_facilities`, `vungu_land_features`, `vungu_railway`), registered as tile layers in `src/config/spatialLayers.js`. `scripts/publish-plan-feature-styles.js` publishes their symbology to the registry (facilities and business centres as markers by kind; mines, quarries, schemes and the new city as areas by kind; the railway as a line) and the QML sidecars in `qgis-projects/canonical-qml` are exported from those styles, so QGIS draws the same.
+The citizen map has two toggles ("Schools, clinics & business centres", "Mines, quarries & schemes") and its legend lists the kinds.
+**The colours are a first proposal chosen by the developer, not the council GIS's**, and were published through the registry's demonstration shortcut: the GIS Branch should confirm or replace them (a new version through the registry). Browsers cache styles for up to five minutes.
