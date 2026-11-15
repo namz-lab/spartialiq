@@ -3,13 +3,14 @@
 // and what each zone colour means. Colours come from the published zone style, so the legend cannot disagree with the map.
 import { computed, onMounted, ref } from 'vue'
 import { getPublishedStyle } from '@/services/gisStyles'
-import { getPlanIdentity, legendFor, identityLine, standing, type PlanIdentity, type LegendEntry } from '@/services/planLegend'
+import { getPlanIdentity, legendFor, identityLine, standing, kindLegend, type PlanIdentity, type LegendEntry, type KindEntry } from '@/services/planLegend'
 
 // the two layers that draw the plan's zones, each with its own published style
 const ZONE_LAYERS = ['vungu_proposed_peri_urban_zones', 'vungu_beyond_peri_urban_zones']
 const plan = ref<PlanIdentity | null>(null)
 const entries = ref<LegendEntry[]>([])
 const failed = ref(false)
+const features = ref<KindEntry[]>([])
 const line = computed(() => (plan.value ? identityLine(plan.value) : ''))
 
 onMounted(async () => {
@@ -17,6 +18,9 @@ onMounted(async () => {
     const { plans } = await getPlanIdentity()
     plan.value = plans[0] ?? null
     entries.value = legendFor(await Promise.all(ZONE_LAYERS.map((l) => getPublishedStyle(l))) as never, plan.value)
+    // the printed sheet's facilities and land features, from their own published styles
+    const [fac, land] = await Promise.all([getPublishedStyle('vungu_facilities'), getPublishedStyle('vungu_land_features')])
+    features.value = [...kindLegend(fac as never, 'dot'), ...kindLegend(land as never, 'area')]
   } catch {
     failed.value = true
   }
@@ -34,6 +38,12 @@ onMounted(async () => {
       <ul v-if="entries.length" class="pl-list">
         <li v-for="e in entries" :key="e.label"><span class="pl-sw" :style="{ background: e.fill }" /> {{ e.label }}</li>
       </ul>
+      <template v-if="features.length">
+        <h3 class="pl-sub">Facilities and features</h3>
+        <ul class="pl-list" data-testid="plan-legend-features">
+          <li v-for="e in features" :key="e.label"><span class="pl-sw" :class="{ dot: e.shape === 'dot' }" :style="{ background: e.fill }" /> {{ e.label }}</li>
+        </ul>
+      </template>
     </template>
     <p v-else-if="failed" class="pl-line">The plan details could not be loaded.</p>
     <p v-else class="pl-line">No plan is in force for this area yet.</p>
@@ -49,5 +59,7 @@ h3 { margin: 0 0 0.4rem; font-size: 0.62rem; font-weight: 700; letter-spacing: 0
 .pl-standing.prov { color: #b54708; }
 .pl-list { list-style: none; margin: 0.4rem 0 0; padding: 0; }
 .pl-list li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.74rem; color: var(--cp-text-2); margin-bottom: 0.25rem; }
+.pl-sub { margin: 0.6rem 0 0.2rem; }
+.pl-sw.dot { border-radius: 50%; }
 .pl-sw { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; border: 1px solid var(--cp-border-strong); }
 </style>

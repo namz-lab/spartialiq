@@ -41,6 +41,13 @@ export function legendFor(styles: Array<ZoneStyle | null> | ZoneStyle | null, pl
   return plan.zones.map((z) => ({ label: z.name, fill: byValue.get(z.name) || fallback, hectares: z.hectares }))
 }
 
+/** One row of the key for a layer coloured by kind (facilities, land features): the published style's own categories. */
+export interface KindEntry { label: string; fill: string; shape: 'dot' | 'area' }
+export function kindLegend(style: ZoneStyle | null, shape: 'dot' | 'area'): KindEntry[] {
+  const cats = style?.definition?.renderer?.categories ?? []
+  return cats.map((c) => ({ label: String(c.label ?? c.value), fill: c.symbol?.fill ?? '#cccccc', shape }))
+}
+
 /** "Rev 005 · July 2026 · 1:120 000" */
 export function identityLine(p: Pick<PlanIdentity, 'revision_label' | 'revision_date' | 'map_scale'>): string {
   const date = p.revision_date ? new Date(p.revision_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : null

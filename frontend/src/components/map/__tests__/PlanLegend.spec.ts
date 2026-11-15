@@ -7,7 +7,7 @@ vi.mock('@/services/gisStyles', () => ({ getPublishedStyle: h.style }))
 vi.mock('@/services/planLegend', async (orig) => ({ ...(await (orig as any)()), getPlanIdentity: h.identity }))
 
 import PlanLegend from '../PlanLegend.vue'
-import { legendFor, identityLine } from '@/services/planLegend'
+import { legendFor, identityLine, kindLegend } from '@/services/planLegend'
 
 const style = { definition: { renderer: { fallback: { symbol: { fill: '#efeadf' } }, categories: [
   { label: 'Cemetery', value: 'Cemetery', symbol: { fill: '#8a8a8a' } }, { label: 'Institutional', value: 'Institutional', symbol: { fill: '#c0392b' } }] } } }
@@ -32,13 +32,23 @@ describe('legendFor', () => {
   })
 })
 
+describe('kindLegend', () => {
+  it('lists the published categories of a layer with their colours, as dots or areas', () => {
+    expect(kindLegend(style, 'dot')).toEqual([{ label: 'Cemetery', fill: '#8a8a8a', shape: 'dot' }, { label: 'Institutional', fill: '#c0392b', shape: 'dot' }])
+    expect(kindLegend(null, 'area')).toEqual([])
+  })
+})
+
 describe('PlanLegend', () => {
   it('shows the plan, its revision and scale, that it is in force, and a swatch per zone', async () => {
     h.identity.mockResolvedValue({ plans: [plan()], published: true }); h.style.mockResolvedValue(style)
     const w = mount(PlanLegend); await flushPromises()
     expect(w.get('[data-testid=plan-legend-identity]').text()).toContain('Rev 005 · July 2026 · 1:120 000')
     expect(w.get('[data-testid=plan-legend-standing]').text()).toContain('In force since')
-    expect(w.findAll('li')).toHaveLength(2)
+    expect(w.findAll('ul')[0].findAll('li')).toHaveLength(2)
+    // the printed sheet's facilities and land features, from their own published styles
+    expect(w.get('[data-testid=plan-legend-features]').findAll('li')).toHaveLength(4)
+    expect(w.findAll('.pl-sw.dot')).toHaveLength(2)
   })
   it('says a plan not yet in force is shown for information only', async () => {
     h.identity.mockResolvedValue({ plans: [plan({ status: 'unknown', provisional: true })], published: false }); h.style.mockResolvedValue(style)

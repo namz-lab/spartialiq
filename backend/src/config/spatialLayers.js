@@ -88,6 +88,10 @@ const LAYERS = [
   // zones_master view over proposed_peri_urban_zones. See docs/SSOT-spatial.md.
   { id: 'vungu_proposed_peri_urban_zones', table: 'zones_master', geomType: 'polygon', group: 'master_plan', title: 'Proposed Peri-Urban Zones',   attributes: ['id', 'zone', 'zone_code'],                                                                                                                                          minzoom: 9,  maxzoom: 22, lowZoomFilter: null, srid: 4326 },
   { id: 'vungu_beyond_peri_urban_zones',   table: 'vungu_beyond_peri_urban_zones',   geomType: 'polygon', group: 'master_plan', title: 'Beyond Peri-Urban Zones',     attributes: ['fid', 'zone_code', 'settlement', 'adm3_en', 'adm2_en'],                                                                                                                  minzoom: 8,  maxzoom: 22, lowZoomFilter: null, srid: 4326 },
+  // --- The printed sheet's features (migration 236): facilities and business centres, land features, the plan's railway lines. Styled by `kind` from the symbology registry. ---
+  { id: 'vungu_facilities',    table: 'vungu_facilities',    geomType: 'point',   group: 'master_plan', title: 'Facilities and business centres', attributes: ['fid', 'kind', 'name', 'subtype', 'grade'],            minzoom: 9, maxzoom: 22, lowZoomFilter: null, srid: 4326 },
+  { id: 'vungu_land_features', table: 'vungu_land_features', geomType: 'polygon', group: 'master_plan', title: 'Mines, quarries, schemes and the new city', attributes: ['fid', 'kind', 'name', 'status', 'worked'], minzoom: 8, maxzoom: 22, lowZoomFilter: null, srid: 4326 },
+  { id: 'vungu_railway',       table: 'vungu_railway',       geomType: 'line',    group: 'master_plan', title: 'Railway lines (plan)',          attributes: ['fid', 'rail_id'],                                     minzoom: 8, maxzoom: 22, lowZoomFilter: null, srid: 4326 },
 ]
 
 const BY_ID = new Map(LAYERS.map((l) => [l.id, l]))
