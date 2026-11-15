@@ -7,7 +7,7 @@
 -- October 2024 package for those layers (the package is out of date). Three changes to the tables of migration 233:
 --   admin.land_feature   gains `use` (what the source says is worked: Gold, Quarry, Sand) and two kinds: mine, proposed_new_city
 --   admin.railway_line   the railway lines of the plan (the national basemap's railways stay as they are)
--- Nothing is guessed: a mine with no use in the source has none here. Artisanal workings are named as the source names them.
+-- Nothing is guessed: a mine with no use in the source has none here. Source spelling slips (Artisinal, Sdands) are corrected.
 -- ═══════════════════════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE admin.land_feature ADD COLUMN IF NOT EXISTS use text;

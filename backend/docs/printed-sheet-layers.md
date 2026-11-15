@@ -6,7 +6,7 @@ Loaded by `node scripts/load-reference-layers.js` from `data/reference/vungu/*.g
 |---|---|---|---|
 | Schools of every level (Primary, Secondary, Technical and Vocational, University; grant class) | `admin.community_facility` kind `school` | 102 | council file, 15 Nov 2026 |
 | Quarries; sand workings | `admin.land_feature` kinds `quarry`, `sand_working` (use as the source says) | 2; 2 | council file, 15 Nov 2026 |
-| Mines (Gold where the source says; artisanal workings named as supplied) | kind `mine` | 41 | council file, 15 Nov 2026 |
+| Mines (Gold where the source says; artisanal workings; the source's spellings Artisinal and Sdands are corrected) | kind `mine` | 41 | council file, 15 Nov 2026 |
 | Proposed New City | kind `proposed_new_city` | 1 | council file, 15 Nov 2026 |
 | Railway lines | `admin.railway_line` (the national basemap's railways stay as they are) | 7 | council file, 15 Nov 2026 |
 | Police posts, stations, prisons | kind `police_post` | 7 | Geo Package, Oct 2024 |
