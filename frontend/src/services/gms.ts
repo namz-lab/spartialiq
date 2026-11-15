@@ -121,6 +121,17 @@ export interface ImportIssue {
   // reconciliation with the council's own survey (boundary_differs, ambiguous_match, overlaps_authority_parcel)
   deviation_m?: number; tolerance_m?: number; parcel_ids?: string[]; parcel_stand_no?: string
   plan_geometry?: GeoJSON.Geometry; register_geometry?: GeoJSON.Geometry
+  // a stand-change proposal named by the import (migrations 229 and 230)
+  change_request_id?: string; status?: string; seq?: number; label?: string | null; needed_iou?: number; features?: number[]; seqs?: number[]
+  mismatch_m2?: number; parent_m2?: number; expected?: string; township_code?: string
+}
+export interface ImportChangeReport {
+  change_request_id: string
+  kind: 'new' | 'split' | 'merge' | 'reshape'
+  matches: { seq: number; role: 'child' | 'revised'; label: string | null; feature: number; stand_no: string; agreement: number }[]
+  retire: { parcel_id: string; stand_no: string }[]
+  revise: { parcel_id: string; stand_no: string }[]
+  match_threshold: number
 }
 export interface ImportOrphan { parcel_id: string; stand_no: string | null; parcel_kind: string; township_code: string | null }
 export interface ImportAdoption { idx: number; parcel_id: string; matched_by: 'stand_no' | 'geometry'; deviation_m: number }
@@ -130,13 +141,15 @@ export interface ImportResult {
   report?: {
     source_crs: string; feature_count: number; transform_method: string | null; transform_accuracy_m: number; errors: ImportIssue[]
     // what the plan does to stands the council has already surveyed: new, adopted in place, in conflict, and the council's stands it does not mention
-    summary?: { new: number; adopt: number; conflicts: number; orphans: number }
+    summary?: { new: number; adopt: number; conflicts: number; orphans: number; revised?: number; retired?: number }
+    change_request?: ImportChangeReport
     adopt?: ImportAdoption[]
     orphans?: ImportOrphan[]
   }
   errors?: ImportIssue[]
   parcel_ids?: string[]
   adopted_ids?: string[]
+  change_request?: { id: string; retired: string[]; revised: string[]; created: string[] }
 }
 
 /** Lo belts a survey import may arrive in (gis_ops.crs_registry). */
@@ -307,7 +320,7 @@ export const gmsApi = {
     data<ParcelRow[]>(api.get('/parcels', { params })),
   parcel: (id: string) => data<ParcelProfile>(api.get(`/parcels/${encodeURIComponent(id)}`)),
 
-  importGeneralPlan: (body: { sg_ref: string; township_code: string; source_srid: number; features: unknown[]; commit: boolean }) =>
+  importGeneralPlan: (body: { sg_ref: string; township_code: string; source_srid: number; features: unknown[]; commit: boolean; change_request_id?: string }) =>
     // 422 carries the validation report: resolve it rather than throw.
     api.post<ImportResult>('/gms/imports/general-plan', body, { validateStatus: (s) => s === 200 || s === 422 })
       .then((r) => r.data),
