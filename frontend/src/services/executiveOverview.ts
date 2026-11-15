@@ -82,9 +82,39 @@ export interface ExecutiveOverview {
   audit: AuditSection
 }
 
+// ── The master plan (GET /api/executive/master-plan, accounting_officer only, read-only) ──
+export interface MasterPlanStep { code: string; label: string; done: boolean; stale?: boolean; detail?: string | null }
+export interface MasterPlanZone {
+  zone: string; polygons: number; hectares: number; share_pct: number; parcels: number
+  permitted: number; special_consent: number; prohibited: number; not_decided: number
+  /** west, south, east, north */
+  bbox: [number, number, number, number]
+}
+export interface KindCount { kind: string; n: number }
+export interface MasterPlan {
+  as_of: string
+  /** Null when the council has no plan on record. */
+  plan: null | {
+    id: string; title: string; version: number; status: string; authority: string | null
+    revision_label: string | null; revision_date: string | null; map_scale: number | null
+    gazette_ref: string | null; effective_from: string | null; in_force: boolean; provisional: boolean
+  }
+  adoption?: { formal: boolean; steps: MasterPlanStep[]; done: number; of: number }
+  decisions?: { uses_in_plan: number; decided: number; proposed: number; affirmed_for_testing: number; tested_on_affirmation: boolean }
+  zones?: MasterPlanZone[]
+  total_hectares?: number
+  coverage?: { parcels: number; zoned: number; unzoned: number }
+  applications?: { lodged_under_plan: number; decided: number; in_progress: number; departures: number; proposed_rule_accepted: number; decided_without_the_plan: number }
+  held?: { facilities: KindCount[]; land_features: KindCount[]; targeted_farms: { targeted: number; linked: number }; retained_zones: number; railway_lines: number }
+}
+
 export const executiveApi = {
   async overview(): Promise<ExecutiveOverview> {
     const res = await api.get<{ success: boolean; data: ExecutiveOverview }>('/executive/overview')
+    return res.data.data
+  },
+  async masterPlan(): Promise<MasterPlan> {
+    const res = await api.get<{ success: boolean; data: MasterPlan }>('/executive/master-plan')
     return res.data.data
   },
 }

@@ -4,6 +4,7 @@
  * Resources and Administration, and Internal Audit.
  *
  *   GET /api/executive/overview     accounting_officer only
+ *   GET /api/executive/master-plan  accounting_officer only: the master plan's standing, adoption, zones, coverage and use (src/services/executiveMasterPlan.js)
  *
  * WHAT IT IS NOT
  * It reads nothing the departments do not already own and writes nothing. Finance is not repeated
@@ -18,6 +19,7 @@
  */
 const { requireRole } = require('../middleware/jwtAuth')
 const { createUnitSections } = require('../services/unitSections')
+const executiveMasterPlan = require('../services/executiveMasterPlan')
 
 // The chief executive is the accounting officer. The IT administrator is not listed: IT issues the
 // accounts and does not read the council's figures.
@@ -35,6 +37,18 @@ async function executiveOverviewRoutes(fastify) {
       success: true,
       data: { as_of: new Date().toISOString(), planning, land, engineering, social_services: socialServices, hr, audit },
     })
+  })
+
+  // The master plan, for the chief executive: read-only, from the registers the planner and the workbench keep.
+  fastify.get('/executive/master-plan', {
+    preHandler: requireRole(fastify, EXECUTIVE_ROLES),
+  }, async (request, reply) => {
+    try {
+      return reply.send({ success: true, data: await executiveMasterPlan.read(fastify.pg) })
+    } catch (err) {
+      request.log.error({ err }, 'executive master plan failed')
+      return reply.code(500).send({ success: false, error: 'internal', message: 'The master plan could not be read.' })
+    }
   })
 }
 
