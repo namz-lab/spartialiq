@@ -381,6 +381,8 @@ const MIGRATIONS = [
   '229_parcel_change_requests.sql',
   // The survey import closes a stand-change proposal. Rollback: migrations/rollback/230_parcel_change_import.down.sql.
   '230_parcel_change_import.sql',
+  // Applications read the plan: the matrix views restored, the parcel found once, a decision's authority carried. Rollback: migrations/rollback/231_applications_read_the_plan.down.sql.
+  '231_applications_read_the_plan.sql',
 ]
 
 function createPool(env = process.env) {

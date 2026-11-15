@@ -87,6 +87,8 @@ if (dxf) {
   step(`5/6 Township ${township}: demonstration owners`, 'seed-township-owners.js', ['--township', township])
   // The township's stands are parcels of the register: put the first few on offer (repeat-safe), so the sales workflow has stands to show.
   step(`5/6 Township ${township}: demonstration stand offers`, 'seed-planner-demo.js')
+  // The demonstration applications name stands that no longer exist: point them at the township's stands and lodge them under the plan (repeat-safe).
+  step(`5/6 Township ${township}: demonstration applications linked to stands`, 'relink-demo-permits.js')
 } else {
   console.log('\n── 5/6 Township: skipped (give --township-dxf <file> --township <CODE> to add one) ──')
 }
