@@ -32,6 +32,17 @@ export interface WorkbenchPlan {
   supersedes_id: string | null
   derived_from_id: string | null
   signoff_current: boolean
+  /** The sheet's identity and the adoption record (migration 232). Absent from older servers. */
+  revision_label?: string | null
+  revision_date?: string | null
+  map_scale?: number | null
+  council_adopted_on?: string | null
+  council_resolution_ref?: string | null
+  ministerial_approval_no?: string | null
+  ministerial_approved_on?: string | null
+  ministerial_approved_by?: string | null
+  /** Whether this plan decides parcels now (not a superseded plan, nor a draft revision). */
+  governs?: boolean
   last_signoff: { signer_name: string; signer_role: string | null; comment: string | null; signed_at: string } | null
   frozen: boolean
 }
@@ -65,6 +76,22 @@ export interface PlanDetail {
   events: PlanEvent[]
   /** Absent from older servers. */
   zone_types?: ZoneColumn[]
+}
+
+export interface ChecklistStep {
+  code: string
+  label: string
+  done: boolean
+  stale?: boolean
+  detail?: Record<string, unknown> | null
+}
+export interface PlanChecklist { status: PlanStatus; formal: boolean; roles: Array<{ code: string; label: string }>; steps: ChecklistStep[] }
+export interface RevisionChange {
+  kind: 'zone' | 'decision'
+  zone_type_code: string
+  land_use_code: string | null
+  change: string
+  detail: Record<string, unknown>
 }
 
 export type FindingSeverity = 'error' | 'warning' | 'review'
@@ -177,8 +204,25 @@ export const wb = {
     const r = await api.post(`/workbench/plans/${id}/matrix/import`, { csv, apply })
     return r.data.data
   },
-  async signOff(id: string, comment?: string) {
-    await api.post(`/workbench/plans/${id}/signoff`, { comment })
+  async signOff(id: string, comment?: string, signatory?: string) {
+    await api.post(`/workbench/plans/${id}/signoff`, { comment, signatory })
+  },
+  async checklist(id: string): Promise<PlanChecklist> {
+    const r = await api.get(`/workbench/plans/${id}/checklist`)
+    return r.data.data
+  },
+  async revisionChanges(id: string): Promise<{ from: string | null; changes: RevisionChange[] }> {
+    const r = await api.get(`/workbench/plans/${id}/revision-changes`)
+    return r.data.data
+  },
+  async setIdentity(id: string, body: { revision_label?: string; revision_date?: string; map_scale?: number | null }) {
+    await api.post(`/workbench/plans/${id}/identity`, body)
+  },
+  async recordAdoption(id: string, body: { adopted_on: string; resolution_ref: string }) {
+    await api.post(`/workbench/plans/${id}/adoption`, body)
+  },
+  async recordMinisterialApproval(id: string, body: { approval_no: string; approved_on: string; approved_by?: string }) {
+    await api.post(`/workbench/plans/${id}/ministerial-approval`, body)
   },
   async setStatus(id: string, status: PlanStatus, extra: { gazette_ref?: string; effective_from?: string } = {}) {
     await api.post(`/workbench/plans/${id}/status`, { status, ...extra })

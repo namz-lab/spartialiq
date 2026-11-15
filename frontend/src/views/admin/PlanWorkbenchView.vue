@@ -20,7 +20,7 @@ import UiDataTable from '@/components/ui/UiDataTable.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   wb, refusalMessage, STATUS_LABEL, STATUS_CHAIN, REVIEW_LABEL,
-  type AuditFinding, type AuthorityOption, type ImportResult, type PlanAudit, type PlanDetail, type PlanStatus,
+  type AuditFinding, type AuthorityOption, type PlanChecklist, type RevisionChange, type ImportResult, type PlanAudit, type PlanDetail, type PlanStatus,
   type ReviewStatus, type WorkbenchPlan, type ZoneColumn,
 } from '@/services/planWorkbench'
 
@@ -34,6 +34,8 @@ const authorities = ref<AuthorityOption[]>([])
 const selectedId = ref<string | null>(null)
 const detail = ref<PlanDetail | null>(null)
 const audit = ref<PlanAudit | null>(null)
+const checklist = ref<PlanChecklist | null>(null)
+const changes = ref<RevisionChange[]>([])
 const loading = ref(false)
 const busy = ref(false)
 const notice = ref<{ tone: Tone; text: string } | null>(null)
@@ -86,6 +88,9 @@ async function open(id: string) {
   }
   // The audit only helps the reviewer; the screen works without it.
   try { audit.value = await wb.audit(id) } catch { audit.value = null }
+  // The adoption checklist and the changes since the revision this one replaces (migration 232); advisory reads.
+  try { checklist.value = await wb.checklist(id) } catch { checklist.value = null }
+  try { changes.value = (await wb.revisionChanges(id)).changes } catch { changes.value = [] }
 }
 
 async function refresh() {
@@ -112,7 +117,20 @@ async function run(action: () => Promise<unknown>, done: string) {
   }
 }
 
-const signOff = () => run(() => wb.signOff(plan.value!.id, signComment.value || undefined), 'Signed off. The sign-off holds until the plan is next changed.')
+const signatory = ref('')
+const signOff = () => run(() => wb.signOff(plan.value!.id, signComment.value || undefined, signatory.value || undefined), 'Signed off. The sign-off holds until the plan is next changed.')
+const adoption = ref({ adopted_on: '', resolution_ref: '' })
+const recordAdoption = () => run(() => wb.recordAdoption(plan.value!.id, { ...adoption.value }), 'The Full Council\'s adoption is recorded.')
+const minister = ref({ approval_no: '', approved_on: '', approved_by: '' })
+const recordMinister = () => run(() => wb.recordMinisterialApproval(plan.value!.id, { ...minister.value, approved_by: minister.value.approved_by || undefined }), 'The Minister\'s approval is recorded.')
+const missingRoles = computed(() => (checklist.value?.steps ?? []).filter((s) => s.code.startsWith('signature:') && !s.done))
+const identityLine = computed(() => {
+  const p = plan.value
+  if (!p) return ''
+  return [p.revision_label, p.revision_date ? new Date(p.revision_date).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : null,
+    p.map_scale ? `1:${p.map_scale.toLocaleString('en').replace(/,/g, ' ')}` : null].filter(Boolean).join(' · ')
+})
+const CHANGE_WORD: Record<string, string> = { added: 'added', removed: 'removed', reshaped: 'reshaped', permitted: 'permitted', special_consent: 'special consent', prohibited: 'prohibited' }
 const moveTo = (s: PlanStatus) => run(
   () => wb.setStatus(plan.value!.id, s, s === 'gazetted' ? { gazette_ref: gazetteRef.value, effective_from: effectiveFrom.value || undefined } : {}),
   `The plan is now ${STATUS_LABEL[s].toLowerCase()}.`)
@@ -223,6 +241,9 @@ const EVENT_TEXT: Record<string, string> = {
   version_created: 'Created as a new version',
   new_version_started: 'A new version was started',
   zone_review: 'Zone review',
+  council_adopted: 'Adopted by the Full Council',
+  ministerial_approval: 'Approved by the Minister',
+  identity_set: 'Revision details set',
   superseded: 'Replaced by a newer version',
 }
 function describeEvent(e: { event_type: string; detail: Record<string, unknown> }): string {
@@ -235,7 +256,9 @@ function describeEvent(e: { event_type: string; detail: Record<string, unknown> 
     const to = (REVIEW_LABEL[d.to as ReviewStatus] ?? String(d.to)).toLowerCase()
     return `${base}: ${d.zone_type} is now ${to}${d.to === 'reviewed' && d.reviewer ? ` (${d.reviewer})` : ''}`
   }
-  if (e.event_type === 'superseded') return `${base} (${d.polygons_moved} zone polygons moved)`
+  if (e.event_type === 'superseded') return d.polygons_moved !== undefined ? `${base} (${d.polygons_moved} zone polygons moved)` : base
+  if (e.event_type === 'council_adopted') return `${base}: resolution ${d.resolution}`
+  if (e.event_type === 'ministerial_approval') return `${base}: no. ${d.number}`
   return base
 }
 const when = (iso: string) => new Date(iso).toLocaleString()
@@ -286,6 +309,8 @@ onMounted(loadPlans)
           <div><dt>Decisions</dt><dd>{{ plan.decisions }}</dd></div>
           <div v-if="plan.gazette_ref"><dt>Gazette reference</dt><dd class="mono">{{ plan.gazette_ref }}</dd></div>
           <div v-if="plan.effective_from"><dt>Effective from</dt><dd class="mono">{{ plan.effective_from.slice(0, 10) }}</dd></div>
+          <div v-if="identityLine" data-testid="plan-identity"><dt>Revision</dt><dd>{{ identityLine }}</dd></div>
+          <div v-if="!plan.is_template"><dt>Decides parcels</dt><dd>{{ plan.governs ? 'Yes, now' : 'No' }}</dd></div>
         </dl>
 
         <p class="wb-aside">
@@ -311,6 +336,45 @@ onMounted(loadPlans)
         </template>
       </UiPanel>
 
+      <UiPanel v-if="checklist && checklist.formal && !plan.is_template" title="Adoption" subtitle="The Full Council, the signatories and the Minister, in order" data-testid="adoption-checklist">
+        <ol class="wb-steps">
+          <li v-for="s in checklist.steps" :key="s.code" :class="{ done: s.done }">
+            <strong>{{ s.label }}</strong>
+            <span v-if="s.done" class="dim"> done<template v-if="s.detail && s.detail.signer_name"> by {{ s.detail.signer_name }}</template><template v-if="s.detail && s.detail.resolution">, resolution {{ s.detail.resolution }}</template><template v-if="s.detail && s.detail.number">, no. {{ s.detail.number }}</template></span>
+            <span v-else-if="s.stale" class="dim"> signed, but the plan has changed since: sign again</span>
+            <span v-else class="dim"> not yet</span>
+          </li>
+        </ol>
+        <template v-if="!plan.frozen && plan.status === 'public_notice'">
+          <div v-if="!plan.council_adopted_on" class="wb-row">
+            <input v-model="adoption.adopted_on" class="wb-input" type="date" aria-label="Date the Full Council adopted the plan" />
+            <input v-model="adoption.resolution_ref" class="wb-input" type="text" placeholder="Council resolution reference" aria-label="Council resolution reference" />
+            <UiButton :disabled="busy" @click="recordAdoption">Record the council's adoption</UiButton>
+          </div>
+          <div v-if="missingRoles.length" class="wb-row">
+            <select v-model="signatory" class="wb-input" aria-label="Signing as">
+              <option value="" disabled>Signing as…</option>
+              <option v-for="r in checklist.roles" :key="r.code" :value="r.code">{{ r.label }}</option>
+            </select>
+          </div>
+        </template>
+        <div v-if="plan.status === 'approved' && !plan.ministerial_approval_no" class="wb-row">
+          <input v-model="minister.approval_no" class="wb-input" type="text" placeholder="Minister's approval number" aria-label="Minister's approval number" />
+          <input v-model="minister.approved_on" class="wb-input" type="date" aria-label="Date of the Minister's approval" />
+          <input v-model="minister.approved_by" class="wb-input" type="text" placeholder="Minister (optional)" aria-label="Name of the Minister" />
+          <UiButton :disabled="busy" @click="recordMinister">Record the Minister's approval</UiButton>
+        </div>
+      </UiPanel>
+
+      <UiPanel v-if="changes.length" title="Changes since the previous revision" subtitle="Worked out from the two revisions, not typed in" data-testid="revision-changes">
+        <ul class="wb-changes">
+          <li v-for="(c, i) in changes" :key="i">
+            <template v-if="c.kind === 'zone'">Zone <strong>{{ c.zone_type_code }}</strong> {{ CHANGE_WORD[c.change] ?? c.change }}<template v-if="c.detail.hectares_changed"> ({{ c.detail.hectares_changed }} ha)</template></template>
+            <template v-else><strong>{{ c.zone_type_code }}</strong>, {{ c.land_use_code }}: {{ CHANGE_WORD[c.change] ?? c.change }}</template>
+          </li>
+        </ul>
+      </UiPanel>
+
       <UiPanel v-if="!plan.is_template && plan.status !== 'superseded'" title="Next step" subtitle="What this plan needs, and what the system will accept">
         <div class="wb-signoff">
           <UiStatusBadge
@@ -323,7 +387,7 @@ onMounted(loadPlans)
 
         <div v-if="!plan.frozen" class="wb-row">
           <input v-model="signComment" class="wb-input" type="text" placeholder="Comment for the sign-off (optional)" aria-label="Sign-off comment" />
-          <UiButton :disabled="busy" @click="signOff">
+          <UiButton :disabled="busy || (checklist?.formal && !signatory)" @click="signOff">
             <template #icon><ShieldCheck :size="16" /></template>
             Sign off this plan
           </UiButton>
@@ -344,7 +408,7 @@ onMounted(loadPlans)
             @click="moveTo(s)">
             {{ s === 'draft' ? 'Return to draft' : `Move to ${STATUS_LABEL[s].toLowerCase()}` }}
           </UiButton>
-          <UiButton v-if="canStartVersion" :disabled="busy" @click="startVersion">Start a new version</UiButton>
+          <UiButton v-if="canStartVersion" :disabled="busy" @click="startVersion">Start a new revision</UiButton>
         </div>
         <p v-if="!nextStatuses.length && !canStartVersion" class="wb-aside">There is no next step for this plan.</p>
       </UiPanel>
@@ -558,6 +622,9 @@ onMounted(loadPlans)
 
 .wb-aside { margin: var(--ent-s3) 0 0; font-size: var(--ent-fs-sm); color: var(--ent-text-muted); max-width: 80ch; }
 .wb-aside.first { margin-top: 0; }
+.wb-steps { margin: 0 0 var(--ent-s3); padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.wb-steps li.done strong { color: var(--ent-ok, inherit); }
+.wb-changes { margin: 0; padding-left: 1.2rem; }
 .wb-signoff { display: flex; align-items: center; gap: var(--ent-s3); flex-wrap: wrap; margin-bottom: var(--ent-s3); }
 .wb-row { display: flex; align-items: center; gap: var(--ent-s3); flex-wrap: wrap; margin-top: var(--ent-s3); }
 .wb-input {

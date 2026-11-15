@@ -2,6 +2,7 @@
  * Plan lookup: "what can I build here?" for a member of the public.
  *
  *   GET /api/plan-lookup/search?q=<stand number or farm name>   the parcels that match (public, name and place only)
+ *   GET /api/plan-lookup/identity                               which plan the map shows: revision, scale, status, who adopted it, and the zones it holds
  *   GET /api/plan-lookup/:layer/:id                             the zone and what the plan says is permitted there
  *
  * Public. What a caller sees follows the plan's visibility (migration 154): the public sees a plan only once it is
@@ -58,6 +59,38 @@ async function planLookupRoutes(fastify) {
     } catch (err) {
       request.log.error({ err }, 'plan lookup search failed')
       return reply.code(500).send({ success: false, error: 'internal', message: 'The search could not be completed.' })
+    }
+  })
+
+  // The plan identity panel (the printed sheet's title block): which plan, revision and scale, whether it is in force, and the zones in it.
+  // What a caller sees follows the plan's visibility, like the lookup: the public sees only a gazetted plan.
+  fastify.get('/plan-lookup/identity', { config: limit, preHandler: optionalAuth(fastify) }, async (request, reply) => {
+    const db = tenantPool(pg, request.user)
+    try {
+      const plans = (await db.query(
+        `SELECT i.id, i.title, i.version, i.status, i.revision_label, i.revision_date, i.map_scale, i.gazette_ref, i.effective_from,
+                i.council_adopted_on, i.ministerial_approval_no, a.authority_name, plan_is_provisional(i.status) AS provisional,
+                plan_governs(i.id) AS governs
+           FROM plan_instrument i LEFT JOIN local_authorities a ON a.id = i.authority_id
+          WHERE NOT i.is_template AND i.status <> 'superseded' AND plan_governs(i.id)
+          ORDER BY i.effective_from DESC NULLS LAST, i.version DESC`)).rows
+      const out = []
+      for (const p of plans) {
+        const zones = (await db.query(
+          `SELECT z.zone AS name, COUNT(*)::int AS polygons, ROUND(SUM(z.area_ha)::numeric, 1) AS hectares
+             FROM spatial_planning.zone z WHERE z.plan_instrument_id = $1 AND z.is_active GROUP BY z.zone ORDER BY SUM(z.area_ha) DESC`, [p.id])).rows
+        out.push({
+          id: p.id, title: p.title, version: p.version, status: p.status, authority: p.authority_name, provisional: p.provisional,
+          revision_label: p.revision_label, revision_date: p.revision_date, map_scale: p.map_scale,
+          gazette_ref: p.gazette_ref, effective_from: p.effective_from,
+          adopted_by_council: Boolean(p.council_adopted_on), approved_by_minister: Boolean(p.ministerial_approval_no),
+          zones: zones.map((z) => ({ name: z.name, polygons: z.polygons, hectares: z.hectares === null ? null : Number(z.hectares) })),
+        })
+      }
+      return { success: true, data: { plans: out, published: out.some((p) => !p.provisional) } }
+    } catch (err) {
+      request.log.error({ err }, 'plan identity failed')
+      return reply.code(500).send({ success: false, error: 'internal', message: 'The plan details could not be loaded.' })
     }
   })
 

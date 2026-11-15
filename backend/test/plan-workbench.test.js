@@ -193,6 +193,41 @@ describe('sign-off is attributed to the signed-in user', () => {
     const { reply } = await call('POST /workbench/plans/:id/signoff', { params: { id: PLAN }, body: { comment: 'ok', signer: 'Someone Else' } })
     expect(reply.statusCode).toBe(201)
     const call2 = server.pg.query.mock.calls.find(([sql]) => /sign_off_plan/.test(sql))
-    expect(call2[1]).toEqual([PLAN, 'u1', 'P. Lanner', 'planner', 'ok'])
+    expect(call2[1]).toEqual([PLAN, 'u1', 'P. Lanner', 'planner', 'ok', null])
+  })
+})
+
+describe('adoption record routes (migration 232)', () => {
+  test('the adoption, identity and ministerial routes are planner writes; the checklist and changes are reads', async () => {
+    const { routes } = await setup(async () => ({ rows: [] }))
+    for (const k of ['adoption', 'ministerial-approval', 'identity']) expect(routes[`POST /workbench/plans/:id/${k}`].opts.preHandler.roles).toEqual(['admin', 'planner'])
+    expect(routes['GET /workbench/plans/:id/checklist'].opts.preHandler.roles).toContain('planning_clerk')
+    expect(routes['GET /workbench/plans/:id/revision-changes'].opts.preHandler.roles).toContain('eo')
+  })
+  test('the council adoption needs a date and a resolution, and is recorded as the signed-in person', async () => {
+    const { call, server } = await setup(planExists())
+    const bad = await call('POST /workbench/plans/:id/adoption', { params: { id: PLAN }, body: { adopted_on: '1 August', resolution_ref: 'R1' } })
+    expect(bad.reply.statusCode).toBe(400)
+    expect((await call('POST /workbench/plans/:id/adoption', { params: { id: PLAN }, body: { adopted_on: '2026-08-01' } })).reply.statusCode).toBe(400)
+    const ok = await call('POST /workbench/plans/:id/adoption', { params: { id: PLAN }, body: { adopted_on: '2026-08-01', resolution_ref: ' Res 12/2026 ' } })
+    expect(ok.reply.statusCode).toBe(200)
+    const c = server.pg.query.mock.calls.find(([sql]) => /record_council_adoption/.test(sql))
+    expect(c[1]).toEqual([PLAN, '2026-08-01', 'Res 12/2026', 'u1', 'planner'])
+  })
+  test('the Minister\'s approval needs a number and a date', async () => {
+    const { call } = await setup(planExists())
+    expect((await call('POST /workbench/plans/:id/ministerial-approval', { params: { id: PLAN }, body: { approval_no: 'MLG/1' } })).reply.statusCode).toBe(400)
+    expect((await call('POST /workbench/plans/:id/ministerial-approval', { params: { id: PLAN }, body: { approval_no: 'MLG/1', approved_on: '2026-08-20' } })).reply.statusCode).toBe(200)
+  })
+  test('the identity takes a positive whole scale', async () => {
+    const { call } = await setup(planExists())
+    expect((await call('POST /workbench/plans/:id/identity', { params: { id: PLAN }, body: { map_scale: -5 } })).reply.statusCode).toBe(400)
+    expect((await call('POST /workbench/plans/:id/identity', { params: { id: PLAN }, body: { revision_label: 'Rev 006', revision_date: '2026-09-01', map_scale: 120000 } })).reply.statusCode).toBe(200)
+  })
+  test('a gate refusal in the database is a readable 409', async () => {
+    const s = await setup(planExists(async () => { throw Object.assign(new Error('approval needs the Full Council\'s adoption: its date and the resolution reference'), { code: '23514' }) }))
+    const { reply } = await s.call('POST /workbench/plans/:id/status', { params: { id: PLAN }, body: { status: 'approved' } })
+    expect(reply.statusCode).toBe(409)
+    expect(reply.body.message).toMatch(/Full Council/)
   })
 })
