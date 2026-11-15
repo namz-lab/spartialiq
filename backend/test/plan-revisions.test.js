@@ -131,8 +131,7 @@ describe('adoption record', () => {
   }, 120000)
 
   test('an authority with no signatory roles keeps the earlier rules', async () => {
-    const { rows: [a] } = await client.query("SELECT id FROM local_authorities WHERE id NOT IN (SELECT authority_id FROM plan_signatory_role) LIMIT 1")
-    if (!a) return
+    const { rows: [a] } = await client.query("INSERT INTO local_authorities (authority_name, kind) VALUES ('jest informal authority', 'rural') RETURNING id")
     const { rows: [p] } = await client.query(
       `INSERT INTO plan_instrument (title, status, is_template, profile_id, authority_id, plan_type)
        SELECT 'jest informal plan', 'public_notice', false, profile_id, $1, plan_type FROM plan_instrument
