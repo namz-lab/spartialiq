@@ -8,15 +8,18 @@
 const { buildAppForTest } = require('./helpers/buildApp')
 const { systemOf } = require('../src/lib/dbContext')
 const { loginAs } = require('./helpers/auth')
+const { suspendAffirmation } = require('./helpers/proposedCells')
 
 describe('applications and the plan', () => {
-  let app, eo, planner, sys
+  let app, eo, planner, sys, restoreAffirmation
   const permits = []
   let eoStand, proposedStand            // a stand governed by an EO column, and one by a PROPOSED column
 
   beforeAll(async () => {
     app = await buildAppForTest()
     sys = systemOf(app.pg)
+    // the EO's pending decisions may be affirmed for testing; these tests pin the behaviour of a PROPOSED rule, so put the proposals back for the length of the file
+    restoreAffirmation = await suspendAffirmation(sys)
     eo = await loginAs(app, 'demo.eo@vungu.test', 'demo1234')
     planner = await loginAs(app, 'demo.planner@vungu.test', 'demo1234')
     const pick = async (zone) => (await sys.query(
@@ -37,6 +40,7 @@ describe('applications and the plan', () => {
       await sys.query('DELETE FROM spatial_planning.generated_document WHERE permit_app_id = $1', [id]).catch(() => {})
       await sys.query('DELETE FROM spatial_planning.permit_application WHERE id = $1', [id])
     }
+    await restoreAffirmation()
     await app.close()
   }, 30000)
 

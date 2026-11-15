@@ -393,6 +393,8 @@ const MIGRATIONS = [
   '235_business_centre_levels_health_source.sql',
   // The printed sheet's features as map tiles (three tile views). Rollback: migrations/rollback/236_plan_feature_tile_views.down.sql.
   '236_plan_feature_tile_views.sql',
+  // The council's targeted farms and the retained zones. Rollback: migrations/rollback/237_targeted_farms_retained_zones.down.sql.
+  '237_targeted_farms_retained_zones.sql',
 ]
 
 function createPool(env = process.env) {

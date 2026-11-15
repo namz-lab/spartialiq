@@ -16,7 +16,7 @@ describe('community facilities', () => {
     expect(by.school.n).toBe(102)
     expect(by.police_post.n).toBe(6)   // Holy Cross prison lies outside the planning boundary
     expect(by.dip_tank.n).toBe(15)
-    expect(by.network_booster.n).toBe(14)
+    expect(by.network_booster.n).toBe(16)
     expect(rows.every((r) => r.no_source === 0)).toBe(true)
   })
   test('a school keeps the level and grant class the source gives, and nothing is guessed where it gives none', async () => {
@@ -48,7 +48,7 @@ describe('land features', () => {
   test('quarries and sand workings are told apart by the source\'s own use, and irrigation schemes keep their status', async () => {
     const { rows } = await pool.query('SELECT kind, name, status FROM admin.land_feature ORDER BY kind, name')
     const kinds = rows.reduce((m, r) => ({ ...m, [r.kind]: (m[r.kind] ?? 0) + 1 }), {})
-    expect(kinds).toEqual({ quarry: 2, sand_working: 2, mine: 41, proposed_new_city: 1, irrigation_scheme: 6, recreational_site: 7 })
+    expect(kinds).toEqual({ quarry: 2, sand_working: 2, mine: 41, proposed_new_city: 1, irrigation_scheme: 6, recreational_site: 9 })
     expect(rows.find((r) => r.name === 'Sino Cement').kind).toBe('sand_working')
     expect(rows.find((r) => r.name === 'Zida').kind).toBe('quarry')
     expect(rows.find((r) => r.name === 'Shagari').status).toBe('Not functional')
@@ -89,5 +89,29 @@ describe('health facilities', () => {
   test('every facility has a position', async () => {
     const r = await one('SELECT count(*) FILTER (WHERE geom IS NULL)::int AS none FROM council_ops.health_facility')
     expect(r.none).toBe(0)
+  })
+})
+
+describe('targeted farms', () => {
+  test('are the 283 supplied by the council, each naming its source, nearly all linked to a farm parcel of the register', async () => {
+    const r = await one("SELECT count(*)::int AS n, count(*) FILTER (WHERE source IS NULL)::int AS no_source, count(parcel_id)::int AS linked FROM admin.targeted_farm")
+    expect(r).toEqual({ n: 283, no_source: 0, linked: 278 })
+  })
+  test('a link is to a farm parcel that exists', async () => {
+    const r = await one("SELECT count(*)::int AS bad FROM admin.targeted_farm t WHERE t.parcel_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM land.parcel p WHERE p.parcel_id = t.parcel_id AND p.parcel_kind = 'farm')")
+    expect(r.bad).toBe(0)
+  })
+  test('keep the status the source gives', async () => {
+    const { rows } = await pool.query('SELECT status FROM admin.targeted_farm GROUP BY status ORDER BY status')
+    expect(rows.map((r) => r.status)).toEqual(['City', 'Commercial', 'Resettlement', 'State Land', null])
+  })
+})
+
+describe('retained zones', () => {
+  test('are 16 polygons under the zone names of the plan, by ward, replacing nothing', async () => {
+    const { rows } = await pool.query('SELECT zone, count(*)::int AS n FROM admin.retained_zone GROUP BY zone ORDER BY zone')
+    expect(Object.fromEntries(rows.map((r) => [r.zone, r.n]))).toEqual({ 'Communal': 2, 'Large Scale Commercial Farms': 4, 'Model A1': 1, 'Model A2': 4, 'Resettlement Area': 3, 'Small Scale Commercial Farms': 2 })
+    const z = await one("SELECT count(*)::int AS n FROM spatial_planning.zone WHERE zone = 'Communal'")
+    expect(z.n).toBe(2)   // the loaded zones are untouched
   })
 })
