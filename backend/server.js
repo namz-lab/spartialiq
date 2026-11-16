@@ -69,6 +69,7 @@ const { planReviewRoutes } = require('./src/routes/plan-review')
 // Turn E: DM Handbook 2021 v1.2 — permit applications, enforcement, building plans,
 // stage inspections, and certificates of occupation (spatial_planning schema).
 const { developmentManagementRoutes } = require('./src/routes/development-management')
+require('./src/lib/pgTypes')   // plain dates stay plain dates, whatever this machine's time zone
 const { eoWorkflowRoutes } = require('./src/routes/eo-workflow')
 const { inspectorGisRoutes } = require('./src/routes/inspector-gis')
 const { inspectorRoutingRoutes } = require('./src/routes/inspector-routing')

@@ -143,7 +143,15 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     // 2. Statutory determination period
     // the clock runs from acknowledgement (s.26(7)), not from receipt
     const clock = deriveStatutoryState(p.acknowledged_at ?? null, new Date(), (p as { development_type?: string | null }).development_type)
-    out.push({
+    if (isIssued.value) {
+      out.push({
+        id: 'statutory_period',
+        label: 'Statutory determination period',
+        status: 'complete',
+        detail: p.decision_at ? `Decided on ${toDateOnly(p.decision_at)}.` : 'Decided.',
+        serverEnforced: true,
+      })
+    } else out.push({
       id: 'statutory_period',
       label: 'Statutory determination period',
       status: !p.acknowledged_at ? 'unknown' : clock.daysRemaining > 0 ? 'complete' : 'outstanding',
@@ -160,7 +168,7 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     const L = lane.value
     const notApplicable = (id: string, label: string, why: string): ReadinessRequirement =>
       ({ id, label, status: 'not_applicable', detail: why, serverEnforced: true })
-    if (!n && L && !L.notice_required) {
+    if (L && !L.notice_required) {
       const why = 'Public notice is not required for this case (s.26(3)): it is not a special consent, a conflict with a condition of title, or a non-conforming or adverse use.'
       out.push(notApplicable('public_notice', 'Public notice (s.26(3))', why))
       out.push(notApplicable('abutting_owners', 'Adjacent owners notified', why))

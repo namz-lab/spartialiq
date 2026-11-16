@@ -1,6 +1,6 @@
 # Executive Officer (Planning): user manual
 
-**Status: DRAFT, 16 November 2026 (revised). For the Executive Officer's and the council's review.**
+**Status: DRAFT, 16 November 2026 (with figures and worked examples). For the Executive Officer's and the council's review.**
 Use: how to work a development application in the EO Planning console, from the day it is lodged to the day the permit is issued and the appeal window closes. It describes what the software does **today**. Where the council has not yet confirmed a rule, the manual says so. The reasons for each rule are in [the working workflow](../workflows/eo-planning-working-workflow.md) and [the workflow definition](../workflows/eo-planning-workflow.md).
 
 ## 1. What this console is for
@@ -40,6 +40,10 @@ The Case console menu has four groups, in the order you use them.
 
 On a phone or a narrow window the menu becomes a bar at the bottom with five items; the others are under **More**.
 
+![The EO console: the menu on the left and the Today dashboard](images/console-dashboard.png)
+
+*Screen 1. The EO console. The menu is on the left, in four groups; the open screen is on the right. This is the Today dashboard.*
+
 ### Opening a case
 
 Most screens work on one **open case**. Open it by choosing an application in **Applications** or on the **Dashboard**. The **case bar** under the title then shows the application reference, the stand, its status, and the clock. The case stays open as you move between screens, so you choose it once. Close it with the **×** at the right of the case bar.
@@ -62,6 +66,10 @@ The address of the page contains the open case, so you can copy it and send it t
 | 8. Permit issued | The permit is drafted, numbered and issued, or the refusal is sent with its reasons. | EO | Permits |
 | 9. Notified | The applicant is formally notified. **The one-month appeal window runs from that date.** | EO, clerk | Permits |
 | 10. After | Inspections, enforcement, appeals. | Inspector, EO | Enforcement, Appeals |
+
+![The road of an application, by who does each step](images/fig-road.png)
+
+*Figure 1. The road of an application. Each column is a person or body; the numbers are the steps in the table above. The EO's own steps are in the right-hand column; the red bracket is the Act's clock.*
 
 An application cannot skip step 2. A registered application can only be acknowledged or withdrawn; it cannot be moved straight to review.
 
@@ -112,6 +120,10 @@ This panel is the council's checklist. It shows:
 The system then writes the decision, produces the decision letter, and records **what the decision rested on**: a committee resolution, a delegation, or an administrator's override.
 
 You can also **Return to role** (to the planner, GIS officer, surveyor, environmental officer or building inspector) for more work, or **Request information from applicant**.
+
+![The gates the server checks before an approval](images/fig-gates.png)
+
+*Figure 2. The gates before an approval. The server checks them in this order and stops at the first one that fails. The red box is the message the screen shows. A refusal skips gates 6 to 8.*
 
 ### When the system refuses
 
@@ -164,6 +176,10 @@ The software starts **safe**. Until the council confirms a power in writing, the
 | **S7** | The Department's returns and information requirements | A returns calendar |
 | **S8** | The current text of the Act after 1998 | Confirmation of every date and section in this manual |
 
+![The Switches tab, all off](images/reg-2-switches.png)
+
+*Screen 2. Referrals & switches, the Switches tab. A switch is off until the CEO or an administrator records the written confirmation behind it.*
+
 **At present all eight are off.** That means every decision goes through the committee. The Vungu plan in the system is not recorded as operative, so S3 stays off for the land it covers.
 
 ## 8. Referrals, directions and the Department
@@ -175,6 +191,10 @@ The Department of Spatial Planning and Development (formerly the Department of P
 ### The referral log
 
 *Referrals & switches → Referral log* holds everything the council has sent to the Department, the Minister or another body, for a case or for a matter. For each one it keeps: when it was sent, who to, why (**mandatory**, **precautionary** or **routine**), the question, the **reply-by date** (21 days unless you set another), the advice that came back, and what the council did with it.
+
+![The referral log with one referral awaiting a reply](images/reg-1-referral-log.png)
+
+*Screen 3. The referral log. This is the referral made in the second worked example (section 13): to the minister responsible for roads, with its reply-by date.*
 
 - To refer a **case**, use *Refer to the Department* in **Before you decide**.
 - To refer a **matter** that is not a case (for example a layout), use *Refer a matter to the Department* in the register.
@@ -255,7 +275,144 @@ After issue, record the **copies due** (section 5, *Before you decide*) and the 
 | **CEO (accounting officer)** | Turns switches on, with their written evidence; is told of every ministerial direction | |
 | **Administrator** | Turns switches on; may override the committee requirement **with a written reason** | Override the clock, a direction or the acknowledgement |
 
-## 13. What the system does not do yet
+## 13. Two worked examples
+
+These follow two real cases through the console, screen by screen. The people and the stands are made up for this manual; the screens, the dates and the messages are what the system shows. Today in both is **16 November 2026**.
+
+### Example 1. An unopposed extension, decided by the Planning Committee
+
+**The case.** Mr B. Phiri has applied to add a two-bedroom extension to his house on **Stand 1378**, in the Medium Density Residential zone. The reference is **TPD/VUN/2026/0911**. The clerk registered and acknowledged it today, and the planner has assessed it and written the committee report. It is now the EO's turn.
+
+**What the EO has to achieve.** A lawful decision, on the committee's resolution, with the record complete: nothing for an appeal or an audit to find missing.
+
+**Step 1. Open the case.** Choose it in *Applications* or on the *Dashboard*, then go to **Determination**. The case bar and the road under it (Screen 4) say where the case is: **Assessed**, next **Committee resolved**, owner: the committee. They also say **Lane L2, closed to the EO**, which means the council has not recorded a delegation to the EO, so the EO cannot decide this alone. That is expected, and it is why the committee comes next.
+
+![The case bar and the road of the case](images/ex1-1-case-bar.png)
+
+*Screen 4. The case bar and the road. Registered, Acknowledged, Circulated and Assessed are done; the case is at Assessed.*
+
+**Step 2. Read "Before you decide".** The panel (Screen 5) is the checklist. For this case it says:
+
+- **Lane:** L2, closed to the EO, for the two reasons shown (no delegation recorded, no operative plan recorded for the land).
+- **Committee:** no resolution yet.
+- **Clock:** the case is deemed refused after **16 February 2027**. The extension should be asked for by 16 January, and the committee should resolve by 1 February.
+- **Ministerial directions:** *Not checked yet.*
+- **The Act's questions:** *5 not answered.*
+- **Public notice:** not required. **Objections:** none. **Referrals:** none.
+
+![Before you decide, with nothing yet done](images/ex1-2-before-you-decide-blocked.png)
+
+*Screen 5. Before you decide, at the start. Nothing is wrong; this is the list of what has to happen.*
+
+**Step 3. Answer the Act's questions and record the direction check.** The EO knows the site: it is inside the village, away from the Gweru road, the aerodrome and the district boundary, and the extension does not conflict with the title deed or change the use. So the answer to each of the five questions is **No**. Press **Save answers**. Then look at the register of ministerial directions (*Referrals & switches*), find that none applies, and press **I have checked: none applies**. Screen 6 shows the result: *All answered*, and *Checked 16 Nov 2026; none applies*.
+
+![Before you decide, after the questions are answered](images/ex1-3-before-you-decide-answered.png)
+
+*Screen 6. Before you decide, after the EO has answered the five questions and recorded the direction check.*
+
+**Step 4. The committee decides.** The clerk (or the EO) tables the case on the committee's November sitting in **Committee**. Attendance is recorded for each member present; the system will not record a resolution unless the quorum is there, and Screen 7 shows *Quorate: 2 of 2 required*. The committee approves, and the resolution is recorded against the item: *"Approved: the extension complies with the plan for the zone."* The road moves to **Committee resolved**.
+
+![The Committee screen with a quorate sitting](images/ex1-4-committee.png)
+
+*Screen 7. The Committee screen. Attendance is recorded; the sitting is quorate; the case is tabled on the agenda.*
+
+**Step 5. Decide.** Back on **Determination**, the panel now reads differently (Screen 8): **Lane L1, decided by the committee or council**, and *The committee's latest resolution: approved*. Everything is in place.
+
+![Before you decide, ready](images/ex1-5-before-you-decide-ready.png)
+
+*Screen 8. Before you decide, after the committee has resolved. The lane is now L1: the case is the committee's and the EO signs.*
+
+In **EO determination** (Screen 9) the **Plan basis** line says that a detached dwelling house is a permitted use in this zone, so the plan asks for nothing more. Write the **decision notes**, then press **Approve**. The system checks the nine gates of Figure 2, writes the decision, produces the decision letter, and records that the decision **rested on the committee's resolution**.
+
+![The EO determination card](images/ex1-6-determination.png)
+
+*Screen 9. EO determination. The plan basis is shown, the decision notes are written, and the three actions are below them.*
+
+**Step 6. After the decision.** The case bar now says **Decided** and the road stands at **Decided** (Screen 10). The next step is the EO's own: **Applicant notified**. Open **Permits** (Screen 11). It reads **Issued: this permit is a fixed record**, and the readiness list is now a record of what stood at the time of the decision. Record the **notification** the day the applicant is told: the one-month appeal window (section 38) runs from that date.
+
+![The case bar after the decision](images/ex1-7-decided-road.png)
+
+*Screen 10. After the decision. The case is Approved and the road is at Decided; the next step is to notify the applicant.*
+
+![The Permits screen after the decision](images/ex1-8-permits.png)
+
+*Screen 11. Permits, after the decision. Public notice reads "Not applicable", because this case did not need it; the permit is locked.*
+
+**What would have stopped the EO.**
+
+| If | The system would have said |
+|---|---|
+| The clerk had not acknowledged the application | *Not acknowledged*: the Act's clock had not started |
+| The committee had not resolved | *Committee resolution required* |
+| The committee had refused, and the EO tried to approve | *Resolution mismatch* |
+| The EO had not recorded the direction check | *Direction check required* |
+| One of the five questions had been left unanswered | *Statutory checks required* |
+
+### Example 2. An objected application beside a State road, ending in a refusal
+
+**The case.** Mrs L. Hlongwane has applied to change part of her house on **Stand 1379** into a tuck shop, beside the Gweru road. The reference is **TPD/VUN/2026/0912**. It was acknowledged **65 days ago**, on 12 September, so the three months are running short.
+
+**What the EO has to achieve.** To make sure the council does not lose the case by default, to do what the Act requires about the road, the objection and the applicant, and to record a refusal that will stand if it is appealed.
+
+**Step 1. Read the dates.** The case bar (Screen 12) says **26 days to determine**, and that the next date to work to is **the committee to resolve by 27 November 2026, in 11 days**. The earlier date, *ask for an extension by 12 November*, has already gone by. The case bar shows only the next date; the **Clock** line in *Before you decide* lists all three (Screen 13). The deemed-refusal date is **12 December 2026**.
+
+![The case bar with the dates to work to](images/ex2-1-case-bar-dates.png)
+
+*Screen 12. The case bar. 26 days left; the next date to work to is the committee's, in 11 days.*
+
+**Step 2. Answer the Act's questions.** The tuck shop is beside the Gweru road, which is a State road, so the answer to **"The site is within 200 m of the centre line of a State road"** is **Yes**. The other four are No. Press **Save answers**. The panel at once shows what that answer leads to, in red (Screen 13): *Referral to the minister responsible for roads: not sent*, with a button.
+
+![Before you decide, a "yes" to the State road question](images/ex2-2-road-referral-waiting.png)
+
+*Screen 13. A "yes" to the State road question. The approval now waits for a referral to the roads minister.*
+
+**Step 3. Record the referral.** Send the referral to the minister responsible for roads in the way the council sends them, then press **Record the referral**. The panel now says *awaiting reply (they have one month, s.26(2)(c))* (Screen 14), and the referral appears in the referral log (Screen 3) with its reply-by date, 7 December. **An approval will wait** until the minister has replied, until "no reply" is recorded, or until the month has gone.
+
+![The referral recorded](images/ex2-3-road-referral-sent.png)
+
+*Screen 14. The referral is recorded and the case is waiting for the reply.*
+
+**Step 4. The objection.** Mr J. Khumalo, a neighbour, hands in an objection at the counter: noise and traffic, and no parking for customers. In **Public notice** the EO considers it and gives reasons: *Sustained: there is no parking, and the stand is on a bend.* The panel now says that **objections are not yet dealt with** (Screen 15): the objection must be **put to the applicant, who has 14 days to comment**.
+
+![An objection, considered, waiting to be put to the applicant](images/ex2-4-objection-to-put.png)
+
+*Screen 15. The objection has been considered. The next step is to put it to the applicant.*
+
+Press **Put to the applicant** and give Mrs Hlongwane the objection. The screen records the date and shows when her 14 days end: **30 November 2026** (Screen 16). When she comments, record what she said; if she does not, the 14 days running out is enough.
+
+![The objection put to the applicant, with her 14 days](images/ex2-5-objection-put.png)
+
+*Screen 16. The objection has been put to the applicant. She has until 30 November to comment.*
+
+**Step 5. Protect the clock.** The minister has a month, the applicant has until 30 November, and the committee has to meet. The Act's date, 12 December, is close. So the council asks Mrs Hlongwane **in writing** for more time, and she agrees to **16 December**. In *Before you decide* press **Record the applicant's written extension**, give the new date and say **where her letter is filed** (Screen 17). Only the applicant can grant an extension, and it needs her letter: the system will not take a date without saying where the letter is. It also cannot revive a case already deemed refused.
+
+![Recording the applicant's written extension](images/ex2-6-extension.png)
+
+*Screen 17. The extension form. The new date and the place of the applicant's letter are both required.*
+
+**Step 6. The committee refuses, and the EO refuses with reasons.** The committee holds a special sitting and **refuses**: *no parking is provided, the objection is sustained, and the access is on a bend.* Back on **Determination** (Screen 18) the panel shows **Lane L1**, the committee's latest resolution *refused*, and the new deemed-refusal date, **16 December 2026**, "the applicant extended it in writing". It still shows the referral awaiting a reply and the objection's 14 days.
+
+![Before you decide, before the refusal](images/ex2-7-before-refusing.png)
+
+*Screen 18. Before refusing. The referral and the objection are still open on the screen.*
+
+The council **may refuse** a case it cannot approve, so the system does not hold a refusal to the referral, public notice or the objection steps. It does require what a refusal must have: **written reasons** (section 26(6)(b)), and a committee resolution that **matches** (a refusal). The EO writes the reasons, including the right of appeal to the Administrative Court within one month, and presses **Refuse**. The case is **Refused**, and the road stands at **Decided** (Screen 19).
+
+![The case bar after the refusal](images/ex2-8-refused-road.png)
+
+*Screen 19. After the refusal. The next step is to notify Mrs Hlongwane, which starts her one-month appeal window.*
+
+**After the refusal.** Notify the applicant in writing and **record the notification date**: her appeal window starts from it. It is good practice also to tell the roads minister and Mr Khumalo of the outcome, though the workflow does not require it. The referral and the objection stay on the file as they were; nothing is deleted.
+
+**What this example shows.**
+
+- The dates work for you only if you read them: the case bar shows the next one; the panel shows all of them.
+- A "yes" to a question about the site is an instruction to **refer**, and the approval then waits for the reply.
+- An objection is not finished when it is considered: the applicant must be told, and given 14 days.
+- Only the applicant can give more time, and only in writing.
+- A refusal is quicker than an approval, but it must have reasons and a matching resolution.
+
+## 14. What the system does not do yet
 
 So that nobody relies on something that is not there:
 
@@ -266,7 +423,7 @@ So that nobody relies on something that is not there:
 - The dates and section numbers come from the text of the Act as consolidated with amendments to 1998. Later amendments have not been checked (switch S8).
 - Building plans, Reports, the Development matrix, Reference and Settings are described on the screens and not in this edition.
 
-## 14. Glossary
+## 15. Glossary
 
 | Term | Meaning |
 |---|---|
@@ -283,6 +440,6 @@ So that nobody relies on something that is not there:
 | **Annexure 6, 7** | The Handbook's permit core and the notes attached to the permit |
 | **DSPD** | The Department of Spatial Planning and Development, formerly the Department of Physical Planning |
 
-## 15. Where to get help
+## 16. Where to get help
 
 Report a problem to the council's IT administrator, with the application reference and what the screen said. For a question about the law, ask the council's legal adviser. This manual and the documents it links are kept in `docs/manuals` and `docs/workflows`.

@@ -17,6 +17,8 @@ import type { ReadinessRequirement, RequirementStatus } from './usePermitIssuanc
 const props = defineProps<{
   requirements: ReadinessRequirement[]
   loading: boolean
+  /** The permit is issued: the list is the record of what stood at the time, not a block. */
+  issued?: boolean
 }>()
 
 defineEmits<{ (e: 'refresh'): void }>()
@@ -33,6 +35,7 @@ const unverified  = computed(() => props.requirements.filter(r => r.status === '
 
 const summary = computed(() => {
   if (props.loading) return { tone: 'busy', text: 'Checking decision readiness…' }
+  if (props.issued) return { tone: 'ok', text: 'Decided: this is the record as it stood' }
   if (outstanding.value.length) {
     return {
       tone: 'bad',

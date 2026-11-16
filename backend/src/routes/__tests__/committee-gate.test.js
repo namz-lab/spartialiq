@@ -175,7 +175,14 @@ describe('the gates on eo-decision', () => {
 
   test('quorum gate blocks a resolution until attendance meets quorum; then a matching decision passes', async () => {
     const id = await permitUnderReview()
+    const before = (await app.inject({ method: 'GET', url: `/api/eo-workflow/lane/${id}`, headers: as(eo) })).json().data
+    expect(before.lane).toBe('L2')                      // no resolution yet: only the EO's own lane is in question, and it is closed
+    expect(before.open).toBe(false)
     await resolve(id, 'approved', 'Approved subject to conditions.')
+    const after = (await app.inject({ method: 'GET', url: `/api/eo-workflow/lane/${id}`, headers: as(eo) })).json().data
+    expect(after.lane).toBe('L1')                       // the committee has resolved: the case is the committee's, and the EO signs
+    expect(after.open).toBe(true)
+    expect(after.reasons).toEqual([])
     const dec = await decide(id, { decision: 'approve' })
     expect(dec.statusCode).toBe(200)
     expect(dec.json().data.permit.status).toBe('approved')

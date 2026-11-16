@@ -249,6 +249,7 @@ const conditionsSummaryId = 'p4-conditions-summary'
     <PermitReadinessPanel
       :requirements="issuance.requirements.value"
       :loading="issuance.loading.value"
+      :issued="issuance.isIssued.value"
       @refresh="issuance.refresh()"
     />
 

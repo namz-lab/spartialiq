@@ -121,7 +121,7 @@ const committeeLine = computed(() => {
         </p>
 
         <div class="wg-checks" data-testid="statutory-checks">
-          <p class="wg-line"><strong>The Act's questions.</strong>
+          <p class="wg-line"><strong>The Act's questions.</strong>{{ ' ' }}
             <span v-if="lane.checks_unanswered.length" class="wg-bad">{{ lane.checks_unanswered.length }} not answered.</span>
             <span v-else>All answered.</span>
             An approval waits for every answer; a refusal does not.</p>
@@ -144,14 +144,14 @@ const committeeLine = computed(() => {
           </ul>
         </div>
 
-        <p class="wg-line"><strong>Public notice.</strong>
+        <p class="wg-line"><strong>Public notice.</strong>{{ ' ' }}
           <template v-if="!lane.notice_required">Not required for this case.</template>
           <template v-else-if="!lane.notice_missing.length">Required (s.26(3)) and complete.</template>
           <template v-else><span class="wg-bad">Required (s.26(3)) and not complete:</span> {{ lane.notice_missing.join('; ') }}.
             <button class="eodr-btn sm" type="button" @click="nav.go('notification')">Open Public notice</button></template>
         </p>
 
-        <p class="wg-line"><strong>Objections.</strong>
+        <p class="wg-line"><strong>Objections.</strong>{{ ' ' }}
           <template v-if="!lane.objection_problems.length">None outstanding.</template>
           <template v-else><span class="wg-bad">Not yet dealt with:</span> {{ lane.objection_problems.join('; ') }}.
             <button class="eodr-btn sm" type="button" @click="nav.go('notification')">Open Public notice</button></template>

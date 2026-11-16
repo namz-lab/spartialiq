@@ -90,7 +90,9 @@ async function eoWorkflowRoutes(fastify) {
     const directions = await eoWorkflow.directionsFor(q, c.development_type)
     const binding = directions.filter((d) => d.refers_to_minister || d.restricts)
     const resolution = await eoWorkflow.latestResolution(q, request.params.id)
-    const lane = eoWorkflow.laneOf({ devType: c.development_type, classification: c.classification, objectionCount: c.objection_count, directionApplies: binding.length > 0 }, sw)
+    // a case the committee has resolved is the committee's (L1): the EO signs; the EO's own lane is only in question while there is no resolution
+    const committeeResolved = !!resolution && !['deferred', 'noted'].includes(resolution.outcome)
+    const lane = eoWorkflow.laneOf({ devType: c.development_type, classification: c.classification, objectionCount: c.objection_count, directionApplies: binding.length > 0 }, sw, { committeeResolved })
     const latestDirection = directions.reduce((m, d) => (d.created_at > m ? d.created_at : m), null)
     const refs = await eoWorkflow.statutoryReferrals(q, request.params.id)
     const st = eoWorkflow.checkState({ devType: c.development_type, classification: c.classification, answers: c.statutory_checks }, refs)
