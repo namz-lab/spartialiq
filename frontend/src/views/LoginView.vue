@@ -30,8 +30,10 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-// Demo one-click accounts only in Vite DEV, and only when not explicitly disabled.
-const isDev = import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEMO_LOGIN !== '0'
+// One-click demo accounts on the local dev server, and on the hosted demo
+// when the image is built with VITE_ALLOW_DEMO_LOGIN=1. Set it to 0 to hide them.
+const showDemoLogins = import.meta.env.VITE_ALLOW_DEMO_LOGIN === '1'
+  || (import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEMO_LOGIN !== '0')
 
 // ── Form state ─────────────────────────────────────────────────────────
 const email = ref('')
@@ -214,9 +216,9 @@ async function goHome() {
   await router.push(redirectTo.value || roleHome(u?.role ?? ''))
 }
 
-// ── Demo accounts (development builds only) ────────────────────────────
+// ── Demo accounts (local dev, and the hosted demo when the flag is on) ─
 interface DemoAccount { label: string; email: string; password: string; role: Role }
-const demoAccounts: DemoAccount[] = isDev
+const demoAccounts: DemoAccount[] = showDemoLogins
   ? [
       { label: 'Citizen',    email: 'demo.viewer@vungu.test',    password: 'demo1234', role: 'viewer' },
       { label: 'Planner',    email: 'demo.planner@vungu.test',   password: 'demo1234', role: 'planner' },
@@ -235,7 +237,7 @@ const demoAccounts: DemoAccount[] = isDev
 // permission catalogue, which is the quick way to see the duty separations:
 // only the Committee approves, only the Publisher releases, only the Auditor
 // reads everything and writes nothing.
-const financeDemoAccounts: DemoAccount[] = isDev
+const financeDemoAccounts: DemoAccount[] = showDemoLogins
   ? [
       { label: 'Finance admin', email: 'demo.finance-admin@vungu.test',   password: 'demo1234', role: 'finance_admin' },
       { label: 'Fin. officer',  email: 'demo.finance-officer@vungu.test', password: 'demo1234', role: 'finance_officer' },
@@ -355,8 +357,8 @@ function fillDemo(account: DemoAccount) {
         No account yet? <router-link to="/register">Create one</router-link>
       </p>
 
-      <div v-if="isDev" class="auth-demo">
-        <p class="auth-demo-title">Demo accounts — development build</p>
+      <div v-if="showDemoLogins" class="auth-demo">
+        <p class="auth-demo-title">Demo accounts</p>
         <p class="auth-demo-group">Planning &amp; operations</p>
         <div class="auth-demo-grid">
           <button
