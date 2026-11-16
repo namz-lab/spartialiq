@@ -90,8 +90,11 @@ export function useEoCase() {
    * The determination clock. It runs from acknowledgement — s.26(7) counts from the council's acknowledgement, not from the
    * day the envelope arrived — so a case nobody has acknowledged has none yet. Three months, or four for a subdivision.
    */
-  const clock = computed(() =>
-    caseClock(permit.value?.acknowledged_at ?? null, prefs.value.clockWarningDays, Date.now(),
+  const DECIDED = ['approved', 'approved_with_conditions', 'refused']
+  const isDecided = computed(() => DECIDED.includes(permit.value?.status ?? ''))
+  const clock = computed(() => isDecided.value
+    ? { daysLeft: null, tone: 'ok' as const, label: 'Decided' }
+    : caseClock(permit.value?.acknowledged_at ?? null, prefs.value.clockWarningDays, Date.now(),
       (permit.value as { development_type?: string | null } | null)?.development_type))
 
   /** Where the case is on its road, and the next date to work to. */
@@ -101,7 +104,8 @@ export function useEoCase() {
     notified: !!permit.value?.notification_date,
     acknowledged: !!permit.value?.acknowledged_at,
   }))
-  const upcoming = computed(() => nextDate(lane.value?.milestones, new Date().toISOString().slice(0, 10)))
+  // once decided, the dates to work to are history
+  const upcoming = computed(() => (isDecided.value ? null : nextDate(lane.value?.milestones, new Date().toISOString().slice(0, 10))))
 
   return {
     permit,

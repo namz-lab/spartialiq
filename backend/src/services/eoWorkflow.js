@@ -162,7 +162,7 @@ async function objectionState(q, permitId) {
   const { rows } = await q.query(
     `SELECT objector_name, sustained, put_to_applicant_on, applicant_commented_on,
             (put_to_applicant_on + 14 <= CURRENT_DATE) AS comment_period_over,
-            to_char(put_to_applicant_on + 14, 'YYYY-MM-DD') AS comment_due
+            to_char(put_to_applicant_on + 14, 'FMDD FMMon YYYY') AS comment_due
        FROM spatial_planning.application_objection WHERE permit_app_id = $1`, [permitId])
   const problems = []
   for (const o of rows) {

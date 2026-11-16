@@ -143,7 +143,7 @@ describe('the statutory gates on an approval', () => {
     expect(put.json().data.comment_due).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     const waiting = await approve(id)
     expect(waiting.statusCode).toBe(409)
-    expect(waiting.json().problems.join(' ')).toMatch(/has until \d{4}-\d{2}-\d{2} to comment/)
+    expect(waiting.json().problems.join(' ')).toMatch(/has until \d{1,2} [A-Z][a-z]{2} \d{4} to comment/)
 
     // the applicant comments: the 14 days need not run out
     expect((await app.inject({ method: 'PATCH', url: `/api/objections/${oid}/applicant-comment`, headers: as(eo), payload: { comment: 'The roof line is lower than the neighbour\'s.' } })).statusCode).toBe(200)
