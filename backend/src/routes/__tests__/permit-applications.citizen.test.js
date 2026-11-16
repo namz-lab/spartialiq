@@ -74,10 +74,14 @@ describe('/permit-applications role + own-row gating', () => {
   test('eo can transition a permit status (determination right)', async () => {
     // The status route enforces optimistic locking — read the current
     // revision first, exactly as the case-file UI does.
-    const cur = await axios.get(`${BASE}/permit-applications/${plannerPermitId}`,
+    // a registered case is acknowledged first (it starts the Act's clock); only then does it go to review
+    const first = await axios.get(`${BASE}/permit-applications/${plannerPermitId}`,
+      { headers: { Authorization: `Bearer ${eoToken}` } })
+    const ack = await axios.patch(`${BASE}/permit-applications/${plannerPermitId}/status`,
+      { status: 'acknowledged', expectedRevision: first.data.data.revision },
       { headers: { Authorization: `Bearer ${eoToken}` } })
     const r = await axios.patch(`${BASE}/permit-applications/${plannerPermitId}/status`,
-      { status: 'under_review', expectedRevision: cur.data.data.revision },
+      { status: 'under_review', expectedRevision: ack.data.data.revision },
       { headers: { Authorization: `Bearer ${eoToken}` } })
     expect(r.status).toBe(200)
     expect(r.data.data.status).toBe('under_review')

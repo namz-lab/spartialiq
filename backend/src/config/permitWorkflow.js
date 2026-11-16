@@ -33,7 +33,9 @@ const DECIDED = ['approved', 'approved_with_conditions', 'refused']
 
 const TRANSITIONS = {
   pending_payment:      ['registered', 'withdrawn'],
-  registered:           ['acknowledged', 'circulation', 'under_review', 'withdrawn'],
+  // A registered case is acknowledged first: the acknowledgement starts the Act's clock (s.26(7), s.40(6)), and a case that never had one can be neither
+  // reviewed nor decided on a clock that does not exist.
+  registered:           ['acknowledged', 'withdrawn'],
   acknowledged:         ['circulation', 'objection_period', 'under_review', 'withdrawn'],
   circulation:          ['objection_period', 'under_review', 'withdrawn'],
   objection_period:     ['under_review', 'awaiting_eo_decision', 'withdrawn'],

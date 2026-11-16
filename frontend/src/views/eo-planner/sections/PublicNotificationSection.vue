@@ -24,6 +24,7 @@ import { useUiFeedback } from '@/composables/useUiFeedback'
 import { useEoCase } from '@/eo-planner/useEoCase'
 import { useEoWorkload } from '@/eo-planner/useEoWorkload'
 import { fmtDate, daysUntil, isoDay } from '@/utils/dates'
+import { eoWorkflowApi } from '@/services/eoWorkflow'
 import UiFeedback from '@/components/UiFeedback.vue'
 import UiSheet from '@/components/ui/UiSheet.vue'
 import CaseRequired from './CaseRequired.vue'
@@ -169,6 +170,30 @@ const pending = computed(() => objections.value.filter(o => o.sustained == null)
 
 const notes = reactive<Record<string, string>>({})
 const evidence = reactive<Record<string, string>>({})
+const applicantComment = reactive<Record<string, string>>({})
+
+// The objection goes to the applicant, who has 14 days to comment; a decision waits for the comment or for the 14 days (working workflow, step 9).
+const commentDue = (o: Objection) => (o.put_to_applicant_on ? isoDay(new Date(new Date(o.put_to_applicant_on.slice(0, 10) + 'T00:00:00').getTime() + 14 * 86_400_000)) : null)
+async function putToApplicant(o: Objection) {
+  busy.value = `put:${o.id}`
+  try {
+    await eoWorkflowApi.putObjectionToApplicant(o.id)
+    await loadCase(eoCase.caseId.value)
+    fb.showToast('Put to the applicant. They have 14 days to comment.', 'success')
+  } catch (err: unknown) {
+    fb.showToast(fb.parseApiError(err, 'Could not record that.'), 'error')
+  } finally { busy.value = null }
+}
+async function recordComment(o: Objection) {
+  busy.value = `cmt:${o.id}`
+  try {
+    await eoWorkflowApi.recordApplicantComment(o.id, (applicantComment[o.id] ?? '').trim())
+    await loadCase(eoCase.caseId.value)
+    fb.showToast("The applicant's comment is recorded.", 'success')
+  } catch (err: unknown) {
+    fb.showToast(fb.parseApiError(err, 'Could not record the comment.'), 'error')
+  } finally { busy.value = null }
+}
 
 async function resolve(o: Objection, sustained: boolean) {
   if (!notes[o.id]?.trim()) {
@@ -463,6 +488,30 @@ async function requestResponse() {
                     <XCircle :size="14" aria-hidden="true" /> Dismiss
                   </button>
                 </div>
+              </div>
+
+              <!-- The applicant's say: the objection is put to them, and they have 14 days -->
+              <div class="pn-applicant" data-testid="objection-applicant-step">
+                <template v-if="!o.put_to_applicant_on">
+                  <p class="ins-hint">The applicant must be told of this objection and given 14 days to comment, before the case is decided.</p>
+                  <button type="button" class="pn-btn" :disabled="busy === `put:${o.id}`" @click="putToApplicant(o)">
+                    <Send :size="14" aria-hidden="true" /> Put to the applicant
+                  </button>
+                </template>
+                <template v-else>
+                  <p class="pn-determination"><strong>Put to the applicant</strong> {{ fmtDate(o.put_to_applicant_on) }}.
+                    <template v-if="o.applicant_commented_on">The applicant commented {{ fmtDate(o.applicant_commented_on) }}: {{ o.applicant_comment }}</template>
+                    <template v-else>The applicant has until <strong>{{ fmtDate(commentDue(o)) }}</strong> to comment.</template>
+                  </p>
+                  <div v-if="!o.applicant_commented_on" class="pn-resolve">
+                    <label class="ins-field full">
+                      <span class="ins-label">What the applicant said</span>
+                      <textarea class="ins-input" rows="2" :value="applicantComment[o.id] ?? ''"
+                                @input="applicantComment[o.id] = ($event.target as HTMLTextAreaElement).value"></textarea>
+                    </label>
+                    <button type="button" class="pn-btn" :disabled="!(applicantComment[o.id] ?? '').trim() || busy === `cmt:${o.id}`" @click="recordComment(o)">Record the applicant's comment</button>
+                  </div>
+                </template>
               </div>
             </li>
           </ul>

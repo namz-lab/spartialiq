@@ -13,6 +13,7 @@ import {
   type PermitApplication, type PublicNotice, type DecisionPackage, type PermitMeeting,
 } from '@/services/developmentManagementService'
 import { deriveStatutoryState } from '@/composables/useStatutoryClock'
+import { eoWorkflowApi, type CaseLane } from '@/services/eoWorkflow'
 import { determinationSection } from '@/statutory/periods'
 import { useConditionLibrary, type PlanningCondition } from '@/composables/useConditionLibrary'
 import type { CaseFile } from '@/composables/usePlannerCase'
@@ -20,10 +21,6 @@ import type { Role } from '@/services/types'
 import { can } from '@/statutory/roles'
 import { buildAnnexure7, deriveDeadlines, toDateOnly, unverifiedRules } from './permitRules'
 import { savePermitDocument, type PermitDocumentRecord } from './permitDocument'
-
-/** Minimum length of a justification for overriding unverified prerequisites.
- *  Long enough that "ok" or "fine" cannot pass as a statutory record. */
-const MIN_OVERRIDE_REASON = 30
 
 /** Statuses a determination is lawful from (mirrors config/permitWorkflow.js
  *  TRANSITIONS; the server re-checks and is the authority). */
@@ -68,6 +65,8 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
   const pkg = ref<DecisionPackage | null>(null)
   const notice = ref<PublicNotice | null>(null)
   const meetings = ref<PermitMeeting[]>([])
+  // The council's own workflow position: the statutory questions, public notice, objections. Null if it could not be read, which is then 'not verified'.
+  const lane = ref<CaseLane | null>(null)
 
   const permitRow = computed<PermitApplication | null>(() => pkg.value?.permit ?? null)
 
@@ -91,12 +90,14 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
       // Readiness must degrade, not vanish: only the decision package is hard
       // required. A council that never opened a public-notice record legitimately
       // has none, and the meetings route may 403 for some roles.
-      const [p, n, m] = await Promise.all([
+      const [p, n, m, l] = await Promise.all([
         dmApi.getDecisionPackage(id),
         dmApi.getPublicNotice(id).catch(() => null),
         dmApi.listPermitMeetings(id).catch(() => [] as PermitMeeting[]),
+        eoWorkflowApi.lane(id).catch(() => null),
       ])
       pkg.value = p
+      lane.value = l
       notice.value = n
       meetings.value = m ?? []
       // Adopt the server's revision: this is the freshest read we have, and
@@ -131,11 +132,12 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     out.push({
       id: 'acknowledged',
       label: 'Application acknowledged',
-      status: p.received_at ? 'complete' : 'outstanding',
-      detail: p.received_at
-        ? `Acknowledged on ${toDateOnly(p.received_at)}.`
-        : 'No acknowledgement date is recorded. Acknowledge the application before determining it.',
-      serverEnforced: false,
+      // the council's own record: the acknowledgement date the server holds (it starts the Act's clock), never the date of receipt
+      status: p.acknowledged_at ? 'complete' : 'outstanding',
+      detail: p.acknowledged_at
+        ? `Acknowledged on ${toDateOnly(p.acknowledged_at)}.`
+        : 'No acknowledgement is recorded, so the clock under the Act has not started. Acknowledge the application before determining it.',
+      serverEnforced: true,
     })
 
     // 2. Statutory determination period
@@ -155,14 +157,23 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     })
 
     // 3–6. Section 26(3) public notification
-    if (!n) {
-      out.push(unknown('public_notice', 'Public notice (s.26(3))',
-        'No public-notification record exists for this application. Open the Public '
-        + 'Notification workspace to create and verify one.'))
-      out.push(unknown('abutting_owners', 'Adjacent owners notified',
-        'No public-notification record exists, so notification of abutting owners is unverified.'))
-      out.push(unknown('objection_period', 'Objection period closed',
-        'No public-notification record exists, so the objection period cannot be confirmed closed.'))
+    const L = lane.value
+    const notApplicable = (id: string, label: string, why: string): ReadinessRequirement =>
+      ({ id, label, status: 'not_applicable', detail: why, serverEnforced: true })
+    if (!n && L && !L.notice_required) {
+      const why = 'Public notice is not required for this case (s.26(3)): it is not a special consent, a conflict with a condition of title, or a non-conforming or adverse use.'
+      out.push(notApplicable('public_notice', 'Public notice (s.26(3))', why))
+      out.push(notApplicable('abutting_owners', 'Adjacent owners notified', why))
+      out.push(notApplicable('objection_period', 'Objection period closed', why))
+    } else if (!n && L) {
+      const why = 'Public notice is required (s.26(3)) and no record of it exists. Open Public notice and record the advert, the abutting owners, the site notice and the objection period.'
+      out.push({ id: 'public_notice', label: 'Public notice (s.26(3))', status: 'outstanding', detail: why, serverEnforced: true })
+      out.push({ id: 'abutting_owners', label: 'Adjacent owners notified', status: 'outstanding', detail: why, serverEnforced: true })
+      out.push({ id: 'objection_period', label: 'Objection period closed', status: 'outstanding', detail: why, serverEnforced: true })
+    } else if (!n) {
+      out.push(unknown('public_notice', 'Public notice (s.26(3))', 'The council\'s notice record could not be read, so whether notice was required and given is not verified.'))
+      out.push(unknown('abutting_owners', 'Adjacent owners notified', 'The council\'s notice record could not be read.'))
+      out.push(unknown('objection_period', 'Objection period closed', 'The council\'s notice record could not be read.'))
     } else {
       out.push({
         id: 'public_notice',
@@ -200,18 +211,40 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
 
     // 7. Objections considered
     const objs = pkg.value?.objection_summary
+    const none = !objs || objs.total === 0
     out.push({
       id: 'objections',
-      label: 'Objections considered',
-      status: !objs || objs.total === 0
-        ? 'not_applicable'
-        : objs.pending === 0 ? 'complete' : 'outstanding',
-      detail: !objs || objs.total === 0
-        ? 'No objections were lodged.'
-        : objs.pending === 0
-          ? `All ${objs.total} objection(s) considered (${objs.sustained} sustained).`
-          : `${objs.pending} of ${objs.total} objection(s) still awaiting consideration.`,
-      serverEnforced: false,
+      label: 'Objections dealt with',
+      status: L
+        ? (L.objection_problems.length ? 'outstanding' : none ? 'not_applicable' : 'complete')
+        : 'unknown',
+      detail: !L
+        ? 'The council\'s record of the objections could not be read.'
+        : L.objection_problems.length
+          ? `${L.objection_problems.join('; ')}.`
+          : none ? 'No objections were lodged.'
+            : `All ${objs!.total} objection(s) considered and put to the applicant (${objs!.sustained} sustained).`,
+      serverEnforced: true,
+    })
+
+    // The Act's questions, and the referrals a "yes" leads to
+    out.push({
+      id: 'statutory_checks',
+      label: 'The Act\'s questions answered',
+      status: !L ? 'unknown' : L.checks_unanswered.length ? 'outstanding' : 'complete',
+      detail: !L ? 'The council\'s record could not be read.'
+        : L.checks_unanswered.length ? `${L.checks_unanswered.length} of ${L.checks.length} not answered (State road, aerodrome, neighbouring authority, title conflict, adverse use). Answer them on the Determination screen.`
+          : 'Every question is answered.',
+      serverEnforced: true,
+    })
+    out.push({
+      id: 'statutory_referrals',
+      label: 'Referrals the Act requires',
+      status: !L ? 'unknown' : L.referrals_waiting.length ? 'outstanding' : 'complete',
+      detail: !L ? 'The council\'s record could not be read.'
+        : L.referrals_waiting.length ? L.referrals_waiting.map(w => `to ${w.body}: ${w.why}`).join('; ') + '.'
+          : 'None outstanding.',
+      serverEnforced: true,
     })
 
     // 8. Blocking referrals
@@ -236,19 +269,16 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
       serverEnforced: false,
     })
 
-    // 9. Decision authority — a committee resolution, or a recorded delegation.
+    // 9. Decision authority — the committee's resolution. A typed 'delegated authority' no longer stands in for it: the EO's own lane opens only when
+    // the council's delegation is recorded as switches (working workflow, section 7), and the server decides that.
     const resolved = meetings.value.filter(m => m.outcome && m.outcome !== 'pending' && m.resolution)
-    const delegated = (c?.permit.decisionAuthority ?? '').trim()
     out.push({
       id: 'authority',
       label: 'Decision authority',
-      status: resolved.length || delegated ? 'complete' : 'outstanding',
+      status: resolved.length ? 'complete' : 'outstanding',
       detail: resolved.length
         ? `Committee resolution recorded (${resolved[0].title}, ${toDateOnly(resolved[0].meeting_date)}).`
-        : delegated
-          ? `Recorded as a delegated-authority decision: ${delegated}.`
-          : 'No committee resolution is recorded and no delegated authority has been stated. '
-            + 'One or the other must back a determination.',
+        : 'No committee resolution is recorded. A determination rests on one that matches it, unless the council has recorded its delegation to the EO.',
       // The backend enforces this on /eo-decision only, which planners cannot call.
       serverEnforced: false,
     })
@@ -289,24 +319,10 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     return out
   })
 
-  const blockers = computed(() => requirements.value.filter(r => r.status === 'outstanding'))
   const unknowns = computed(() => requirements.value.filter(r => r.status === 'unknown'))
-
-  // ── Unverified prerequisites ───────────────────────────────────────────
-  // A requirement whose record simply does not exist (no public-notice row, for
-  // instance) is NOT evidence that the step was completed — it is evidence that
-  // nothing is known. Because the backend does not gate issuance on any of
-  // these (see the header), treating 'unknown' as passable would let a permit
-  // issue with public notice never verified and nothing anywhere objecting.
-  //
-  // So unknowns block too, and the only way past is a typed justification which
-  // is sent with the determination — landing in decision_conditions and in the
-  // permit_event audit row. An override becomes a recorded act, not a silent one.
-  const overrideReason = ref('')
-  const overrideRequired = computed(() => unknowns.value.length > 0)
-  const overrideValid = computed(
-    () => overrideReason.value.trim().length >= MIN_OVERRIDE_REASON)
-  const overrideSatisfied = computed(() => !overrideRequired.value || overrideValid.value)
+  // "Not verified" is not evidence that a step was done, so it blocks like "outstanding". There is no typed justification to get past it: the server
+  // enforces the Act's requirements itself, and a record the screen cannot read is a reason to reload, not to issue.
+  const blockers = computed(() => requirements.value.filter(r => r.status === 'outstanding' || r.status === 'unknown'))
 
   // ── Local form validation (usability, not authority) ───────────────────
   const fieldErrors = computed<Record<string, string>>(() => {
@@ -346,7 +362,7 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     if (isIssued.value) return 'issued'
     if (!canAttemptIssue.value) return 'forbidden'
     if (loadError.value || issueError.value) return 'error'
-    if (blockers.value.length || !formValid.value || !overrideSatisfied.value) return 'blocked'
+    if (blockers.value.length || !formValid.value) return 'blocked'
     return 'ready'
   })
 
@@ -440,11 +456,6 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
       const decisionDate = c.permit.decisionDate ?? toDateOnly(new Date())!
       const notes = `Permit ${c.permit.permitNo} issued by ${c.permit.issuingOfficer}`
         + (c.permit.decisionAuthority ? ` under ${c.permit.decisionAuthority}` : '')
-        + (overrideRequired.value && overrideValid.value
-          ? `\n\nIssued with ${unknowns.value.length} unverified prerequisite(s): `
-            + `${unknowns.value.map(u => u.label).join(', ')}. `
-            + `Officer justification: ${overrideReason.value.trim()}`
-          : '')
 
       // Server gate: only EO/admin may determine. Planners hand the case up.
       const r = role.value
@@ -548,8 +559,7 @@ export function usePermitIssuance(opts: PermitIssuanceOptions) {
     loadError, issueError, isIssued, canAttemptIssue, canIssue,
     // data
     pkg, notice, meetings, permitRow,
-    requirements, blockers, unknowns,
-    overrideReason, overrideRequired, overrideValid,
+    requirements, blockers, unknowns, lane,
     fieldErrors, failingConditions, formValid,
     deadlines, annexure, rulesNeedingConfirmation,
     // actions
@@ -585,8 +595,13 @@ function describeError(e: unknown, fallback: string): string {
     invalid_transition:
       'The application is not in a state from which a permit may be issued.',
     committee_resolution_required:
-      'A committee resolution is required before this determination, or it must be recorded '
-      + 'as a delegated-authority decision.',
+      'A committee resolution is required before this determination.',
+    delegation_not_open:
+      "The EO's own lane is closed until the council's delegation is recorded.",
+    resolution_mismatch:
+      "The committee's resolution does not match this decision.",
+    deemed_refused:
+      'The application is deemed refused (s.26(7)); it cannot now be approved.',
     forbidden:
       'You do not have authority to issue this permit. A determination must be recorded by '
       + 'an authorised officer.',

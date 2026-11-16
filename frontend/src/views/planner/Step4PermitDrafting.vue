@@ -62,9 +62,6 @@ function ensureDefaults() {
   if (!c.permit.issuingOfficer && officerName.value) {
     c.permit.issuingOfficer = officerName.value
   }
-  if (!c.permit.decisionAuthority && c.committeeReport.resolutionAt) {
-    c.permit.decisionAuthority = 'Council committee resolution'
-  }
 }
 
 onMounted(async () => {
@@ -105,6 +102,10 @@ async function removeCondition(idx: number) {
 
 // ── Issue ────────────────────────────────────────────────────────────────
 const issueAttempted = ref(false)
+
+// Reasons first, form after: while something stands in the way of issuing, the page leads with what it is, and the drafting form waits behind a
+// control. Wording can still be prepared in advance; it cannot be issued until the items above are done.
+const standingInTheWay = computed(() => (issuance.isIssued.value ? [] : issuance.blockers.value))
 
 async function onIssue() {
   issueAttempted.value = true
@@ -251,41 +252,18 @@ const conditionsSummaryId = 'p4-conditions-summary'
       @refresh="issuance.refresh()"
     />
 
-    <!-- A missing record is not proof a step was done — it is proof nothing is
-         known. Since the server does not gate on these, issuing anyway must be
-         a deliberate, recorded act rather than a silent one. -->
-    <section v-if="issuance.overrideRequired.value && !readonly"
-             class="p4-card p4-override" aria-labelledby="p4-override-h">
-      <header><h3 id="p4-override-h">Unverified prerequisites</h3></header>
-      <div class="p4-pad p4-override-body">
-        <p class="p4-override-lead">
-          {{ issuance.unknowns.value.length }} statutory requirement(s) could not be
-          verified from the council's records:
-        </p>
-        <ul class="p4-override-list">
-          <li v-for="u in issuance.unknowns.value" :key="u.id">
-            <strong>{{ u.label }}</strong> — {{ u.detail }}
-          </li>
-        </ul>
-        <p class="p4-hint">
-          The preferred action is to complete the missing record. If you nevertheless
-          have grounds to issue, state them: your justification is sent with the
-          determination and stored on the case audit trail.
-        </p>
-        <label class="p4-override-label" for="p4-override-reason">
-          Justification for issuing without these records
-        </label>
-        <textarea id="p4-override-reason" v-model="issuance.overrideReason.value"
-                  class="p4-notes" rows="3"
-                  :aria-invalid="!issuance.overrideValid.value"
-                  aria-describedby="p4-override-count"
-                  placeholder="e.g. Objection period closed and verified on the paper file dated …" />
-        <p id="p4-override-count" class="p4-hint">
-          {{ issuance.overrideReason.value.trim().length }} / 30 characters minimum.
-          <span v-if="issuance.overrideValid.value"> Recorded with the determination.</span>
-        </p>
-      </div>
+    <!-- Reasons first: what stands in the way of this permit, before the form. -->
+    <section v-if="standingInTheWay.length" class="p4-gate" aria-labelledby="p4-gate-h" data-testid="permit-gate">
+      <h3 id="p4-gate-h">This permit cannot be issued yet</h3>
+      <p>{{ standingInTheWay.length }} {{ standingInTheWay.length === 1 ? 'thing stands' : 'things stand' }} in the way. Each one below is a record the council has to complete first.</p>
+      <ul>
+        <li v-for="r in standingInTheWay" :key="r.id"><strong>{{ r.label }}.</strong> {{ r.detail }}</li>
+      </ul>
     </section>
+
+    <!-- The drafting form: open when nothing stands in the way, or the permit is issued; closed (but available) when something does. -->
+    <details class="p4-draft" :open="!standingInTheWay.length">
+      <summary>{{ standingInTheWay.length ? 'Prepare the permit wording in advance' : 'The permit' }}</summary>
 
     <!-- ═══ 3. Permit core ═════════════════════════════════════════════ -->
     <section class="p4-card" aria-labelledby="p4-core">
@@ -313,16 +291,15 @@ const conditionsSummaryId = 'p4-conditions-summary'
            only the conditions, decision date and deciding officer; the rest has
            no column yet, so it survives in this browser alone. An officer must
            know that before relying on it from another machine. -->
-      <div class="p4-alert warn p4-pad" role="note">
+      <div class="p4-alert info p4-pad" role="note">
         <Info :size="15" aria-hidden="true" />
         <div>
-          <strong>Only part of this section is held by the council.</strong>
+          <strong>This section is the council's record.</strong>
           <p>
-            The conditions, decision date and deciding officer are saved to the case
-            record. The permit number, use class, permitted development, commencement
-            period, decision authority and Annexure&nbsp;7 notes are held in
-            <em>this browser only</em> until the permit record is added to the
-            database — they will not appear on another machine.
+            What you enter here is saved on the permit and shows on any machine.
+            Once the permit is issued its number, class, description, period and
+            notes are locked. The decision authority is set by the system from what
+            the decision rested on; it is not typed.
           </p>
         </div>
       </div>
@@ -392,8 +369,8 @@ const conditionsSummaryId = 'p4-conditions-summary'
 
         <label>
           <span>Decision authority</span>
-          <input v-model="current.permit.decisionAuthority" :readonly="readonly"
-                 placeholder="Committee resolution, or named delegated authority" @change="save" />
+          <input :value="current.permit.decisionAuthority || 'Recorded when the decision is made'" readonly aria-readonly="true" />
+          <span class="p4-hint">Set by the system from what the decision rested on.</span>
         </label>
 
         <label>
@@ -567,6 +544,7 @@ const conditionsSummaryId = 'p4-conditions-summary'
         {{ readonly ? 'Download permit' : 'Download draft' }}
       </button>
     </div>
+    </details>
   </div>
 
   <p v-else class="p4-nocase">No case is open.</p>
@@ -673,7 +651,14 @@ const conditionsSummaryId = 'p4-conditions-summary'
 .p4-alert.bad  { background:var(--sw-red-bg); color:var(--sw-red); border-color:var(--ent-tone-negative-line); }
 .p4-alert.warn { background:var(--sw-amber-bg); color:var(--sw-amber-text);
   border-color:var(--sw-amber-border); margin-bottom:0.6rem; }
+.p4-alert.info { background:var(--sw-surface-3); color:var(--sw-text-2); border-color:var(--ent-line); margin-bottom:0.6rem; }
 .p4-alert > div { flex:1; min-width:0; }
+.p4-gate { padding:0.8rem 1rem; border:1px solid var(--sw-amber-border); background:var(--sw-amber-bg); color:var(--sw-amber-text);
+  border-radius:var(--sw-radius-sm); margin:0.6rem 0; font-size:0.8rem; }
+.p4-gate h3 { margin:0 0 0.3rem; font-size:0.9rem; }
+.p4-gate p { margin:0 0 0.4rem; }
+.p4-gate ul { margin:0; padding-left:1.1rem; display:grid; gap:0.25rem; }
+.p4-draft > summary { cursor:pointer; padding:0.55rem 0.2rem; font-size:0.8rem; font-weight:600; color:var(--sw-text-2); }
 
 .p4-confirm { padding:0 0.8rem 0.85rem; }
 .p4-confirm label { display:flex; gap:0.5rem; align-items:flex-start;
@@ -698,17 +683,6 @@ const conditionsSummaryId = 'p4-conditions-summary'
 .p4-issued-note { display:flex; align-items:flex-start; gap:0.35rem; margin:0;
   font-size:0.73rem; font-weight:600; color:var(--sw-green); max-width:38rem; line-height:1.5; }
 .p4-issued-note svg { flex-shrink:0; margin-top:0.15rem; }
-
-/* Unverified-prerequisite override */
-.p4-override { border-color:var(--sw-amber-border); }
-.p4-override > header { background:var(--sw-amber-bg); border-color:var(--sw-amber-border); }
-.p4-override > header h3 { color:var(--sw-amber-text); }
-.p4-override-body { padding-top:0.6rem; padding-bottom:0.2rem; }
-.p4-override-lead { margin:0; font-size:0.74rem; font-weight:600; color:var(--sw-text); }
-.p4-override-list { margin:0.35rem 0 0.5rem; padding-left:1.1rem;
-  font-size:0.72rem; line-height:1.5; color:var(--sw-text-2); }
-.p4-override-label { display:block; margin:0.5rem 0 0.2rem;
-  font-size:0.68rem; font-weight:600; color:var(--sw-text-2); }
 
 .p4-btn--inline { align-self:flex-start; margin-top:0.3rem; }
 .p4-btn--inline:disabled { opacity:0.5; cursor:not-allowed; }

@@ -22,8 +22,12 @@ import { useOrProvidePlannerCase } from '@/composables/usePlannerCase'
 import { useEoNav } from './useEoNav'
 import { useEoPreferences } from './useEoPreferences'
 import { caseClock } from './console'
+import { eoWorkflowApi, type CaseLane } from '@/services/eoWorkflow'
+import { caseStep, nextDate } from './caseSteps'
 
 const permit = ref<PermitApplication | null>(null)
+/** The council's workflow position for the open case: lane, dates, what stands in the way. Best effort: the case opens without it. */
+const lane = ref<CaseLane | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 
@@ -42,6 +46,7 @@ export function useEoCase() {
   async function load(id: string | null, force = false): Promise<void> {
     if (!id) {
       permit.value = null
+      lane.value = null
       loadedId = null
       error.value = null
       return
@@ -53,6 +58,7 @@ export function useEoCase() {
       const p = await dmApi.getPermit(id)
       permit.value = p
       loadedId = id
+      lane.value = await eoWorkflowApi.lane(id).catch(() => null)
       // Mirror into the planner case file the step components read. It reads
       // the same permit again, which is one extra request on opening a case
       // and the price of not keeping two ideas of "the open case".
@@ -88,8 +94,20 @@ export function useEoCase() {
     caseClock(permit.value?.acknowledged_at ?? null, prefs.value.clockWarningDays, Date.now(),
       (permit.value as { development_type?: string | null } | null)?.development_type))
 
+  /** Where the case is on its road, and the next date to work to. */
+  const step = computed(() => caseStep({
+    status: permit.value?.status ?? '',
+    committeeResolved: !!lane.value?.committee && lane.value.committee.outcome !== 'deferred' && lane.value.committee.outcome !== 'noted',
+    notified: !!permit.value?.notification_date,
+    acknowledged: !!permit.value?.acknowledged_at,
+  }))
+  const upcoming = computed(() => nextDate(lane.value?.milestones, new Date().toISOString().slice(0, 10)))
+
   return {
     permit,
+    lane,
+    step,
+    upcoming,
     loading,
     error,
     caseId: nav.caseId,

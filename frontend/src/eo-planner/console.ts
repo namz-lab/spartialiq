@@ -41,19 +41,20 @@ export const SECTION_KEYS = [
   'dashboard', 'register', 'intake', 'diligence', 'notification',
   'circulation', 'committee', 'decision',
   // Records — registers the EO keeps, which outlive any single application.
-  'permits', 'enforcement', 'appeals', 'plans',
+  'permits', 'enforcement', 'appeals', 'plans', 'workflow',
   // Office
   'reports', 'matrix', 'reference', 'settings',
 ] as const
 
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
-export type SectionGroup = 'casework' | 'records' | 'office'
+/** casework: the EO's own steps. prepared: what the planner and the clerk prepare for the EO. records: what the council keeps. office: periodic work and reference. */
+export type SectionGroup = 'casework' | 'prepared' | 'records' | 'office'
 
 export const SECTION_GROUP: Readonly<Record<SectionKey, SectionGroup>> = Object.freeze({
-  dashboard: 'casework', register: 'casework', intake: 'casework', diligence: 'casework',
-  notification: 'casework', circulation: 'casework', committee: 'casework', decision: 'casework',
-  permits: 'records', enforcement: 'records', appeals: 'records', plans: 'records',
+  dashboard: 'casework', register: 'casework', committee: 'casework', decision: 'casework', permits: 'casework',
+  intake: 'prepared', diligence: 'prepared', notification: 'prepared', circulation: 'prepared',
+  enforcement: 'records', appeals: 'records', plans: 'records', workflow: 'records',
   reports: 'office', matrix: 'office', reference: 'office', settings: 'office',
 })
 

@@ -95,11 +95,16 @@ const summary = computed(() => {
       </tbody>
     </table>
 
-    <p class="rp-note">
-      These checks read the council's own records and are shown to help you.
-      Only the items marked <strong>enforced</strong> are independently re-checked
-      by the server when you issue.
-    </p>
+    <details class="rp-legend">
+      <summary>What these words mean</summary>
+      <dl>
+        <dt>Complete</dt><dd>The council's record shows it is done.</dd>
+        <dt>Outstanding</dt><dd>It is not done, and it stands in the way.</dd>
+        <dt>Not verified</dt><dd>The record needed to tell could not be read, so nothing is known. It is not evidence that the step was done, and it also stands in the way.</dd>
+        <dt>Not applicable</dt><dd>It does not apply to this case, for example no objections were lodged.</dd>
+        <dt>enforced</dt><dd>The server re-checks it when the decision is made. The unmarked rows are shown to help you.</dd>
+      </dl>
+    </details>
   </section>
 </template>
 
@@ -162,6 +167,11 @@ const summary = computed(() => {
 .rp-status.na      { background:var(--sw-surface-3); color:var(--sw-muted);      border-color:var(--sw-border-soft); }
 .rp-status.unknown { background:var(--sw-amber-bg);  color:var(--sw-amber-text); border-color:var(--sw-amber-border); }
 
+.rp-legend { margin-top:0.5rem; font-size:0.72rem; color:var(--sw-text-2); }
+.rp-legend summary { cursor:pointer; font-weight:600; }
+.rp-legend dl { display:grid; grid-template-columns:max-content 1fr; gap:0.2rem 0.8rem; margin:0.4rem 0 0; }
+.rp-legend dt { font-weight:600; }
+.rp-legend dd { margin:0; }
 .rp-note { margin:0; padding:0.5rem 0.8rem; font-size:0.68rem; line-height:1.5;
   color:var(--sw-muted); background:var(--sw-surface-2);
   border-top:1px solid var(--sw-border-soft); }

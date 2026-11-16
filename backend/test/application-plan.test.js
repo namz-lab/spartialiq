@@ -8,10 +8,11 @@
 const { buildAppForTest } = require('./helpers/buildApp')
 const { systemOf } = require('../src/lib/dbContext')
 const { loginAs } = require('./helpers/auth')
+const { answerChecks } = require('./helpers/statutoryChecks')
 const { suspendAffirmation } = require('./helpers/proposedCells')
 
 describe('applications and the plan', () => {
-  let app, eo, planner, sys, restoreAffirmation
+  let app, eo, admin, planner, sys, restoreAffirmation
   const permits = []
   let eoStand, proposedStand            // a stand governed by an EO column, and one by a PROPOSED column
 
@@ -21,6 +22,7 @@ describe('applications and the plan', () => {
     // the EO's pending decisions may be affirmed for testing; these tests pin the behaviour of a PROPOSED rule, so put the proposals back for the length of the file
     restoreAffirmation = await suspendAffirmation(sys)
     eo = await loginAs(app, 'demo.eo@vungu.test', 'demo1234')
+    admin = await loginAs(app, 'demo.admin@vungu.test', 'demo1234')
     planner = await loginAs(app, 'demo.planner@vungu.test', 'demo1234')
     const pick = async (zone) => (await sys.query(
       `SELECT p.stand_no FROM public.parcel_zoning pz
@@ -57,12 +59,17 @@ describe('applications and the plan', () => {
         const r = await app.inject({ method: 'PATCH', url: `/api/permit-applications/${id}/status`, headers: auth(planner), payload: { status: step, expectedRevision: rev } })
         rev = r.json().data.revision
       }
+      const chk = await app.inject({ method: 'POST', url: `/api/permit-applications/${id}/direction-check`, headers: auth(eo) })
+      expect(chk.statusCode).toBe(200)
+      await answerChecks(app, eo, id)
     }
     return id
   }
   const assess = (id, use) => app.inject({ method: 'POST', url: `/api/permit-applications/${id}/rule-snapshot`, headers: auth(planner), payload: { land_use_code: use } })
-  const decide = (id, payload) => app.inject({ method: 'POST', url: `/api/permit-applications/${id}/eo-decision`, headers: auth(eo),
-    payload: { delegated_authority: 'Decided under delegated authority for this test.', ...payload } })
+  // These tests pin the PLAN's gate. The authority for a decision is not what they are about, so an administrator's written override stands in for it
+  // (the switches the delegated lane needs are shared state, and are tested in committee-gate.test.js).
+  const decide = (id, payload) => app.inject({ method: 'POST', url: `/api/permit-applications/${id}/eo-decision`, headers: auth(admin),
+    payload: { override: true, override_reason: 'Test: the plan gate is under test, not the decision authority.', ...payload } })
   const events = async (id) => (await sys.query('SELECT event_type, detail FROM spatial_planning.permit_event WHERE permit_app_id = $1 ORDER BY created_at', [id])).rows
 
   test('an application for a real stand number is linked to the parcel and lodged under the plan', async () => {

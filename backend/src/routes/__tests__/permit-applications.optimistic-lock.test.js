@@ -105,7 +105,7 @@ describe('permit-applications optimistic locking (migration 097)', () => {
       const stale = await app.inject({
         method: 'PATCH', url: `/api/permit-applications/${seed.id}/status`,
         headers: { authorization: `Bearer ${planner}` },
-        payload: { status: 'under_review', expectedRevision: seed.revision - 1 },
+        payload: { status: 'acknowledged', expectedRevision: seed.revision - 1 },   // a lawful move from registered, so only the stale revision is wrong
       })
       // seed.revision is 0 for a freshly-created row, so revision - 1 = -1
       // never matches; this exercises the same 409 path as a real race.

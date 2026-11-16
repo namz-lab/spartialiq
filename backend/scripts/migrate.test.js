@@ -209,6 +209,9 @@ describe('migration plan', () => {
       '236_plan_feature_tile_views.sql',
       '237_targeted_farms_retained_zones.sql',
       '238_account_coverage_counts_stands.sql',
+      '239_eo_workflow_controls.sql',
+      '240_permit_record_fields.sql',
+      '241_statutory_checks_and_objection_steps.sql',
     ])
 
     for (const filename of MIGRATIONS) {
