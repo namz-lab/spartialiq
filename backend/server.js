@@ -874,8 +874,34 @@ async function build() {
     console.log(server.printRoutes())
   }
 
+  // Hosted demo: the built Vue app sits next to the API. Real files are
+  // served; any other page URL returns the app shell so the router can open it.
+  const publicDir = process.env.PUBLIC_DIR
+    ? require('path').resolve(process.env.PUBLIC_DIR)
+    : ''
+  if (publicDir) {
+    await server.register(require('@fastify/static'), {
+      root: publicDir,
+      prefix: '/',
+      decorateReply: false,
+      index: 'index.html',
+    })
+  }
+
   // 404 handler
   server.setNotFoundHandler(async (request, reply) => {
+    const pagePath = String(request.url || '').split('?')[0]
+    if (
+      publicDir &&
+      request.method === 'GET' &&
+      !pagePath.startsWith('/api') &&
+      !pagePath.startsWith('/uploads')
+    ) {
+      try {
+        const html = require('node:fs').readFileSync(require('path').join(publicDir, 'index.html'))
+        return reply.type('text/html; charset=utf-8').send(html)
+      } catch { /* no shell yet */ }
+    }
     reply.status(404).send({
       error: 'Not Found',
       message: `Route ${request.method} ${request.url} not found`,
