@@ -811,7 +811,7 @@ const deemed = computed(() =>
             </section>
 
             <!-- The lane, the committee, the clock, the directions and the referrals (working workflow) -->
-            <WorkflowGatePanel :permit-id="selectedId" />
+            <WorkflowGatePanel :permit-id="selectedId" @changed="eoCase.reload()" />
 
             <!-- Decision notes + actions -->
             <section class="eodr-card eodr-decide">

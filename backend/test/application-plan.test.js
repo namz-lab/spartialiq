@@ -8,6 +8,7 @@
 const { buildAppForTest } = require('./helpers/buildApp')
 const { systemOf } = require('../src/lib/dbContext')
 const { loginAs } = require('./helpers/auth')
+const { answerChecks } = require('./helpers/statutoryChecks')
 const { suspendAffirmation } = require('./helpers/proposedCells')
 
 describe('applications and the plan', () => {
@@ -60,6 +61,7 @@ describe('applications and the plan', () => {
       }
       const chk = await app.inject({ method: 'POST', url: `/api/permit-applications/${id}/direction-check`, headers: auth(eo) })
       expect(chk.statusCode).toBe(200)
+      await answerChecks(app, eo, id)
     }
     return id
   }

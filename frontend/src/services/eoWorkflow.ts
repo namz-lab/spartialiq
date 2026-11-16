@@ -27,7 +27,23 @@ export interface CaseLane {
   binding_directions: { id: string; reference: string | null; section: string; summary: string }[]
   committee: { outcome: string; resolution: string; heard_at: string | null } | null
   switches: Record<string, boolean>
+  /** The dates to work to. Null until the case is acknowledged. */
+  milestones: { ask_extension_by: string; resolve_by: string; deemed_on: string } | null
+  /** The questions the Act makes the council ask of every application, with the EO's answer (null = unanswered). */
+  checks: StatutoryCheck[]
+  checks_unanswered: string[]
+  /** "Yes" answers whose referral has not been sent, or has not been answered. */
+  referrals_waiting: { key: string; why: string; body: string }[]
+  notice_required: boolean
+  notice_missing: string[]
+  objection_problems: string[]
+  /** Copies the Act requires after a permit is issued, and whether each is recorded in the referral log. */
+  copies_due: { key: string; body: string; section: string; recorded: boolean }[]
 }
+
+export interface StatutoryCheck { key: string; label: string; section: string; referral_body: string | null; answer: boolean | null }
+
+export type StatutoryKey = 'road' | 'aviation' | 'neighbouring' | 'agriculture' | 'registrar' | 'surveyor_general'
 
 export type ReferralKind = 'department' | 'minister' | 'statutory' | 'other'
 export type ReferralTier = 'mandatory' | 'precautionary' | 'routine'
@@ -40,6 +56,7 @@ export interface Referral {
   tier: ReferralTier
   body: string
   legal_basis: string | null
+  statutory_key?: StatutoryKey | null
   question: string
   sent_on: string
   reply_by: string | null
@@ -75,6 +92,15 @@ export const eoWorkflowApi = {
   async recordDirectionCheck(permitId: string): Promise<void> {
     await api.post(`/permit-applications/${encodeURIComponent(permitId)}/direction-check`)
   },
+  async recordStatutoryChecks(permitId: string, answers: Record<string, boolean>): Promise<void> {
+    await api.post(`/permit-applications/${encodeURIComponent(permitId)}/statutory-checks`, { answers })
+  },
+  async putObjectionToApplicant(objectionId: string): Promise<void> {
+    await api.patch(`/objections/${encodeURIComponent(objectionId)}/put-to-applicant`)
+  },
+  async recordApplicantComment(objectionId: string, comment: string): Promise<void> {
+    await api.patch(`/objections/${encodeURIComponent(objectionId)}/applicant-comment`, { comment })
+  },
   async recordExtension(permitId: string, extension_until: string, evidence: string): Promise<void> {
     await api.post(`/permit-applications/${encodeURIComponent(permitId)}/extension`, { extension_until, evidence })
   },
@@ -83,7 +109,7 @@ export const eoWorkflowApi = {
   },
   async createReferral(body: {
     permit_app_id?: string | null; topic?: string; kind: ReferralKind; tier: ReferralTier
-    body: string; legal_basis?: string; question: string; reply_by?: string
+    body: string; legal_basis?: string; question: string; reply_by?: string; statutory_key?: StatutoryKey
   }): Promise<Referral> { return data(await api.post('/eo-workflow/referrals', body)) },
   async answerReferral(id: string, body: { advice?: string; no_reply?: boolean; council_action?: string }): Promise<Referral> {
     return data(await api.patch(`/eo-workflow/referrals/${encodeURIComponent(id)}`, body))

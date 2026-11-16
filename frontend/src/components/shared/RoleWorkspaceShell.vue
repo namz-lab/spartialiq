@@ -48,6 +48,9 @@ const props = withDefaults(defineProps<{
   avatarKey: string
   mapLabel?: string
   consoleLabel?: string
+  /** What each pane is for, shown as a tooltip and read out by screen readers. */
+  mapHint?: string
+  consoleHint?: string
   /** Which pane to show first. Console is the field default for inspectors. */
   initialPane?: Pane
   /**
@@ -114,12 +117,12 @@ defineExpose({ showMap, showConsole })
 
       <div class="rw-switch" role="tablist" :aria-label="`${props.title} view`">
         <button role="tab" type="button" :aria-selected="activePane === 'map'"
-                :class="{ active: activePane === 'map' }" @click="showMap">
+                :class="{ active: activePane === 'map' }" :title="props.mapHint" :aria-label="props.mapHint ? `${props.mapLabel}: ${props.mapHint}` : undefined" @click="showMap">
           <MapIcon :size="14" aria-hidden="true" />
           <span :class="isMobile ? 'ent-sr-only' : 'rw-switch-label'">{{ props.mapLabel }}</span>
         </button>
         <button role="tab" type="button" :aria-selected="activePane === 'console'"
-                :class="{ active: activePane === 'console' }" @click="showConsole">
+                :class="{ active: activePane === 'console' }" :title="props.consoleHint" :aria-label="props.consoleHint ? `${props.consoleLabel}: ${props.consoleHint}` : undefined" @click="showConsole">
           <LayoutGrid :size="14" aria-hidden="true" />
           <span :class="isMobile ? 'ent-sr-only' : 'rw-switch-label'">{{ props.consoleLabel }}</span>
         </button>

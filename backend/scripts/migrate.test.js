@@ -211,6 +211,7 @@ describe('migration plan', () => {
       '238_account_coverage_counts_stands.sql',
       '239_eo_workflow_controls.sql',
       '240_permit_record_fields.sql',
+      '241_statutory_checks_and_objection_steps.sql',
     ])
 
     for (const filename of MIGRATIONS) {

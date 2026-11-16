@@ -252,42 +252,6 @@ const conditionsSummaryId = 'p4-conditions-summary'
       @refresh="issuance.refresh()"
     />
 
-    <!-- A missing record is not proof a step was done — it is proof nothing is
-         known. Since the server does not gate on these, issuing anyway must be
-         a deliberate, recorded act rather than a silent one. -->
-    <section v-if="issuance.overrideRequired.value && !readonly"
-             class="p4-card p4-override" aria-labelledby="p4-override-h">
-      <header><h3 id="p4-override-h">Unverified prerequisites</h3></header>
-      <div class="p4-pad p4-override-body">
-        <p class="p4-override-lead">
-          {{ issuance.unknowns.value.length }} statutory requirement(s) could not be
-          verified from the council's records:
-        </p>
-        <ul class="p4-override-list">
-          <li v-for="u in issuance.unknowns.value" :key="u.id">
-            <strong>{{ u.label }}</strong> — {{ u.detail }}
-          </li>
-        </ul>
-        <p class="p4-hint">
-          The preferred action is to complete the missing record. If you nevertheless
-          have grounds to issue, state them: your justification is sent with the
-          determination and stored on the case audit trail.
-        </p>
-        <label class="p4-override-label" for="p4-override-reason">
-          Justification for issuing without these records
-        </label>
-        <textarea id="p4-override-reason" v-model="issuance.overrideReason.value"
-                  class="p4-notes" rows="3"
-                  :aria-invalid="!issuance.overrideValid.value"
-                  aria-describedby="p4-override-count"
-                  placeholder="e.g. Objection period closed and verified on the paper file dated …" />
-        <p id="p4-override-count" class="p4-hint">
-          {{ issuance.overrideReason.value.trim().length }} / 30 characters minimum.
-          <span v-if="issuance.overrideValid.value"> Recorded with the determination.</span>
-        </p>
-      </div>
-    </section>
-
     <!-- Reasons first: what stands in the way of this permit, before the form. -->
     <section v-if="standingInTheWay.length" class="p4-gate" aria-labelledby="p4-gate-h" data-testid="permit-gate">
       <h3 id="p4-gate-h">This permit cannot be issued yet</h3>
@@ -719,17 +683,6 @@ const conditionsSummaryId = 'p4-conditions-summary'
 .p4-issued-note { display:flex; align-items:flex-start; gap:0.35rem; margin:0;
   font-size:0.73rem; font-weight:600; color:var(--sw-green); max-width:38rem; line-height:1.5; }
 .p4-issued-note svg { flex-shrink:0; margin-top:0.15rem; }
-
-/* Unverified-prerequisite override */
-.p4-override { border-color:var(--sw-amber-border); }
-.p4-override > header { background:var(--sw-amber-bg); border-color:var(--sw-amber-border); }
-.p4-override > header h3 { color:var(--sw-amber-text); }
-.p4-override-body { padding-top:0.6rem; padding-bottom:0.2rem; }
-.p4-override-lead { margin:0; font-size:0.74rem; font-weight:600; color:var(--sw-text); }
-.p4-override-list { margin:0.35rem 0 0.5rem; padding-left:1.1rem;
-  font-size:0.72rem; line-height:1.5; color:var(--sw-text-2); }
-.p4-override-label { display:block; margin:0.5rem 0 0.2rem;
-  font-size:0.68rem; font-weight:600; color:var(--sw-text-2); }
 
 .p4-btn--inline { align-self:flex-start; margin-top:0.3rem; }
 .p4-btn--inline:disabled { opacity:0.5; cursor:not-allowed; }

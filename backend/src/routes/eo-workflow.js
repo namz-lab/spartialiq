@@ -92,9 +92,23 @@ async function eoWorkflowRoutes(fastify) {
     const resolution = await eoWorkflow.latestResolution(q, request.params.id)
     const lane = eoWorkflow.laneOf({ devType: c.development_type, classification: c.classification, objectionCount: c.objection_count, directionApplies: binding.length > 0 }, sw)
     const latestDirection = directions.reduce((m, d) => (d.created_at > m ? d.created_at : m), null)
+    const refs = await eoWorkflow.statutoryReferrals(q, request.params.id)
+    const st = eoWorkflow.checkState({ devType: c.development_type, classification: c.classification, answers: c.statutory_checks }, refs)
+    const notice = st.noticeRequired ? await eoWorkflow.noticeComplete(q, request.params.id) : null
+    const objections = await eoWorkflow.objectionState(q, request.params.id)
+    const sent = new Set((await q.query(
+      `SELECT statutory_key FROM spatial_planning.case_referral WHERE permit_app_id = $1 AND deleted_at IS NULL AND statutory_key IS NOT NULL`, [request.params.id])).rows.map((r) => r.statutory_key))
     return reply.send({
       success: true,
       data: {
+        milestones: c.deemed_on ? { ask_extension_by: c.ask_extension_by, resolve_by: c.resolve_by, deemed_on: c.deemed_on } : null,
+        checks: st.keys.map((k) => ({ key: k, label: eoWorkflow.CHECKS[k].label, section: eoWorkflow.CHECKS[k].section, referral_body: eoWorkflow.CHECKS[k].body, answer: typeof (c.statutory_checks || {})[k] === 'boolean' ? c.statutory_checks[k] : null })),
+        checks_unanswered: st.unanswered,
+        referrals_waiting: st.waiting,
+        notice_required: st.noticeRequired,
+        notice_missing: notice ? notice.missing : [],
+        objection_problems: objections.problems,
+        copies_due: eoWorkflow.copiesDue({ devType: c.development_type, answers: c.statutory_checks }).map((x) => ({ ...x, recorded: sent.has(x.key) })),
         lane: lane.lane, open: lane.open, reasons: lane.reasons,
         deemed_on: c.deemed_on, extension_until: c.extension_until_text, acknowledged_at: c.acknowledged_at,
         direction_checked_at: c.direction_checked_at,
@@ -139,6 +153,50 @@ async function eoWorkflowRoutes(fastify) {
     return reply.send({ success: true, data: rows[0] })
   })
 
+  // ── the statutory checks (the questions the Act makes the council ask) ───────────────────
+  fastify.post('/permit-applications/:id/statutory-checks', { preHandler: requireRole(fastify, ['eo', 'planner', 'admin']) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return bad(reply, 'bad_id')
+    const a = (request.body || {}).answers
+    if (!a || typeof a !== 'object') return bad(reply, 'bad_request', 'Send the answers as { key: true | false }.')
+    const clean = {}
+    for (const [k, v] of Object.entries(a)) {
+      if (!eoWorkflow.CHECKS[k]) return bad(reply, 'bad_check', 'Unknown question: ' + k)
+      if (typeof v !== 'boolean') return bad(reply, 'bad_answer', 'Each answer is yes or no (true or false): ' + k)
+      clean[k] = v
+    }
+    const { rows } = await db(request).query(
+      `UPDATE spatial_planning.permit_application
+          SET statutory_checks = statutory_checks || $2::jsonb, statutory_checks_at = now(), statutory_checks_by = $3, updated_at = now()
+        WHERE id = $1 RETURNING id, statutory_checks`, [request.params.id, JSON.stringify(clean), request.user.id])
+    if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    await logEvent(request.params.id, 'statutory_checks_recorded', request, { answers: clean })
+    return reply.send({ success: true, data: rows[0] })
+  })
+
+  // ── the objection steps: put to the applicant, and the applicant's comment ───────────────
+  const OBJECTION_STAFF = ['eo', 'planner', 'planning_clerk', 'admin']
+  fastify.patch('/objections/:oid/put-to-applicant', { preHandler: requireRole(fastify, OBJECTION_STAFF) }, async (request, reply) => {
+    if (!isUuid(request.params.oid)) return bad(reply, 'bad_id')
+    const { rows } = await db(request).query(
+      `UPDATE spatial_planning.application_objection SET put_to_applicant_on = COALESCE(put_to_applicant_on, CURRENT_DATE)
+        WHERE id = $1 RETURNING id, permit_app_id, put_to_applicant_on, to_char(put_to_applicant_on + 14, 'YYYY-MM-DD') AS comment_due`, [request.params.oid])
+    if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
+    await logEvent(rows[0].permit_app_id, 'objection_put_to_applicant', request, { objection_id: rows[0].id })
+    return reply.send({ success: true, data: rows[0] })
+  })
+
+  fastify.patch('/objections/:oid/applicant-comment', { preHandler: requireRole(fastify, OBJECTION_STAFF) }, async (request, reply) => {
+    if (!isUuid(request.params.oid)) return bad(reply, 'bad_id')
+    const comment = text((request.body || {}).comment, 8000)
+    if (!comment) return bad(reply, 'comment_required', 'Record what the applicant said.')
+    const { rows } = await db(request).query(
+      `UPDATE spatial_planning.application_objection SET applicant_comment = $2, applicant_commented_on = CURRENT_DATE
+        WHERE id = $1 AND put_to_applicant_on IS NOT NULL RETURNING id, permit_app_id, applicant_commented_on`, [request.params.oid, comment])
+    if (!rows[0]) return reply.code(409).send({ success: false, error: 'not_put_to_applicant', message: 'The objection has not been put to the applicant yet.' })
+    await logEvent(rows[0].permit_app_id, 'applicant_commented', request, { objection_id: rows[0].id })
+    return reply.send({ success: true, data: rows[0] })
+  })
+
   // ── the referral log ─────────────────────────────────────────────────────────────────────
   fastify.get('/eo-workflow/referrals', { preHandler: requireRole(fastify, STAFF) }, async (request, reply) => {
     const { permit, open } = request.query || {}
@@ -160,16 +218,20 @@ async function eoWorkflowRoutes(fastify) {
     const body = text(b.body, 300), question = text(b.question)
     if (!kind || !tier || !body || !question) return bad(reply, 'bad_request', 'A referral needs a kind, the body it goes to, and the question.')
     if (b.permit_app_id !== undefined && b.permit_app_id !== null && !isUuid(b.permit_app_id)) return bad(reply, 'bad_id')
+    const KEYS = ['road', 'aviation', 'neighbouring', 'agriculture', 'registrar', 'surveyor_general']
+    const statutoryKey = b.statutory_key === undefined || b.statutory_key === null ? null : (KEYS.includes(b.statutory_key) ? b.statutory_key : false)
+    if (statutoryKey === false) return bad(reply, 'bad_request', 'statutory_key must be one of ' + KEYS.join(', ') + '.')
+    if (statutoryKey && !b.permit_app_id) return bad(reply, 'bad_request', 'A statutory referral belongs to a case.')
     const topic = text(b.topic, 300)
     if (!b.permit_app_id && !topic) return bad(reply, 'bad_request', 'Say which case it is about, or the topic.')
     // the reply-by date: given, or 21 days after sending (the working workflow's proposed figure)
     const sent = isDate(b.sent_on) ? b.sent_on : null
     const { rows } = await db(request).query(
       `INSERT INTO spatial_planning.case_referral
-         (permit_app_id, topic, kind, tier, body, legal_basis, question, sent_on, reply_by, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8::date, CURRENT_DATE), COALESCE($9::date, COALESCE($8::date, CURRENT_DATE) + 21), $10)
+         (permit_app_id, topic, kind, tier, body, legal_basis, question, sent_on, reply_by, created_by, statutory_key)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8::date, CURRENT_DATE), COALESCE($9::date, COALESCE($8::date, CURRENT_DATE) + 21), $10, $11)
        RETURNING *`,
-      [b.permit_app_id || null, topic, kind, tier, body, text(b.legal_basis, 300), question, sent, isDate(b.reply_by) ? b.reply_by : null, request.user.id])
+      [b.permit_app_id || null, topic, kind, tier, body, text(b.legal_basis, 300), question, sent, isDate(b.reply_by) ? b.reply_by : null, request.user.id, statutoryKey])
     if (rows[0].permit_app_id) await logEvent(rows[0].permit_app_id, 'referral_sent', request, { referral_id: rows[0].id, kind, body, tier })
     return reply.code(201).send({ success: true, data: rows[0] })
   })

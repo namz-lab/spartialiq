@@ -49,6 +49,8 @@ import { useEoPreferences } from '@/eo-planner/useEoPreferences'
 import { useEoWorkload } from '@/eo-planner/useEoWorkload'
 import { useEoCase } from '@/eo-planner/useEoCase'
 import { SECTION_GROUP, isCaseSection, type SectionKey } from '@/eo-planner/console'
+import { CASE_STEPS } from '@/eo-planner/caseSteps'
+import { LANE_LABEL } from '@/services/eoWorkflow'
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import UiBottomNav, { type BottomNavItem } from '@/components/ui/UiBottomNav.vue'
 import UiSheet from '@/components/ui/UiSheet.vue'
@@ -103,6 +105,12 @@ const SECTIONS: readonly Omit<Section, 'badge'>[] = [
     desc: 'The clock, the queues and what needs you today' },
   { key: 'register',     label: 'Applications',     short: 'Register', icon: Library,
     desc: 'The development register — every application, searchable' },
+  { key: 'committee',    label: 'Committee',        short: 'Committee', icon: Users,
+    desc: 'Sittings, agendas, quorum and the report to members' },
+  { key: 'decision',     label: 'Determination',    short: 'Decide',   icon: Gavel,
+    desc: 'Approve, approve with conditions, refuse, return or ask' },
+  { key: 'permits',      label: 'Permits',          short: 'Permits',  icon: FileCheck2,
+    desc: 'Drafting, the permit register and occupation certificates' },
   { key: 'intake',       label: 'Intake review',    short: 'Intake',   icon: Inbox,
     desc: 'Completeness, land rights and the acknowledgement that starts the three-month clock' },
   { key: 'diligence',    label: 'Due diligence',    short: 'Assess',   icon: FileSearch,
@@ -111,12 +119,6 @@ const SECTIONS: readonly Omit<Section, 'badge'>[] = [
     desc: 'Section 26(3) advert, abutting owners and objections' },
   { key: 'circulation',  label: 'Circulation',      short: 'Circulate', icon: Send,
     desc: 'Referrals to health, survey, engineering, fire and the rest' },
-  { key: 'committee',    label: 'Committee',        short: 'Committee', icon: Users,
-    desc: 'Sittings, agendas, quorum and the report to members' },
-  { key: 'decision',     label: 'Determination',    short: 'Decide',   icon: Gavel,
-    desc: 'Approve, approve with conditions, refuse, return or ask' },
-  { key: 'permits',      label: 'Permits',          short: 'Permits',  icon: FileCheck2,
-    desc: 'Drafting, the permit register and occupation certificates' },
   { key: 'enforcement',  label: 'Enforcement',      short: 'Enforce',  icon: ShieldAlert,
     desc: 'Stop-work and prohibition orders, and compliance' },
   { key: 'appeals',      label: 'Appeals',          short: 'Appeals',  icon: Scale,
@@ -136,13 +138,18 @@ const SECTIONS: readonly Omit<Section, 'badge'>[] = [
 ]
 
 const GROUP_LABEL: Record<string, string> = {
-  casework: 'Casework', records: 'Registers', office: 'Office',
+  casework: 'Your cases', prepared: 'Prepared for you', records: 'Registers', office: 'Office',
 }
+
+// What the planner and the clerk prepare is folded away until it is wanted: it is not the EO's step, and seventeen entries in one list hide the ones that are.
+const preparedOpen = ref(false)
+const railSections = computed(() => sections.value.filter(s =>
+  SECTION_GROUP[s.key] !== 'prepared' || preparedOpen.value || SECTION_GROUP[activeSection.value] === 'prepared'))
 
 // Bottom bar order: the four that move a case day to day, then the rest
 // behind More. A fifteen-slot bar would give each item 25px.
 const MOBILE_ORDER: SectionKey[] = [
-  'dashboard', 'decision', 'register', 'intake',
+  'dashboard', 'register', 'committee', 'decision',
   'diligence', 'notification', 'circulation', 'committee', 'permits',
   'enforcement', 'appeals', 'plans', 'workflow', 'reports', 'matrix', 'reference', 'settings',
 ]
@@ -154,6 +161,7 @@ const mobileSections = computed<Section[]>(() =>
   MOBILE_ORDER.map(k => sections.value.find(s => s.key === k)!).filter(Boolean))
 
 const activeSection = nav.section
+const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 const activeMeta = computed(() =>
   sections.value.find(s => s.key === activeSection.value) ?? sections.value[0])
 
@@ -367,16 +375,33 @@ function handleLogout() {
       </template>
     </div>
 
+    <!-- Where the case is on its road, who has it, and the next date to work to. -->
+    <div v-if="eoCase.permit.value" class="eo-caseroad" data-testid="case-road">
+      <ol class="eo-road" aria-label="Steps of this case">
+        <li v-for="(st, i) in CASE_STEPS" :key="st.key" :class="{ done: i < eoCase.step.value.index && !eoCase.step.value.skipped.includes(st.key), skipped: eoCase.step.value.skipped.includes(st.key), now: i === eoCase.step.value.index }"
+            :aria-current="i === eoCase.step.value.index ? 'step' : undefined" :title="st.label + ' (' + st.owner + ')'">
+          <span class="eo-road-dot" aria-hidden="true"></span><span class="eo-road-label">{{ st.label }}</span>
+        </li>
+      </ol>
+      <p class="eo-road-now">
+        <strong>{{ eoCase.step.value.current ? 'At: ' + eoCase.step.value.current.label : (eoCase.step.value.note ?? 'Not started') }}</strong>
+        <template v-if="eoCase.step.value.current && eoCase.step.value.note"> ({{ eoCase.step.value.note }})</template>
+        <template v-if="eoCase.step.value.next"> · Next: {{ eoCase.step.value.next.label }} ({{ eoCase.step.value.next.owner }})</template>
+        <template v-if="eoCase.lane.value"> · <abbr :title="LANE_LABEL[eoCase.lane.value.lane]">Lane {{ eoCase.lane.value.lane }}</abbr><template v-if="!eoCase.lane.value.open">, closed to the EO</template></template>
+        <template v-if="eoCase.upcoming.value"> · {{ eoCase.upcoming.value.label }} {{ fmtDay(eoCase.upcoming.value.date) }} ({{ eoCase.upcoming.value.days < 0 ? Math.abs(eoCase.upcoming.value.days) + ' d ago' : eoCase.upcoming.value.days === 0 ? 'today' : 'in ' + eoCase.upcoming.value.days + ' d' }})</template>
+      </p>
+    </div>
+
     <div class="eo-body">
       <nav v-if="!isMobile" id="eo-section-rail" class="eo-nav"
            :class="{ collapsed: railCollapsed }"
            aria-label="EO planner console sections">
-        <template v-for="(s, i) in sections" :key="s.key">
-          <span v-if="!railCollapsed && (i === 0 || SECTION_GROUP[sections[i - 1].key] !== SECTION_GROUP[s.key])"
+        <template v-for="(s, i) in railSections" :key="s.key">
+          <span v-if="!railCollapsed && (i === 0 || SECTION_GROUP[railSections[i - 1].key] !== SECTION_GROUP[s.key])"
                 class="eo-nav-group">
             {{ GROUP_LABEL[SECTION_GROUP[s.key]] }}
           </span>
-          <hr v-else-if="railCollapsed && i > 0 && SECTION_GROUP[sections[i - 1].key] !== SECTION_GROUP[s.key]"
+          <hr v-else-if="railCollapsed && i > 0 && SECTION_GROUP[railSections[i - 1].key] !== SECTION_GROUP[s.key]"
               class="eo-nav-rule" />
           <button type="button"
                   class="eo-nav-item"
@@ -396,6 +421,10 @@ function handleLogout() {
             </span>
           </button>
         </template>
+        <button v-if="!railCollapsed && SECTION_GROUP[activeSection] !== 'prepared'" type="button" class="eo-nav-more" :aria-expanded="preparedOpen"
+                @click="preparedOpen = !preparedOpen">
+          {{ preparedOpen ? 'Hide' : 'Show' }} what is prepared for you
+        </button>
       </nav>
 
       <main id="eo-main" ref="mainEl" class="eo-content"
@@ -509,6 +538,19 @@ function handleLogout() {
 .eo-work.is-error { color:var(--ent-tone-negative-fg); background:var(--ent-tone-negative-bg);
   border-color:var(--ent-tone-negative-line); }
 
+/* ── The road under the case bar ─────────────────────────────────── */
+.eo-caseroad { padding:var(--ent-s2) var(--ent-s4); background:var(--ent-surface); border-bottom:1px solid var(--ent-line); font-size:var(--ent-fs-xs); }
+.eo-road { display:flex; flex-wrap:wrap; gap:var(--ent-s1) var(--ent-s3); list-style:none; margin:0 0 var(--ent-s1); padding:0; color:var(--ent-text-3); }
+.eo-road li { display:inline-flex; align-items:center; gap:5px; }
+.eo-road-dot { width:9px; height:9px; border-radius:50%; border:1.5px solid var(--ent-line-strong, var(--ent-line)); background:var(--ent-surface); }
+.eo-road li.done .eo-road-dot { background:var(--ent-success); border-color:var(--ent-success); }
+.eo-road li.now { color:var(--ent-text); font-weight:var(--ent-fw-semibold); }
+.eo-road li.skipped { color:var(--ent-tone-negative-fg, #b3261e); }
+.eo-road li.skipped .eo-road-dot { border-color:var(--ent-danger, #b3261e); background:var(--ent-surface); border-style:dashed; }
+.eo-road li.now .eo-road-dot { background:var(--ent-accent, #1a73e8); border-color:var(--ent-accent, #1a73e8); }
+.eo-road-now { margin:0; color:var(--ent-text-2); }
+.eo-nav-more { margin:var(--ent-s2) var(--ent-s3); padding:0; background:none; border:0; cursor:pointer; font:inherit; font-size:var(--ent-fs-xs); color:var(--ent-text-3); text-align:left; text-decoration:underline; }
+
 /* ── Case bar ────────────────────────────────────────────────────── */
 .eo-casebar { display:flex; align-items:center; gap:var(--ent-s3); flex-shrink:0;
   padding:var(--ent-s2) var(--ent-s4); background:var(--ent-surface-2);
@@ -521,7 +563,7 @@ function handleLogout() {
   border-bottom-color:var(--ent-tone-negative-line); }
 .eo-case-ico { color:var(--ent-text-3); flex-shrink:0; }
 .eo-case-id { display:flex; align-items:baseline; gap:var(--ent-s2); min-width:0; flex:1; }
-.eo-case-ref { font-weight:var(--ent-fw-semibold); color:var(--ent-text); white-space:nowrap; }
+.eo-case-ref { font-weight:var(--ent-fw-semibold); color:var(--ent-text); white-space:nowrap; flex-shrink:0; }
 .eo-case-where { color:var(--ent-text-2); font-size:var(--ent-fs-xs);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .eo-case-status { flex-shrink:0; padding:1px 8px; border-radius:var(--ent-r-pill);
@@ -610,7 +652,9 @@ function handleLogout() {
   .eo-section-title { margin-left:0; padding-left:0; border-left:none; font-size:var(--ent-fs-md); }
   .eo-brand-text, .eo-work-label { display:none; }
   .eo-casebar { flex-wrap:wrap; }
-  .eo-case-where { font-size:var(--ent-fs-micro); }
+  .eo-case-id { flex-direction:column; align-items:flex-start; gap:0; flex-basis:100%; }
+  .eo-case-where { font-size:var(--ent-fs-micro); max-width:100%; }
+  .eo-road { display:none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

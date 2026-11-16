@@ -253,6 +253,10 @@ export interface Objection {
   grounds_detail?: string | null
   document_url?: string | null
   sustained?: boolean | null
+  /** The day the objection was put to the applicant. The applicant has 14 days from it to comment. */
+  put_to_applicant_on?: string | null
+  applicant_comment?: string | null
+  applicant_commented_on?: string | null
   consideration_notes?: string | null
   considered_at?: string | null
   resolution_document_url?: string | null

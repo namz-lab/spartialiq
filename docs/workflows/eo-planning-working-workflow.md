@@ -152,7 +152,15 @@ Migration 239 and the decision route enforce these; the switches are in the EO c
 6. **A refusal gives its reasons**, and an outstanding blocking reply from the circulation stops a decision.
 7. **The referral log** holds each Department referral, with a 21-day reply-by, the advice, what the council did, or "no reply".
 
-Still by hand: the s.26(2)(c) and s.40 statutory referrals (the log records them; nothing prompts for them); the s.26(3) public-notice triggers other than special consent; the A+2 months and A+2 months 15 days reminders; the Registrar and Surveyor-General copies; and treating the plan gate's "provisional" banner as true, because the Vungu plan is not in force.
+8. **The Act's questions** (a State road, an aerodrome, a neighbouring authority, agricultural land in a subdivision, a conflict with a condition of title, a non-conforming or adverse use) are answered before an approval; each "yes" that needs another body has a referral on the log, and the body has replied, been recorded as not replying, or had its **one month** (s.26(2)(c)).
+9. **Public notice** is complete where s.26(3) requires it (a special consent, a title conflict, an adverse or non-conforming use). A `departure_reason` no longer stands in for it.
+10. **Each objection** is considered, put to the applicant, and the applicant's **14 days** to comment are used or answered (step 9).
+11. **The dates to work to** (ask for an extension one month before the deemed-refusal date; the committee to resolve fifteen days before it) are worked out and shown under the case bar and in *Before you decide*.
+12. **The copies after a subdivision** (the Surveyor-General and the Registrar of Deeds), and the Registrar's copy after a title conflict, are listed and recorded in the log.
+
+A refusal is held to the written reasons and the lane, not to items 8 to 10: the council may refuse a case it cannot approve.
+
+Still by hand: whether a site is near a State road or an aerodrome (the EO answers); the sending itself of every referral and copy; the Registrar's notice within 7 days of an appeal; and treating the plan gate's "provisional" banner as true, because the Vungu plan is not in force.
 
 ## 10. Questions that change this procedure
 
@@ -170,4 +178,4 @@ These are unanswered; the procedure assumes the stated default until they are.
 
 ## 11. What has been built, and what is next
 
-Built (migration 239): (1) the **delegation register and the lane check**; (3) the **referral log** for the Department, the Minister's directions and the statutory referrals; and the decision gates of section 9. Not yet built: (2) the **clock's stop-date reminders** of section 5 (the Act's date is enforced; the internal prompts are not); (4) the **EO's desk** reorganised around the steps the EO owns (3, 4, 5, 11, 12, 14, 15, 17), with the planner's and clerk's steps leaving the EO's menu; and automatic prompts for the section 4 referrals. See [the gap report](eo-planning-code-gap-report.md).
+Built (migration 239): (1) the **delegation register and the lane check**; (3) the **referral log** for the Department, the Minister's directions and the statutory referrals; and the decision gates of section 9. Also built since: (2) the **clock's stop-date reminders** of section 5, worked out by the server and shown with the case; the **Act's questions** that prompt the section 4 referrals; the public-notice and objection gates; and (4) the **EO's desk** regrouped around the steps the EO owns (the planner's and clerk's screens are folded away under "Prepared for you"). Not built: sending the referrals and letters from the software, and knowing where a site is. See [the gap report](eo-planning-code-gap-report.md).

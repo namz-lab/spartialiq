@@ -63,6 +63,9 @@ async function caseFacts(q, permitId) {
             to_char(GREATEST(spatial_planning.determination_deadline(p.acknowledged_at, p.development_type), p.extension_until), 'YYYY-MM-DD') AS deemed_on,
             (CURRENT_DATE > GREATEST(spatial_planning.determination_deadline(p.acknowledged_at, p.development_type), p.extension_until)) AS deemed_past,
             to_char(p.extension_until, 'YYYY-MM-DD') AS extension_until_text,
+            to_char(GREATEST(spatial_planning.determination_deadline(p.acknowledged_at, p.development_type), p.extension_until) - INTERVAL '1 month', 'YYYY-MM-DD') AS ask_extension_by,
+            to_char(GREATEST(spatial_planning.determination_deadline(p.acknowledged_at, p.development_type), p.extension_until) - INTERVAL '15 days', 'YYYY-MM-DD') AS resolve_by,
+            p.statutory_checks,
             (SELECT count(*) FROM spatial_planning.application_objection o WHERE o.permit_app_id = p.id)::int AS objection_count
        FROM spatial_planning.permit_application p WHERE p.id = $1`, [permitId])
   return rows[0] || null
@@ -89,6 +92,85 @@ async function latestResolution(q, permitId) {
         AND a.outcome <> 'pending' AND a.resolution IS NOT NULL
       ORDER BY a.heard_at DESC NULLS LAST, a.created_at DESC LIMIT 1`, [permitId])
   return rows[0] || null
+}
+
+/**
+ * The questions the Act makes the council ask of every application (working workflow, section 4). The software cannot know whether a site is within 200 m of
+ * a State road or in an aerodrome's obstacle limitation area, so the EO answers yes or no; a decision waits for every answer.
+ * 'referral' names the body a "yes" has to be sent to (case_referral.statutory_key).
+ */
+const CHECKS = {
+  road_within_200m:         { label: 'The site is within 200 m of the centre line of a State road', section: 's.26(2)(c), s.40(2)(c)', referral: 'road', body: 'the minister responsible for roads' },
+  aviation_olz:             { label: "The site is within an aerodrome's obstacle limitation area", section: 's.26(2)(c), s.40(2)(c)', referral: 'aviation', body: 'the minister responsible for aviation' },
+  neighbouring_authority:   { label: "The site is next to another planning authority's area", section: 's.26(4)(b)', referral: 'neighbouring', body: 'the neighbouring planning authority' },
+  agricultural_subdivision: { label: 'The land is agricultural property outside a municipal or town council area (a subdivision)', section: 's.40(5)(a)(i)', referral: 'agriculture', body: 'the minister responsible for agriculture', subdivisionOnly: true },
+  title_condition_conflict: { label: 'The proposal conflicts with a condition of title', section: 's.26(3), s.26(9)', referral: null, body: null },
+  adverse_or_nonconforming: { label: 'The proposal is a non-conforming use or has an adverse impact', section: 's.26(3)', referral: null, body: null },
+}
+const checksFor = (devType) => Object.entries(CHECKS).filter(([, c]) => !c.subdivisionOnly || NEEDS_S2[devType] === 'L3').map(([k]) => k)
+
+/** Which questions are unanswered, which "yes" answers still wait on a referral, and whether public notice is required. Pure. */
+function checkState({ devType, classification, answers }, referrals) {
+  const keys = checksFor(devType)
+  const a = answers || {}
+  const unanswered = keys.filter((k) => typeof a[k] !== 'boolean')
+  const waiting = []
+  for (const k of keys) {
+    if (a[k] !== true || !CHECKS[k].referral) continue
+    const r = (referrals || []).find((x) => x.statutory_key === CHECKS[k].referral)
+    if (!r) waiting.push({ key: k, why: 'not sent', body: CHECKS[k].body })
+    else if (!(r.answered_on || r.no_reply || r.month_passed)) waiting.push({ key: k, why: 'awaiting reply (they have one month, s.26(2)(c))', body: CHECKS[k].body })
+  }
+  const noticeRequired = classification === 'special_consent_26_3' || a.title_condition_conflict === true || a.adverse_or_nonconforming === true
+  return { keys, unanswered, waiting, noticeRequired }
+}
+
+/** Copies the Act requires after a permit is issued (section 5, step 16): a subdivision goes to the Surveyor-General and the Registrar; a title-condition conflict to the Registrar. */
+function copiesDue({ devType, answers }) {
+  const out = []
+  if (NEEDS_S2[devType] === 'L3') {
+    out.push({ key: 'surveyor_general', body: 'the Surveyor-General', section: 's.40(7), (8)' })
+    out.push({ key: 'registrar', body: 'the Registrar of Deeds', section: 's.40(7), (8)' })
+  } else if ((answers || {}).title_condition_conflict === true) out.push({ key: 'registrar', body: 'the Registrar of Deeds', section: 's.26(9)' })
+  return out
+}
+
+async function statutoryReferrals(q, permitId) {
+  const { rows } = await q.query(
+    `SELECT statutory_key, sent_on, answered_on, no_reply, (sent_on + INTERVAL '1 month' <= CURRENT_DATE) AS month_passed
+       FROM spatial_planning.case_referral WHERE permit_app_id = $1 AND deleted_at IS NULL AND statutory_key IS NOT NULL`, [permitId])
+  return rows
+}
+
+/** Public notice under s.26(3): the advert, the abutting owners and the site notice verified, and the objection period closed. */
+async function noticeComplete(q, permitId) {
+  const { rows } = await q.query(
+    `SELECT advert_verified, abutting_owners_verified, site_notice_verified, objection_period_closed
+       FROM spatial_planning.public_notice WHERE permit_app_id = $1`, [permitId])
+  const n = rows[0]
+  if (!n) return { complete: false, missing: ['no public-notice record exists'] }
+  const missing = []
+  if (!n.advert_verified) missing.push('the newspaper advert is not verified')
+  if (!n.abutting_owners_verified) missing.push('the abutting owners are not verified as notified')
+  if (!n.site_notice_verified) missing.push('the site notice is not verified')
+  if (!n.objection_period_closed) missing.push('the objection period is not closed')
+  return { complete: missing.length === 0, missing }
+}
+
+/** Objections: each considered, put to the applicant, and the applicant's 14 days to comment over or used (working workflow, step 9). */
+async function objectionState(q, permitId) {
+  const { rows } = await q.query(
+    `SELECT objector_name, sustained, put_to_applicant_on, applicant_commented_on,
+            (put_to_applicant_on + 14 <= CURRENT_DATE) AS comment_period_over,
+            to_char(put_to_applicant_on + 14, 'YYYY-MM-DD') AS comment_due
+       FROM spatial_planning.application_objection WHERE permit_app_id = $1`, [permitId])
+  const problems = []
+  for (const o of rows) {
+    if (o.sustained === null) problems.push('the objection of ' + o.objector_name + ' has not been considered')
+    if (!o.put_to_applicant_on) problems.push('the objection of ' + o.objector_name + ' has not been put to the applicant')
+    else if (!o.applicant_commented_on && !o.comment_period_over) problems.push('the applicant has until ' + o.comment_due + ' to comment on the objection of ' + o.objector_name)
+  }
+  return { count: rows.length, problems }
 }
 
 const stop = (status, error, message, extra = {}) => ({ status, body: { success: false, error, message, ...extra } })
@@ -144,6 +226,30 @@ async function checkDetermination(q, permitId, { decision, notes, delegated, adm
       `A reply the circulation marked as blocking is still outstanding: ${blocking.rows.map((r) => r.body_name).join(', ')}.`) }
   }
 
+  // 4a to 4d. what the Act asks of an APPROVAL: the statutory questions answered, the referrals they lead to made, public notice where it is
+  // required, and the objections put to the applicant and heard. A refusal does not wait for them: the council may refuse a case it cannot approve.
+  if (status !== 'refused') {
+    const st = checkState({ devType: c.development_type, classification: c.classification, answers: c.statutory_checks }, await statutoryReferrals(q, permitId))
+    if (st.unanswered.length) {
+      return { halt: stop(409, 'statutory_checks_required',
+        'Answer the questions the Act asks of every application before it is approved: ' + st.unanswered.map((k) => CHECKS[k].label + ' (' + CHECKS[k].section + ')').join('; ') + '.', { unanswered: st.unanswered }) }
+    }
+    if (st.waiting.length) {
+      return { halt: stop(409, 'statutory_referral_pending',
+        'A referral the Act requires is outstanding: ' + st.waiting.map((w) => 'to ' + w.body + ' (' + w.why + ')').join('; ') + '. Record it in the referral log.', { waiting: st.waiting }) }
+    }
+    if (st.noticeRequired) {
+      const n = await noticeComplete(q, permitId)
+      if (!n.complete) {
+        return { halt: stop(409, 'public_notice_incomplete', 'Public notice is required (s.26(3)) and is not complete: ' + n.missing.join('; ') + '.', { missing: n.missing }) }
+      }
+    }
+    const ob = await objectionState(q, permitId)
+    if (ob.problems.length) {
+      return { halt: stop(409, 'objections_open', 'Objections are not yet dealt with: ' + ob.problems.join('; ') + '.', { problems: ob.problems }) }
+    }
+  }
+
   // 5. a refusal gives written reasons (s.26(6)(b))
   if (status === 'refused' && !(typeof notes === 'string' && notes.trim().length >= 10)) {
     return { halt: stop(400, 'refusal_reasons_required', 'A refusal must give its reasons in writing (s.26(6)(b)).') }
@@ -172,4 +278,4 @@ async function checkDetermination(q, permitId, { decision, notes, delegated, adm
     'A committee resolution is required before this determination. Table the application on a committee agenda and record the resolution.', { lane: lane.lane, reasons: lane.reasons }) }
 }
 
-module.exports = { SWITCHES, DECISION_STATUS, loadSwitches, laneOf, caseFacts, directionsFor, latestResolution, checkDetermination }
+module.exports = { CHECKS, checksFor, checkState, copiesDue, statutoryReferrals, noticeComplete, objectionState, SWITCHES, DECISION_STATUS, loadSwitches, laneOf, caseFacts, directionsFor, latestResolution, checkDetermination }

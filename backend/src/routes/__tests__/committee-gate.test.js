@@ -11,6 +11,7 @@
 const { buildAppForTest } = require('../../../test/helpers/buildApp')
 const { systemOf } = require('../../lib/dbContext')   // fixtures use the system connection (TENANCY_MODE=strict has no request context)
 const { loginAs } = require('../../../test/helpers/auth')
+const { answerChecks } = require('../../../test/helpers/statutoryChecks')
 
 describe('the gates on eo-decision', () => {
   let app, eo, planner, admin
@@ -65,7 +66,7 @@ describe('the gates on eo-decision', () => {
       expect([200, 201]).toContain(r.statusCode)
       rev = r.json().data.revision
     }
-    if (checked) await checkDirections(id)
+    if (checked) { await checkDirections(id); await answerChecks(app, eo, id) }
     return id
   }
   async function checkDirections(id) {

@@ -34,6 +34,8 @@ const pane = ref<'map' | 'console'>(route.query.section || route.query.case ? 'c
     avatar-key="eo_planner_avatar"
     map-label="Command centre"
     console-label="Case console"
+    map-hint="A map of the district showing where the applications are"
+    console-hint="The working screens: open a case and take it through its steps"
   >
     <template #map><EOPlannerView embedded @open-console="pane = 'console'" /></template>
     <template #console><EOPlannerPortalView embedded /></template>

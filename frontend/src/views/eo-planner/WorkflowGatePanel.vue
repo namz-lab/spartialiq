@@ -3,10 +3,12 @@
 // statutory clock (with the applicant's written extension), the check against ministerial directions (step 5) and the referrals sent out.
 // The server decides; this shows what it will ask for and records the EO's steps.
 import { ref, watch, computed } from 'vue'
-import { eoWorkflowApi, serverMessage, LANE_LABEL, type CaseLane, type Referral } from '@/services/eoWorkflow'
+import { useEoNav } from '@/eo-planner/useEoNav'
+import { eoWorkflowApi, serverMessage, LANE_LABEL, type CaseLane, type Referral, type StatutoryKey } from '@/services/eoWorkflow'
 
 const props = defineProps<{ permitId: string }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
+const nav = useEoNav()
 
 const lane = ref<CaseLane | null>(null)
 const referrals = ref<Referral[]>([])
@@ -21,12 +23,18 @@ const refTier = ref<'mandatory' | 'precautionary' | 'routine'>('precautionary')
 const showExt = ref(false)
 const showRef = ref(false)
 
+// The Act's questions (working workflow, section 4): the EO answers yes or no; a decision waits for every answer.
+const draft = ref<Record<string, boolean | null>>({})
+const CHECK_REFERRAL: Record<string, StatutoryKey> = { road_within_200m: 'road', aviation_olz: 'aviation', neighbouring_authority: 'neighbouring', agricultural_subdivision: 'agriculture' }
+const COPY_KEY: Record<string, StatutoryKey> = { surveyor_general: 'surveyor_general', registrar: 'registrar' }
+
 async function load() {
   error.value = null
   try {
     const [l, r] = await Promise.all([eoWorkflowApi.lane(props.permitId), eoWorkflowApi.referrals({ permit: props.permitId })])
     lane.value = l
     referrals.value = r
+    draft.value = Object.fromEntries(l.checks.map(c => [c.key, c.answer]))
   } catch (e) { error.value = serverMessage(e, 'Could not read the workflow position of this case') }
 }
 watch(() => props.permitId, load, { immediate: true })
@@ -44,6 +52,17 @@ const saveExtension = () => run('ext', async () => {
 const sendReferral = () => run('ref', async () => {
   await eoWorkflowApi.createReferral({ permit_app_id: props.permitId, kind: 'department', tier: refTier.value, body: refBody.value.trim(), question: refQuestion.value.trim() })
   showRef.value = false; refQuestion.value = ''
+})
+const dirtyChecks = computed(() => (lane.value?.checks ?? []).some(c => draft.value[c.key] !== c.answer && typeof draft.value[c.key] === 'boolean'))
+const saveChecks = () => run('chk', async () => {
+  const answers = Object.fromEntries(Object.entries(draft.value).filter(([, v]) => typeof v === 'boolean')) as Record<string, boolean>
+  await eoWorkflowApi.recordStatutoryChecks(props.permitId, answers)
+})
+const referTo = (key: StatutoryKey, body: string, section: string) => run('st' + key, async () => {
+  await eoWorkflowApi.createReferral({
+    permit_app_id: props.permitId, kind: 'statutory', tier: 'mandatory', body: body.charAt(0).toUpperCase() + body.slice(1), statutory_key: key,
+    legal_basis: section, question: 'Please comment on this application. The Act gives you one month (' + section + ').',
+  })
 })
 const noReply = (r: Referral) => run('nr' + r.id, async () => { await eoWorkflowApi.answerReferral(r.id, { no_reply: true, council_action: 'Proceeded without a reply by the reply-by date.' }) })
 
@@ -77,6 +96,11 @@ const committeeLine = computed(() => {
           <template v-else>Not acknowledged, so the Act's period has not started.</template>
           <button v-if="lane.deemed_on" class="eodr-btn ghost sm" type="button" @click="showExt = !showExt">Record the applicant's written extension</button>
         </p>
+        <ul v-if="lane.milestones" class="wg-list wg-dates" data-testid="milestones">
+          <li>Ask the applicant for an extension by <strong>{{ fmt(lane.milestones.ask_extension_by) }}</strong></li>
+          <li>Committee to resolve by <strong>{{ fmt(lane.milestones.resolve_by) }}</strong></li>
+          <li>Deemed refused after <strong>{{ fmt(lane.milestones.deemed_on) }}</strong></li>
+        </ul>
         <div v-if="showExt" class="wg-form">
           <label>New date <input v-model="extUntil" type="date" /></label>
           <label>Where the applicant's letter is filed
@@ -95,6 +119,57 @@ const committeeLine = computed(() => {
             <button class="eodr-btn ghost sm" type="button" :disabled="busy === 'dir'" @click="checkDirections">I have checked: none applies</button>
           </template>
         </p>
+
+        <div class="wg-checks" data-testid="statutory-checks">
+          <p class="wg-line"><strong>The Act's questions.</strong>
+            <span v-if="lane.checks_unanswered.length" class="wg-bad">{{ lane.checks_unanswered.length }} not answered.</span>
+            <span v-else>All answered.</span>
+            An approval waits for every answer; a refusal does not.</p>
+          <ul class="wg-qs">
+            <li v-for="c in lane.checks" :key="c.key">
+              <span class="wg-q">{{ c.label }} <em>({{ c.section }})</em></span>
+              <span class="wg-yn" role="radiogroup" :aria-label="c.label">
+                <label><input type="radio" :name="'chk-' + c.key" :checked="draft[c.key] === true" @change="draft[c.key] = true" /> Yes</label>
+                <label><input type="radio" :name="'chk-' + c.key" :checked="draft[c.key] === false" @change="draft[c.key] = false" /> No</label>
+              </span>
+            </li>
+          </ul>
+          <button v-if="dirtyChecks" class="eodr-btn ok sm" type="button" :disabled="busy === 'chk'" @click="saveChecks">Save answers</button>
+          <ul v-if="lane.referrals_waiting.length" class="wg-list">
+            <li v-for="w in lane.referrals_waiting" :key="w.key">
+              <span class="wg-bad">Referral to {{ w.body }}: {{ w.why }}.</span>
+              <button v-if="w.why === 'not sent'" class="eodr-btn sm" type="button" :disabled="busy === 'st' + CHECK_REFERRAL[w.key]"
+                      @click="referTo(CHECK_REFERRAL[w.key], w.body, lane.checks.find(c => c.key === w.key)?.section ?? '')">Record the referral</button>
+            </li>
+          </ul>
+        </div>
+
+        <p class="wg-line"><strong>Public notice.</strong>
+          <template v-if="!lane.notice_required">Not required for this case.</template>
+          <template v-else-if="!lane.notice_missing.length">Required (s.26(3)) and complete.</template>
+          <template v-else><span class="wg-bad">Required (s.26(3)) and not complete:</span> {{ lane.notice_missing.join('; ') }}.
+            <button class="eodr-btn sm" type="button" @click="nav.go('notification')">Open Public notice</button></template>
+        </p>
+
+        <p class="wg-line"><strong>Objections.</strong>
+          <template v-if="!lane.objection_problems.length">None outstanding.</template>
+          <template v-else><span class="wg-bad">Not yet dealt with:</span> {{ lane.objection_problems.join('; ') }}.
+            <button class="eodr-btn sm" type="button" @click="nav.go('notification')">Open Public notice</button></template>
+        </p>
+
+        <div v-if="lane.copies_due.length" class="wg-line" data-testid="copies-due">
+          <strong>Copies due after the permit is issued.</strong>
+          <ul class="wg-list">
+            <li v-for="x in lane.copies_due" :key="x.key">
+              A copy to {{ x.body }} ({{ x.section }}):
+              <template v-if="x.recorded">recorded in the log.</template>
+              <template v-else>
+                <span class="wg-bad">not yet recorded.</span>
+                <button class="eodr-btn sm" type="button" :disabled="busy === 'st' + x.key" @click="referTo(COPY_KEY[x.key], x.body, x.section)">Record that it was sent</button>
+              </template>
+            </li>
+          </ul>
+        </div>
 
         <div class="wg-refs">
           <p class="wg-line"><strong>Referrals.</strong> {{ referrals.length ? '' : 'None sent for this case.' }}
@@ -141,6 +216,12 @@ const committeeLine = computed(() => {
 .eodr-btn.ok { background: var(--ent-success); border-color: transparent; color: var(--ent-text-on-accent); margin-left: 0; }
 .wg { display: grid; gap: var(--ent-s3); }
 .wg-line { margin: 0; line-height: 1.5; }
+.wg-dates { color: var(--ent-text-2); }
+.wg-qs { list-style: none; margin: 0 0 var(--ent-s2); padding: 0; display: grid; gap: var(--ent-s1); }
+.wg-qs li { display: flex; justify-content: space-between; gap: var(--ent-s3); align-items: baseline; border-bottom: 1px solid var(--ent-line); padding: 3px 0; }
+.wg-q em { color: var(--ent-text-3); font-style: normal; }
+.wg-yn { display: inline-flex; gap: var(--ent-s3); flex-shrink: 0; }
+.wg-yn label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
 .wg-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
 .wg-bad { color: #b3261e; font-weight: 600; }
 .wg-err { margin: 0; color: #b3261e; }

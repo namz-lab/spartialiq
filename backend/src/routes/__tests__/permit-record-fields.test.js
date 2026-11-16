@@ -6,6 +6,7 @@
 const { buildAppForTest } = require('../../../test/helpers/buildApp')
 const { systemOf } = require('../../lib/dbContext')
 const { loginAs } = require('../../../test/helpers/auth')
+const { answerChecks } = require('../../../test/helpers/statutoryChecks')
 
 describe('the permit record fields', () => {
   let app, eo, planner, admin
@@ -46,6 +47,7 @@ describe('the permit record fields', () => {
       }
       const chk = await app.inject({ method: 'POST', url: `/api/permit-applications/${id}/direction-check`, headers: as(eo) })
       expect(chk.statusCode).toBe(200)
+      await answerChecks(app, eo, id)
     }
     return { id, rev }
   }

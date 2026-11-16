@@ -1,6 +1,6 @@
 # Executive Officer (Planning): user manual
 
-**Status: DRAFT, 16 November 2026. For the Executive Officer's and the council's review.**
+**Status: DRAFT, 16 November 2026 (revised). For the Executive Officer's and the council's review.**
 Use: how to work a development application in the EO Planning console, from the day it is lodged to the day the permit is issued and the appeal window closes. It describes what the software does **today**. Where the council has not yet confirmed a rule, the manual says so. The reasons for each rule are in [the working workflow](../workflows/eo-planning-working-workflow.md) and [the workflow definition](../workflows/eo-planning-workflow.md).
 
 ## 1. What this console is for
@@ -23,16 +23,19 @@ The EO Planner has two panes, chosen at the top of the screen:
 | Pane | What it shows | Use it to |
 |---|---|---|
 | **Command centre** | A map of the district with the applications on it | See where an application is, and open it |
-| **Case console** | The working screens, listed in a menu on the left | Do the work |
+| **Case console** | The working screens, listed in a menu on the left | Do the work: open a case and take it through its steps |
+
+Hold the pointer over either name for a reminder of what it is for.
 
 ### The menu
 
-The Case console menu has three groups.
+The Case console menu has four groups, in the order you use them.
 
 | Group | Screens | What they are for |
 |---|---|---|
-| **Casework** | Dashboard, Applications, Intake review, Due diligence, Public notice, Circulation, Committee, Determination | The steps of one application, in the order the Act takes them |
-| **Registers** | Permits, Enforcement, Appeals, Building plans, Referrals & switches | What the council keeps afterwards |
+| **Your cases** | Dashboard, Applications, Committee, Determination, Permits | The EO's own steps |
+| **Prepared for you** | Intake review, Due diligence, Public notice, Circulation | What the clerk and the planner prepare. **Folded away** until you ask for it (*Show what is prepared for you*), and open whenever you are on one of these screens |
+| **Registers** | Enforcement, Appeals, Building plans, Referrals & switches | What the council keeps afterwards |
 | **Office** | Reports, Development matrix, Reference, Settings | Periodic work and reference |
 
 On a phone or a narrow window the menu becomes a bar at the bottom with five items; the others are under **More**.
@@ -40,6 +43,8 @@ On a phone or a narrow window the menu becomes a bar at the bottom with five ite
 ### Opening a case
 
 Most screens work on one **open case**. Open it by choosing an application in **Applications** or on the **Dashboard**. The **case bar** under the title then shows the application reference, the stand, its status, and the clock. The case stays open as you move between screens, so you choose it once. Close it with the **×** at the right of the case bar.
+
+Under the case bar is the **road of the case**: seven steps (Registered, Acknowledged, Circulated and noticed, Assessed, Committee resolved, Decided, Applicant notified), with the one the case has reached marked, **who normally does the next one** (clerk, planner, committee or EO), the **lane** (section 6), and **the next date to work to**. It is read from the council's record; it is not something you set.
 
 The address of the page contains the open case, so you can copy it and send it to a colleague.
 
@@ -50,7 +55,7 @@ The address of the page contains the open case, so you can copy it and send it t
 | 1. Lodged | The applicant, or the clerk for them, lodges the application and pays the fee. It is **registered**. | Applicant, planning clerk | Applications |
 | 2. Acknowledged | The council acknowledges receipt in writing. **This starts the Act's clock.** The Act allows two weeks; the Handbook asks for five working days. | Planning clerk | Intake review |
 | 3. Circulated | The planner sends the application to the departments that must comment. Some replies are marked **blocking**. | Planner | Circulation |
-| 4. Public notice | Where section 26(3) requires it: an advert at the applicant's expense, notice to abutting owners and a site notice. Objections are open for one month. | Clerk, planner | Public notice |
+| 4. Public notice | Where section 26(3) requires it: an advert at the applicant's expense, notice to abutting owners and a site notice. Objections are open for one month. **Each objection is put to the applicant, who has 14 days to comment.** | Clerk, planner | Public notice |
 | 5. Assessed | The planner checks the site, the plan, the zone and the title, and recommends. | Planner | Due diligence |
 | 6. Committee | The Planning Committee hears the case and records a **resolution**. | Committee | Committee |
 | 7. Decided | **You decide**: approve, approve with conditions, or refuse. | EO | Determination |
@@ -73,7 +78,7 @@ The clock is the most important number on the screen. Under section 26(7) of the
 - **After the date, an approval is refused by the system** (`deemed_refused`). A refusal can still be recorded.
 - Dates are counted in calendar months, so an application acknowledged on 30 November has until 28 February.
 
-The working workflow sets internal targets inside the Act's date: ask for an extension by two months after acknowledgement, and have the committee resolve by two months and fifteen days. These are not yet enforced or reminded by the software.
+The working workflow sets internal targets inside the Act's date: **ask for an extension one month before the deemed-refusal date**, and **have the committee resolve fifteen days before it** (for a three-month case, two months and two months fifteen days after acknowledgement). The software works them out. They appear under **Clock** in *Before you decide*, and the **next one** is on the road under the case bar. They are reminders; the Act's date is the one the system enforces.
 
 ## 5. Determination: deciding a case
 
@@ -89,15 +94,20 @@ This panel is the council's checklist. It shows:
 | **Committee** | The committee's latest resolution, or that none is recorded | A decision must match the resolution |
 | **Clock** | The date the case is deemed refused, and any written extension | Record an extension if the applicant agreed one |
 | **Ministerial directions** | Whether a direction applies, or the check has not been made | Press *I have checked: none applies* once you have looked at the register |
-| **Referrals** | What has been sent to the Department for this case, and the reply-by date | *Refer to the Department* where section 8 says to |
+| **The Act's questions** | Six yes-or-no questions (a State road, an aerodrome, a neighbouring authority, agricultural land if a subdivision, a conflict with a condition of title, a non-conforming or adverse use) | Answer each; press *Save answers*. A "yes" to the first four leads to a referral (below) |
+| **Public notice** | Whether notice is required (a special consent, a title conflict, or an adverse or non-conforming use) and whether it is complete | If required and incomplete, *Open Public notice* |
+| **Objections** | Whether each has been considered, put to the applicant, and the applicant's 14 days used or answered | *Open Public notice* and take the next step |
+| **Copies due** | After a subdivision, a copy of the permit to the Surveyor-General and the Registrar of Deeds; after a title conflict, to the Registrar | Record when each is sent |
+| **Referrals** | What has been sent to the Department and to the ministers for this case, and the reply-by date | *Record the referral* where a "yes" is waiting; *Refer to the Department* where section 8 says to |
 
 ### Deciding
 
 1. Read the package and the panel.
 2. Record the **ministerial-direction check** if the panel asks for it.
-3. Where the plan asks for it, give the reason or acknowledgement shown under **Plan basis**. The Approve buttons stay greyed out until you do.
-4. Write the **decision notes**. For a refusal the reasons are required (section 26(6)(b)).
-5. Press **Approve**, **Approve with conditions** (add at least one condition first) or **Refuse**.
+3. **Answer the Act's questions** and make the referrals they lead to. An approval waits for every answer. A refusal does not wait for the questions, the referrals, public notice or the objections: the council may refuse a case it cannot approve.
+4. Where the plan asks for it, give the reason or acknowledgement shown under **Plan basis**. The Approve buttons stay greyed out until you do.
+5. Write the **decision notes**. For a refusal the reasons are required (section 26(6)(b)).
+6. Press **Approve**, **Approve with conditions** (add at least one condition first) or **Refuse**.
 
 The system then writes the decision, produces the decision letter, and records **what the decision rested on**: a committee resolution, a delegation, or an administrator's override.
 
@@ -119,6 +129,10 @@ The message appears on the screen. This table says what each means and what to d
 | **Deemed refused** | The date has passed and no written extension is recorded | An approval cannot be recorded. The applicant may appeal |
 | **Refusal reasons required** | A refusal with no written reasons | Write the reasons |
 | **Blocking reply outstanding** | A department whose reply was marked blocking has not answered | Chase it, or record that the reply was not needed |
+| **Statutory checks required** | One or more of the Act's questions is unanswered | Answer them in *Before you decide* |
+| **Statutory referral pending** | You answered "yes" (a State road, an aerodrome, a neighbouring authority, agricultural land) and the referral is not sent, or its month has not run | *Record the referral*; the body then has one month to reply, and the case waits for the reply or the month |
+| **Public notice incomplete** | Notice is required and the advert, the abutting owners, the site notice or the closing of the objection period is not recorded | Complete it on *Public notice* |
+| **Objections open** | An objection is not considered, not put to the applicant, or the applicant's 14 days have not run | Take the next step on *Public notice* |
 | **Override reason required** | An administrator override without a written reason | Give the reason |
 | **Case changed by another officer** | Someone saved while you were working | Reload and check |
 
@@ -170,7 +184,7 @@ When to refer is in section 3 of the working workflow. In short: **always** for 
 
 ### Other referrals the Act requires
 
-On acknowledging an application near a State road, an aerodrome, or another authority's area, the Act requires the council to consult the minister or authority concerned (section 26(2)(c)). A subdivision of agricultural land outside a town needs the agriculture minister's recommendation (section 40(5)(a)(i)). **The software does not prompt for these yet.** Record them in the referral log with *kind* "statutory" so the file shows they were made.
+On acknowledging an application near a State road, an aerodrome, or another authority's area, the Act requires the council to consult the minister or authority concerned (section 26(2)(c)); they may object within **one month**. A subdivision of agricultural land outside a town needs the agriculture minister's recommendation (section 40(5)(a)(i)). The software cannot know where a site is, so **you answer the Act's questions** in *Before you decide*; a "yes" then shows a **Record the referral** button, which puts the referral on the log under the right heading. **An approval waits** until each such referral has been answered, recorded as "no reply", or has had its month.
 
 ### Ministerial directions
 
@@ -196,16 +210,16 @@ The **latest** resolution on a case is the one that counts, and it must **match*
 
 When something stands in the way of issuing, the page opens with **This permit cannot be issued yet** and lists each item with what to do. The drafting form is folded away under **Prepare the permit wording in advance**. You may prepare wording early; you cannot issue until the items are done.
 
-The readiness list shows each requirement as **Complete**, **Outstanding**, **Not verified** or **Not applicable**:
+The readiness list shows each requirement as **Complete**, **Outstanding**, **Not verified** or **Not applicable**. *What these words mean* under the list explains them on the screen:
 
 | Word | Meaning |
 |---|---|
 | **Complete** | The council's record shows it is done |
 | **Outstanding** | It is not done, and it stands in the way |
-| **Not verified** | The record needed to tell does not exist, so nothing is known. It is not evidence that the step was done |
-| **Not applicable** | It does not apply to this case (for example, no objections were lodged) |
+| **Not verified** | The record needed to tell could not be read, so nothing is known. It is not evidence that the step was done, and **it stands in the way too**. There is no way to issue past it by typing a justification |
+| **Not applicable** | It does not apply to this case (for example, no objections, or public notice not required) |
 
-Rows marked **Enforced** are re-checked by the server when you issue. The others are shown to help you.
+Rows marked **enforced** are re-checked by the server when you issue. The others are shown to help you.
 
 ### The permit's fields
 
@@ -222,7 +236,7 @@ The statutory clauses of Annexure 7 are produced from the council's rule set and
 
 Tick the confirmation and press **Issue permit**. **Once issued, the permit's number, class, description, period and notes are locked.** An amendment under section 26(12) is a new application; the system does not yet handle amendments.
 
-After issue, record the **notification**: the date the applicant was formally told. **The appeal window of one month (section 38) runs from that date**, so record it the day you do it.
+After issue, record the **copies due** (section 5, *Before you decide*) and the **notification**: the date the applicant was formally told. **The appeal window of one month (section 38) runs from that date**, so record it the day you do it.
 
 ## 11. Appeals, enforcement and the rest
 
@@ -245,12 +259,12 @@ After issue, record the **notification**: the date the applicant was formally to
 
 So that nobody relies on something that is not there:
 
-- It does **not remind** you of the internal dates (extension asked by two months; committee resolved by two months fifteen days).
-- It does **not prompt** for the statutory referrals to the roads, aviation and agriculture ministers, or for the copies to the Registrar of Deeds and the Surveyor-General.
-- It tests public notice only for special consent; the other section 26(3) triggers are for you to judge.
-- It does not track the applicant's 14 days to comment on objections.
+- It does **not know where a site is**. It cannot tell whether a site is near a State road or an aerodrome, so you answer the Act's questions, and the system acts on the answers.
+- It does **not send** the referrals, the copies or the letters. It records that you sent them, and waits for the record.
+- A refusal is not held to the Act's questions, referrals, notice or objection steps (section 5). That is deliberate; the council may refuse what it cannot approve.
 - The Vungu plan is **not** recorded as operative, so the plan gate shows a "provisional" banner. Treat it as true: nothing is decided "as of right" under that plan.
 - The dates and section numbers come from the text of the Act as consolidated with amendments to 1998. Later amendments have not been checked (switch S8).
+- Building plans, Reports, the Development matrix, Reference and Settings are described on the screens and not in this edition.
 
 ## 14. Glossary
 
@@ -262,6 +276,8 @@ So that nobody relies on something that is not there:
 | **Lane** | The route a case takes, and who may decide it |
 | **Resolution** | The committee's recorded decision on a case |
 | **Switch** | A written confirmation from the council that opens a power |
+| **Statutory question** | One of the six yes-or-no questions the Act makes the council ask of every application |
+| **Road of the case** | The seven steps of a case, with the one it has reached |
 | **Plan gate** | The check against the plan's decision for the use on the land |
 | **Blocking reply** | A department's reply that must arrive before a decision |
 | **Annexure 6, 7** | The Handbook's permit core and the notes attached to the permit |

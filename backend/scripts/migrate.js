@@ -401,6 +401,8 @@ const MIGRATIONS = [
   '239_eo_workflow_controls.sql',
   // The permit's own fields (number, use class, description, commencement period, notes, notification date, decision basis) held by the council. Rollback: migrations/rollback/240_permit_record_fields.down.sql.
   '240_permit_record_fields.sql',
+  // The statutory checks on a case (road, aviation, neighbouring authority, agriculture, title conflict, adverse use) and the objection steps. Rollback: migrations/rollback/241_statutory_checks_and_objection_steps.down.sql.
+  '241_statutory_checks_and_objection_steps.sql',
 ]
 
 function createPool(env = process.env) {
