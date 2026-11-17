@@ -15,7 +15,8 @@ import { spatialEngineApi, type WardTable, type WardTableMeasure, type WardTable
 import { unitsApi, type UnitKey } from '@/services/units'
 import type { Cell, ExportTable } from '@/utils/tableExport'
 
-const props = defineProps<{ unitKey?: UnitKey }>()
+// `only` shows one of the two tables (the Chief Executive's shell gives each its own view); the export always carries both.
+const props = defineProps<{ unitKey?: UnitKey; only?: 'counts' | 'measures' }>()
 
 const data = ref<WardTable | null>(null)
 const error = ref<string | null>(null)
@@ -120,7 +121,7 @@ function build(): ExportTable {
     <template v-else>
       <p v-for="t in notes" :key="t" class="wt-foot">{{ t }}</p>
 
-      <div v-if="data.counts.length" class="wt-block">
+      <div v-if="data.counts.length" v-show="only !== 'measures'" class="wt-block">
         <table class="wt-table" data-testid="wt-counts">
           <caption>What the registers hold in each ward</caption>
           <thead>
@@ -150,7 +151,7 @@ function build(): ExportTable {
         </table>
       </div>
 
-      <div v-if="data.measures.length" class="wt-block">
+      <div v-if="data.measures.length" v-show="only !== 'counts'" class="wt-block">
         <table class="wt-table" data-testid="wt-measures">
           <caption>The ward measures</caption>
           <thead>
@@ -202,7 +203,7 @@ th[aria-sort="descending"] .wt-sort::after { content: ' ▼'; font-size: 0.7em; 
   .wt-root { border: 0; padding: 0; margin-top: 1rem; break-inside: auto; }
   .wt-table { font-size: 11pt; color: #000; }
   .wt-table th, .wt-table td { border-bottom: 1px solid #999; }
-  .wt-block { overflow: visible; }
+  .wt-block { overflow: visible; display: block !important; }   /* both tables print, whichever one is on screen */
   .wt-sort::after { content: none !important; }
 }
 </style>
