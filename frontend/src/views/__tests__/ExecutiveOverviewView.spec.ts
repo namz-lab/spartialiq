@@ -17,10 +17,21 @@ const dash = vi.hoisted(() => ({
 }))
 vi.mock('@/modules/finance/workspaces/executive/dashboard', () => ({ executiveDash: dash }))
 
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  RouterLink: { name: 'RouterLink', props: ['to'], template: '<a :href="to"><slot /></a>' },
-}))
+// The page keeps its view in the address (?view=…): a reactive stand-in for the route, which push updates as the router would.
+const nav = vi.hoisted(() => ({ route: null as unknown as { query: Record<string, unknown> } }))
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  nav.route = reactive({ query: {} as Record<string, unknown> })
+  return {
+    useRoute: () => nav.route,
+    useRouter: () => ({
+      push: vi.fn(async (to: { query?: Record<string, unknown> } | string) => {
+        if (typeof to === 'object' && to.query) nav.route.query = Object.fromEntries(Object.entries(to.query).filter(([, v]) => v !== undefined))
+      }),
+    }),
+    RouterLink: { name: 'RouterLink', props: ['to'], template: '<a :href="to"><slot /></a>' },
+  }
+})
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ logout: vi.fn(), user: { name: 'CEO', role: 'accounting_officer' } }) }))
 vi.mock('@/components/shared/ProfileDropdown.vue', () => ({ default: { name: 'ProfileDropdown', template: '<div />' } }))
 // The ward map has its own spec; here it is a stand-in so this page's tests make no map request.
@@ -63,6 +74,7 @@ async function mountPage() {
 }
 
 beforeEach(() => {
+  nav.route.query = {}
   api.overview.mockReset()
   api.masterPlan.mockReset()
   api.masterPlan.mockRejectedValue(new Error('not read'))   // the master plan is an extra: the page works without it
@@ -76,7 +88,7 @@ describe('ExecutiveOverviewView', () => {
     const wrapper = await mountPage()
     const titles = wrapper.findAll('h2').map((h) => h.text())
     expect(titles).toEqual([
-      'Finance', 'Planning and Environment', 'Engineering and Works', 'Social Services',
+      'At a glance', 'Finance', 'Planning and Environment', 'Engineering and Works', 'Social Services',
       'Human Resources and Administration', 'Internal Audit',
     ])
   })
@@ -218,5 +230,74 @@ describe('ExecutiveOverviewView', () => {
     const planning = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Planning and Environment')!
     expect(planning.text()).toContain('Development control')
     expect(planning.text()).not.toContain('Not in force')
+  })
+})
+
+// The app shell: one screen, with a menu, a summary of the six units and a view per unit and per ward table.
+describe('ExecutiveOverviewView: the app shell', () => {
+  const shown = (w: Awaited<ReturnType<typeof mountPage>>) =>
+    w.findAll('[data-testid^="xo-"]').filter((e) => (e.attributes('style') ?? '').indexOf('display: none') === -1).map((e) => e.attributes('data-testid'))
+
+  it('opens on "At a glance", with only the summary on screen', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    expect(shown(wrapper).filter((t) => t!.startsWith('xo-unit-'))).toEqual([])
+    expect(wrapper.find('[data-testid="xo-summary"]').isVisible()).toBe(true)
+    expect(wrapper.find('.xo-nav-item[aria-current="page"]').text()).toBe('At a glance')
+  })
+
+  it('puts the figures to look at first on a tile, at most three, and counts the rest', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    const tile = wrapper.find('[data-testid="xo-tile-planning"]')
+    const labels = tile.findAll('dt').map((d) => d.text())
+    expect(labels).toHaveLength(3)
+    expect(labels).toContain('Past statutory due date')
+    expect(labels).toContain('Awaiting a decision')
+    expect(tile.find('.xo-tile-more').text()).toMatch(/more figures/)
+  })
+
+  it('opens a unit from its tile, shows that unit alone, and puts it in the address', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    await wrapper.find('[data-testid="xo-tile-engineering"] .xo-tile-open').trigger('click')
+    await flushPromises()
+    expect(nav.route.query).toEqual({ view: 'engineering' })
+    expect(shown(wrapper)).not.toContain('xo-summary')
+    expect(shown(wrapper)).toContain('xo-unit-engineering')
+    expect(shown(wrapper)).not.toContain('xo-unit-audit')
+  })
+
+  it('counts a unit\'s flagged figures on its menu item', async () => {
+    api.overview.mockResolvedValue(FULL)
+    const wrapper = await mountPage()
+    const item = wrapper.findAll('.xo-nav-item').find((b) => b.text().startsWith('Planning'))!
+    expect(item.find('.xo-nav-flag').text()).toBe('4 to look at')   // overdue, awaiting a decision, complaints, estimated outlines
+  })
+
+  it('shows one ward table at a time, and the map only on its own view', async () => {
+    api.overview.mockResolvedValue(FULL)
+    nav.route.query = { view: 'wards-measures' }
+    const wrapper = await mountPage()
+    expect(wrapper.findComponent({ name: 'WardTable' }).attributes('only')).toBe('measures')
+    expect(wrapper.find('.wm-stub').exists()).toBe(false)
+    await wrapper.findAll('.xo-nav-item').find((b) => b.text() === 'Ward map')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.wm-stub').exists()).toBe(true)
+  })
+
+  it('falls back to "At a glance" for a view it does not know', async () => {
+    api.overview.mockResolvedValue(FULL)
+    nav.route.query = { view: 'nonsense' }
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-testid="xo-summary"]').isVisible()).toBe(true)
+  })
+
+  it('says a unit is being read while the overview is on its way, not that it could not be read', async () => {
+    api.overview.mockReturnValue(new Promise(() => {}))
+    const wrapper = mount(ExecutiveOverviewView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Reading the registers')
+    expect(wrapper.text()).not.toContain('could not be read')
   })
 })

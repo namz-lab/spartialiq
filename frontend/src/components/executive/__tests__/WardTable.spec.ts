@@ -101,6 +101,16 @@ describe('WardTable', () => {
     expect(w.find('[data-testid=wt-measures]').exists()).toBe(true)
   })
 
+  it('shows one table when told which, keeps the other for printing, and still exports both', async () => {
+    api.ceo.mockResolvedValue(DATA)
+    const w = await mountIt({ only: 'measures' })
+    const block = (id: string) => w.get(`[data-testid=${id}]`).element.parentElement as HTMLElement
+    expect(block('wt-counts').style.display).toBe('none')     // hidden on screen, still in the page for print
+    expect(block('wt-measures').style.display).toBe('')
+    await w.get('[data-testid=export]').trigger('click')
+    expect(exported.table!.columns).toContain('Stands')        // the export carries the counts too
+  })
+
   it('says so when no wards are linked, and when the tables cannot be read', async () => {
     api.ceo.mockResolvedValue({ ...DATA, rows: [], counts: [], measures: [], totals: null, not_in_a_ward: null })
     expect((await mountIt()).get('[data-testid=wt-empty]').text()).toContain('No wards are linked')

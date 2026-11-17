@@ -7,9 +7,16 @@
 // A department whose register is empty says so and says what is missing; it is never shown as a
 // row of zeros. Human resources has no data in the system at all and says that. Finance is read from
 // the existing executive finance dashboard (the same role may read it), not recomputed here.
-import { computed, onMounted, ref, type Component } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
-import { Banknote, Building2, HardHat, HeartPulse, Users, ShieldCheck, Info, TriangleAlert, ArrowRight } from 'lucide-vue-next'
+//
+// LAYOUT (the app shell): the header and a side menu stay put and only the work area changes, so the
+// page is one screen, not a long column. "At a glance" shows each unit's headline figures, flagged
+// ones first; a unit opens its full figures; the wards have the map and the two tables as views of
+// their own. The view is in the address (?view=planning), so it can be shared and Back works. Print
+// prints every unit and both ward tables, whichever view is on screen. Below 64rem the menu becomes a
+// strip across the top and the page scrolls as an ordinary page.
+import { computed, nextTick, onMounted, ref, type Component } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { Banknote, Building2, HardHat, HeartPulse, Users, ShieldCheck, Info, TriangleAlert, ArrowRight, LayoutGrid, Map as MapIcon, Table2, ChartColumn } from 'lucide-vue-next'
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
 import WardTable from '@/components/executive/WardTable.vue'
@@ -25,6 +32,7 @@ import { byCurrency, pctText } from '@/modules/finance/workspaces/shared/useDash
 import { formatMoney, type Currency } from '@/modules/finance/composables/useMoney'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const overview = ref<ExecutiveOverview | null>(null)
@@ -109,7 +117,9 @@ const planGroup = computed<Group | null>(() => {
 
 const cards = computed<Card[]>(() => {
   const o = overview.value
-  const miss = (note: string, heading?: string) => () => missing(overviewError.value ?? note, !!overviewError.value, heading)
+  // before the overview has arrived a unit is being read, not unreadable
+  const miss = (note: string, heading?: string) => () =>
+    missing(overviewError.value ?? (o || !loading.value ? note : 'Reading the registers…'), !!overviewError.value, heading)
 
   return [
     {
@@ -154,6 +164,40 @@ const asOf = computed(() => {
   const t = overview.value?.as_of
   return t ? new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
 })
+
+// ── The shell: which view the work area shows ────────────────────────────
+const WARD_VIEWS = [
+  { key: 'wards-map', label: 'Ward map', icon: MapIcon },
+  { key: 'wards-registers', label: 'What the registers hold', icon: Table2 },
+  { key: 'wards-measures', label: 'Ward measures', icon: ChartColumn },
+] as const
+const VIEWS = new Set<string>(['summary', 'finance', 'planning', 'engineering', 'social', 'hr', 'audit', ...WARD_VIEWS.map((w) => w.key)])
+const view = computed(() => {
+  const v = route.query.view
+  return typeof v === 'string' && VIEWS.has(v) ? v : 'summary'
+})
+const work = ref<HTMLElement | null>(null)
+async function go(v: string) {
+  if (v === view.value) return
+  await router.push({ query: { ...route.query, view: v === 'summary' ? undefined : v } })
+  await nextTick()
+  // the work area starts at its top, and a keyboard or screen-reader user lands on the new view
+  if (work.value) { work.value.scrollTop = 0; work.value.focus({ preventScroll: true }) }
+}
+const wardTableOnly = computed(() => (view.value === 'wards-measures' ? 'measures' : 'counts'))
+
+/** A tile's headline: up to three figures, the flagged ones first, in the card's own order. */
+function headline(c: Card) {
+  const stats = c.groups.filter((g) => g.loaded).flatMap((g) => g.stats)
+  const flagged = stats.filter((s) => s.tone === 'bad' || s.tone === 'warn')
+  const picked = new Set([...flagged, ...stats.filter((s) => !flagged.includes(s))].slice(0, 3))
+  const shown = stats.filter((s) => picked.has(s))
+  const gap = c.groups.find((g) => !g.loaded)
+  return { shown, more: stats.length - shown.length, gap, flagged: flagged.length }
+}
+
+/** A figure may wrap between its words but never inside a number ("US$ 1 466 000.00" keeps its digit groups together). */
+const unbroken = (v: string) => v.replace(/(\d) (?=\d)/g, '$1 ')
 </script>
 
 <template>
@@ -161,62 +205,117 @@ const asOf = computed(() => {
     <a class="xo-skip" href="#xo-main">Skip to content</a>
     <header class="xo-header">
       <div class="xo-brand">
-        <span class="xo-council">Vungu Rural District Council</span>
+        <span class="xo-council">Vungu Rural District Council<span v-if="asOf" class="xo-asof"> · As at {{ asOf }}</span></span>
         <h1 class="xo-title">Chief Executive's Overview</h1>
       </div>
-      <p v-if="asOf" class="xo-asof">As at {{ asOf }}</p>
+      <ExportMenu :build="buildOverview" filename="chief-executive-overview" print />
       <ProfileDropdown role-label="Chief Executive" avatar-key="executive_avatar" @logout="handleLogout" />
     </header>
 
-    <main id="xo-main" class="xo-main" tabindex="-1">
-      <p class="xo-lede">
-        The six areas of the Executive Arm, read from the council's own registers. Nothing here can be changed from this page.
-      </p>
-      <div class="xo-tools"><ExportMenu :build="buildOverview" filename="chief-executive-overview" print /></div>
-      <p v-if="overviewError" class="xo-alert" role="alert">
-        <TriangleAlert :size="16" aria-hidden="true" />{{ overviewError }}
-        <button type="button" class="xo-retry" @click="load">Try again</button>
-      </p>
+    <div class="xo-shell">
+      <nav class="xo-nav" aria-label="Sections of the overview">
+        <ul class="xo-nav-list">
+          <li>
+            <button type="button" class="xo-nav-item" :aria-current="view === 'summary' ? 'page' : undefined" @click="go('summary')">
+              <LayoutGrid :size="16" aria-hidden="true" /> At a glance
+            </button>
+          </li>
+        </ul>
+        <p class="xo-nav-head">Units</p>
+        <ul class="xo-nav-list">
+          <li v-for="c in cards" :key="c.key">
+            <button type="button" class="xo-nav-item" :aria-current="view === c.key ? 'page' : undefined" @click="go(c.key)">
+              <component :is="c.icon" :size="16" aria-hidden="true" />
+              <span class="xo-nav-label">{{ c.title }}</span>
+              <span v-if="headline(c).flagged" class="xo-nav-flag" :title="`${headline(c).flagged} to look at`">{{ headline(c).flagged }}<span class="xo-sr"> to look at</span></span>
+            </button>
+          </li>
+        </ul>
+        <p class="xo-nav-head">Wards</p>
+        <ul class="xo-nav-list">
+          <li v-for="w in WARD_VIEWS" :key="w.key">
+            <button type="button" class="xo-nav-item" :aria-current="view === w.key ? 'page' : undefined" @click="go(w.key)">
+              <component :is="w.icon" :size="16" aria-hidden="true" /> {{ w.label }}
+            </button>
+          </li>
+        </ul>
+      </nav>
 
-      <div class="xo-grid">
-        <section v-for="c in cards" :key="c.key" class="xo-card" :aria-labelledby="`xo-${c.key}`">
+      <main id="xo-main" ref="work" class="xo-work" tabindex="-1">
+        <p v-if="overviewError" class="xo-alert" role="alert">
+          <TriangleAlert :size="16" aria-hidden="true" />{{ overviewError }}
+          <button type="button" class="xo-retry" @click="load">Try again</button>
+        </p>
+
+        <!-- At a glance: one tile per unit with its headline figures; the whole tile opens the unit -->
+        <section v-show="view === 'summary'" class="xo-panel xo-summary" aria-labelledby="xo-summary-h" data-testid="xo-summary">
+          <div class="xo-panel-head">
+            <h2 id="xo-summary-h" class="xo-panel-title">At a glance</h2>
+            <p class="xo-lede">The six areas of the Executive Arm, read from the council's own registers. Figures to look at come first. Nothing here can be changed from this page.</p>
+          </div>
+          <div class="xo-tiles">
+            <article v-for="c in cards" :key="c.key" class="xo-tile" :class="{ 'has-flag': headline(c).flagged }" :data-testid="`xo-tile-${c.key}`">
+              <header class="xo-card-head">
+                <component :is="c.icon" :size="20" class="xo-card-icon" aria-hidden="true" />
+                <h3 class="xo-tile-title">
+                  <button type="button" class="xo-tile-open" @click="go(c.key)">{{ c.title }}</button>
+                </h3>
+              </header>
+              <dl v-if="headline(c).shown.length" class="xo-stats">
+                <div v-for="s in headline(c).shown" :key="s.label" class="xo-stat">
+                  <dt>{{ s.label }}</dt>
+                  <dd :class="s.tone ? `is-${s.tone}` : undefined">{{ unbroken(s.value) }}</dd>
+                </div>
+              </dl>
+              <p v-if="headline(c).gap && (!headline(c).shown.length || headline(c).gap?.unavailable)" class="xo-missing" :class="{ 'is-error': headline(c).gap?.unavailable }">
+                <component :is="headline(c).gap?.unavailable ? TriangleAlert : Info" :size="16" aria-hidden="true" />
+                <span>{{ headline(c).gap?.note }}</span>
+              </p>
+              <p class="xo-tile-more" aria-hidden="true">
+                {{ headline(c).more ? `${headline(c).more} more figure${headline(c).more === 1 ? '' : 's'}` : 'Open' }} <ArrowRight :size="14" />
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <!-- Each unit in full -->
+        <section v-for="c in cards" v-show="view === c.key" :key="c.key" class="xo-panel xo-unit" :aria-labelledby="`xo-${c.key}`" :data-testid="`xo-unit-${c.key}`">
           <header class="xo-card-head">
-            <component :is="c.icon" :size="20" class="xo-card-icon" aria-hidden="true" />
+            <component :is="c.icon" :size="22" class="xo-card-icon" aria-hidden="true" />
             <div>
-              <h2 :id="`xo-${c.key}`" class="xo-card-title">{{ c.title }}</h2>
+              <h2 :id="`xo-${c.key}`" class="xo-panel-title">{{ c.title }}</h2>
               <p class="xo-card-post">{{ c.post }}</p>
             </div>
           </header>
-
-          <div v-for="(g, i) in c.groups" :key="i" class="xo-group">
-            <h3 v-if="g.heading" class="xo-group-title">{{ g.heading }}</h3>
-            <dl v-if="g.loaded" class="xo-stats">
-              <div v-for="s in g.stats" :key="s.label" class="xo-stat">
-                <dt>{{ s.label }}</dt>
-                <dd :class="s.tone ? `is-${s.tone}` : undefined">{{ s.value }}</dd>
-              </div>
-            </dl>
-            <p v-if="g.loaded && g.footnote" class="xo-foot">{{ g.footnote }}</p>
-            <p v-else-if="!g.loaded" class="xo-missing" :class="{ 'is-error': g.unavailable }">
-              <component :is="g.unavailable ? TriangleAlert : Info" :size="16" aria-hidden="true" />
-              <span>{{ g.note }}</span>
-            </p>
+          <div class="xo-groups">
+            <div v-for="(g, i) in c.groups" :key="i" class="xo-group">
+              <h3 v-if="g.heading" class="xo-group-title">{{ g.heading }}</h3>
+              <dl v-if="g.loaded" class="xo-stats">
+                <div v-for="s in g.stats" :key="s.label" class="xo-stat">
+                  <dt>{{ s.label }}</dt>
+                  <dd :class="s.tone ? `is-${s.tone}` : undefined">{{ unbroken(s.value) }}</dd>
+                </div>
+              </dl>
+              <p v-if="g.loaded && g.footnote" class="xo-foot">{{ g.footnote }}</p>
+              <p v-else-if="!g.loaded" class="xo-missing" :class="{ 'is-error': g.unavailable }">
+                <component :is="g.unavailable ? TriangleAlert : Info" :size="16" aria-hidden="true" />
+                <span>{{ g.note }}</span>
+              </p>
+            </div>
           </div>
-
           <div class="xo-links">
-            <RouterLink :to="`/units/${c.unit}`" class="xo-link">
-              Unit dashboard <ArrowRight :size="14" aria-hidden="true" />
-            </RouterLink>
-            <RouterLink v-if="c.link" :to="c.link.to" class="xo-link">
-              {{ c.link.label }} <ArrowRight :size="14" aria-hidden="true" />
-            </RouterLink>
+            <RouterLink :to="`/units/${c.unit}`" class="xo-link">Unit dashboard <ArrowRight :size="14" aria-hidden="true" /></RouterLink>
+            <RouterLink v-if="c.link" :to="c.link.to" class="xo-link">{{ c.link.label }} <ArrowRight :size="14" aria-hidden="true" /></RouterLink>
           </div>
         </section>
-      </div>
 
-      <ExecutiveWardMap />
-      <WardTable />
-    </main>
+        <!-- The wards. The map fills the work area and is not printed: the tables carry the same figures. -->
+        <div v-if="view === 'wards-map'" class="xo-panel xo-wardmap"><ExecutiveWardMap /></div>
+        <div v-show="view === 'wards-registers' || view === 'wards-measures'" class="xo-panel xo-wardtable">
+          <WardTable :only="wardTableOnly" />
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
@@ -224,55 +323,114 @@ const asOf = computed(() => {
 .xo-root { min-height: var(--ent-vh, 100vh); background: var(--ent-canvas); color: var(--ent-text); font-family: var(--ent-font); }
 .xo-skip { position: absolute; left: 8px; top: -48px; z-index: 80; padding: 0.5rem 0.75rem; background: var(--ent-surface); color: var(--ent-accent); border-radius: 4px; }
 .xo-skip:focus { top: 8px; }
+.xo-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-.xo-header { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.25rem; background: var(--ent-surface); border-bottom: 1px solid var(--ent-line); flex-wrap: wrap; }
-.xo-brand { display: flex; flex-direction: column; flex: 1 1 14rem; min-width: 0; }
+.xo-header { display: flex; align-items: center; gap: 1rem; padding: 0.625rem 1.25rem; background: var(--ent-surface); border-bottom: 1px solid var(--ent-line); flex-wrap: wrap; }
+.xo-brand { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
 .xo-council { font-size: var(--ent-fs-micro, 0.6875rem); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ent-text-3); }
 .xo-title { margin: 0; font-size: 1.25rem; font-weight: 600; }
-.xo-asof { margin: 0; color: var(--ent-text-3); font-size: 0.8125rem; }
+.xo-asof { text-transform: none; letter-spacing: 0; }
 
-.xo-main { max-width: 76rem; margin: 0 auto; padding: 1.25rem; }
-.xo-main:focus { outline: none; }
-.xo-tools { margin: 0 0 1rem; }
-.xo-lede { margin: 0 0 1rem; color: var(--ent-text-2); max-width: 46rem; }
+/* The menu. On a narrow screen it is a strip across the top. */
+.xo-nav { display: flex; gap: 0.25rem; padding: 0.5rem 0.75rem; overflow-x: auto; background: var(--ent-surface); border-bottom: 1px solid var(--ent-line); }
+.xo-nav-list { display: flex; flex: none; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.xo-nav-list > li { flex: none; }
+.xo-nav-head { display: none; }
+.xo-nav-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.5rem 0.625rem; border: 0; border-radius: 6px; background: none; color: var(--ent-text-2); font: inherit; font-size: 0.875rem; text-align: left; white-space: nowrap; cursor: pointer; }
+.xo-nav-item:hover { background: var(--ent-surface-2); color: var(--ent-text); }
+.xo-nav-item:focus-visible { outline: 2px solid var(--ent-accent); outline-offset: -2px; }
+.xo-nav-item[aria-current='page'] { background: var(--ent-accent-soft); color: var(--ent-accent); font-weight: 600; }
+.xo-nav-label { flex: 1; }
+.xo-nav-flag { flex: none; min-width: 1.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--ent-warning-soft); color: var(--ent-warning); font-size: 0.75rem; font-weight: 600; text-align: center; }
+
+.xo-work { padding: 1.25rem; }
+.xo-work:focus { outline: none; }
+.xo-panel-head { margin-bottom: 1rem; }
+.xo-panel-title { margin: 0; font-size: 1.125rem; font-weight: 600; }
+.xo-lede { margin: 0.25rem 0 0; color: var(--ent-text-2); max-width: 52rem; font-size: 0.9375rem; }
 
 .xo-alert { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; padding: 0.625rem 0.875rem; background: var(--ent-danger-soft); color: var(--ent-danger); border-radius: 6px; }
 .xo-retry { margin-left: auto; padding: 0.25rem 0.625rem; border: 1px solid var(--ent-danger); background: var(--ent-surface); color: var(--ent-danger); border-radius: 4px; cursor: pointer; }
 
-.xo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 1rem; align-items: start; }
-.xo-card { background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: 8px; padding: 1rem 1.125rem; }
+/* At a glance */
+.xo-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 1rem; }
+.xo-tile { position: relative; display: flex; flex-direction: column; background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: 8px; padding: 1rem 1.125rem; transition: border-color 150ms ease, box-shadow 150ms ease; }
+.xo-tile:hover { border-color: var(--ent-line-strong); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+.xo-tile.has-flag { box-shadow: inset 3px 0 0 var(--ent-warning); }
+.xo-tile:focus-within { outline: 2px solid var(--ent-accent); outline-offset: 2px; }
+.xo-tile-title { margin: 0; font-size: 1rem; font-weight: 600; }
+/* The title's button covers the whole tile, so the tile is one control with one name. */
+.xo-tile-open { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.xo-tile-open::after { content: ''; position: absolute; inset: 0; border-radius: 8px; }
+.xo-tile-open:focus { outline: none; }
+.xo-tile-more { display: flex; align-items: center; gap: 0.25rem; margin: auto 0 0; padding-top: 0.75rem; color: var(--ent-accent); font-size: 0.8125rem; }
+@media (prefers-reduced-motion: reduce) { .xo-tile { transition: none; } }
+
+/* A unit in full */
+.xo-unit { background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: 8px; padding: 1.25rem 1.5rem; max-width: 64rem; }
+.xo-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 0.5rem 2rem; align-items: start; }
+
 .xo-card-head { display: flex; gap: 0.75rem; align-items: flex-start; margin-bottom: 0.75rem; }
 .xo-card-icon { color: var(--ent-accent); margin-top: 0.125rem; flex: none; }
-.xo-card-title { margin: 0; font-size: 1rem; font-weight: 600; }
 .xo-card-post { margin: 0.125rem 0 0; font-size: 0.8125rem; color: var(--ent-text-3); }
-
-.xo-group + .xo-group { margin-top: 0.875rem; padding-top: 0.75rem; border-top: 1px solid var(--ent-line); }
-.xo-group-title { margin: 0 0 0.375rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); }
+.xo-group-title { margin: 0.5rem 0 0.375rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); }
 
 .xo-stats { margin: 0; display: grid; gap: 0.25rem; }
 .xo-stat { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3125rem 0; border-bottom: 1px solid var(--ent-surface-2); }
 .xo-stat:last-child { border-bottom: 0; }
 .xo-stat dt { color: var(--ent-text-2); font-size: 0.875rem; }
-.xo-stat dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.xo-stat dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: normal; word-break: normal; }
+/* On a tile the label sits above its figure, so a narrow tile never squeezes either one. */
+.xo-tile .xo-stat { flex-direction: column; gap: 0.0625rem; padding: 0.375rem 0; }
+.xo-tile .xo-stat dt { font-size: 0.8125rem; }
+.xo-tile .xo-stat dd { text-align: left; font-size: 1.0625rem; }
 .xo-stat dd.is-warn { color: var(--ent-warning); }
 .xo-stat dd.is-bad { color: var(--ent-danger); }
 .xo-stat dd.is-good { color: var(--ent-success); }
 
-.xo-missing { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0; padding: 0.625rem 0.75rem; background: var(--ent-surface-2); border-radius: 6px; color: var(--ent-text-2); font-size: 0.875rem; }
+.xo-missing { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0.25rem 0 0; padding: 0.625rem 0.75rem; background: var(--ent-surface-2); border-radius: 6px; color: var(--ent-text-2); font-size: 0.875rem; }
 .xo-missing svg { flex: none; margin-top: 0.125rem; }
 .xo-missing.is-error { background: var(--ent-warning-soft); color: var(--ent-warning); }
 
-.xo-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin-top: 0.875rem; }
+.xo-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin-top: 1rem; }
 .xo-foot { margin: 0.375rem 0 0; font-size: 0.8125rem; color: var(--ent-text-3); }
 .xo-link { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--ent-accent); font-size: 0.875rem; text-decoration: none; }
 .xo-link:hover { text-decoration: underline; }
 
-/* Print (the browser's "Save as PDF"): black on white, the tables in full, none of the controls or the map */
+.xo-wardmap :deep(.wm), .xo-wardtable :deep(.wt-root) { margin-top: 0; }
+
+/* The app shell. On a desktop the page is one screen: the header and the menu stay put, and only the
+   work area scrolls, and only when a view is taller than the window (the ward tables, a short screen). */
+@media (min-width: 64rem) {
+  .xo-root { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .xo-header { flex-wrap: nowrap; }
+  .xo-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xo-shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 15.5rem minmax(0, 1fr); }
+  .xo-nav { flex-direction: column; gap: 0; padding: 0.75rem 0.625rem; overflow-x: hidden; overflow-y: auto; border-bottom: 0; border-right: 1px solid var(--ent-line); }
+  .xo-nav-list { flex-direction: column; gap: 0.125rem; }
+  .xo-nav-head { display: block; margin: 1rem 0.625rem 0.25rem; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ent-text-3); }
+  .xo-nav-item { white-space: normal; }
+  .xo-work { overflow-y: auto; padding: 1.25rem 1.5rem; }
+  .xo-summary { display: flex; flex-direction: column; min-height: 100%; }
+  .xo-tiles { flex: 1; grid-template-columns: repeat(auto-fill, minmax(max(14rem, calc((100% - 2rem) / 3)), 1fr)); grid-auto-rows: auto; align-content: start; }
+  .xo-tile { min-height: 11rem; }
+  /* The ward map takes the height of the window, its ranked list beside it. */
+  .xo-wardmap { height: 100%; }
+  .xo-wardmap :deep(.wm) { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+  .xo-wardmap :deep(.wm-body) { flex: 1; min-height: 22rem; align-items: stretch; }
+  .xo-wardmap :deep(.wm-map-col) { display: flex; flex-direction: column; min-height: 0; }
+  .xo-wardmap :deep(.wm-canvas) { flex: 1; height: auto; min-height: 18rem; }
+  .xo-wardmap :deep(.wm-list-col) { max-height: none; min-height: 0; }
+}
+
+/* Print (the browser's "Save as PDF"): every unit in full and both ward tables, black on white, no menu, no map. */
 @media print {
-  .xo-root { background: #fff; color: #000; }
-  .xo-header :deep(.profile-dropdown), .xo-skip, .xo-retry, .xo-links { display: none !important; }
-  .xo-card { break-inside: avoid; border-color: #999; }
+  .xo-root { height: auto; overflow: visible; display: block; background: #fff; color: #000; }
+  .xo-shell { display: block; }
+  .xo-header :deep(.profile-dropdown), .xo-skip, .xo-retry, .xo-links, .xo-nav, .xo-summary, .xo-wardmap { display: none !important; }
+  .xo-work { overflow: visible; padding: 0; }
+  .xo-unit, .xo-wardtable { display: block !important; }
+  .xo-unit { break-inside: avoid; border-color: #999; margin-bottom: 0.75rem; max-width: none; }
   .xo-stat dd, .xo-stat dt { color: #000; }
-  :deep(.wm) { display: none !important; }   /* the ward map: the tables below carry the same figures */
 }
 </style>
