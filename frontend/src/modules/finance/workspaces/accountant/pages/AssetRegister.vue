@@ -7,6 +7,8 @@
  * depreciation run and a disposal are drafts until somebody other than whoever raised them
  * approves. The method and every figure are the server's.
  */
+import { announce } from '../../shared/usePortalAnnouncer'
+import CwSkeleton from '../kit/CwSkeleton.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { AlertTriangle, Building2, CircleCheck, Info, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
@@ -35,6 +37,7 @@ const q = ref('')
 const loading = ref(true)
 const error = ref<string | null>(null)
 const notice = ref<string | null>(null)
+watch(notice, (t) => { if (t) announce(t) })
 const formError = ref<string | null>(null)
 const busy = ref<string | null>(null)
 const today = new Date().toISOString().slice(0, 10)
@@ -178,9 +181,23 @@ async function showCharges(r: DepreciationRun): Promise<void> {
 
 // ── Categories ────────────────────────────────────────────────────────────────────────────────
 const addingCategory = ref(false)
-const c = reactive({ code: '', name: '', asset_account_id: '', accumulated_account_id: '', expense_account_id: '', method: 'straight_line' as 'straight_line' | 'none', useful_life_years: '', residual_pct: '' })
+/** The category being changed, or null when a new one is being added. */
+const editingCategory = ref<AssetCategory | null>(null)
+const c = reactive({ code: '', name: '', asset_account_id: '', accumulated_account_id: '', expense_account_id: '', method: 'straight_line' as 'straight_line' | 'none', useful_life_years: '', residual_pct: '', status: 'active' as 'active' | 'inactive' })
 function openCategory(): void {
-  Object.assign(c, { code: '', name: '', asset_account_id: '', accumulated_account_id: '', expense_account_id: '', method: 'straight_line', useful_life_years: '', residual_pct: '' })
+  Object.assign(c, { code: '', name: '', asset_account_id: '', accumulated_account_id: '', expense_account_id: '', method: 'straight_line', useful_life_years: '', residual_pct: '', status: 'active' })
+  editingCategory.value = null
+  formError.value = null
+  addingCategory.value = true
+}
+function editCategory(k: AssetCategory): void {
+  Object.assign(c, {
+    code: k.code, name: k.name, asset_account_id: k.asset_account_id, accumulated_account_id: k.accumulated_account_id ?? '',
+    expense_account_id: k.expense_account_id ?? '', method: k.method,
+    useful_life_years: k.useful_life_months ? String(Math.round((k.useful_life_months / 12) * 100) / 100) : '',
+    residual_pct: String(Number(k.residual_pct)), status: k.status,
+  })
+  editingCategory.value = k
   formError.value = null
   addingCategory.value = true
 }
@@ -189,6 +206,22 @@ async function saveCategory(): Promise<void> {
   busy.value = 'category'
   formError.value = null
   try {
+    const editing = editingCategory.value
+    if (editing) {
+      await assetsApi.updateCategory(editing.id, {
+        name: c.name.trim(), asset_account_id: c.asset_account_id, status: c.status,
+        ...(c.accumulated_account_id ? { accumulated_account_id: c.accumulated_account_id } : {}),
+        ...(c.method === 'straight_line' ? {
+          ...(c.expense_account_id ? { expense_account_id: c.expense_account_id } : {}),
+          ...(c.useful_life_years ? { useful_life_months: Math.round(Number(c.useful_life_years) * 12) } : {}),
+          ...(c.residual_pct !== '' ? { residual_pct: Number(c.residual_pct) } : {}),
+        } : {}),
+      })
+      addingCategory.value = false
+      editingCategory.value = null
+      await load()
+      return
+    }
     await assetsApi.createCategory({
       code: c.code.trim(), name: c.name.trim(), asset_account_id: c.asset_account_id, method: c.method,
       ...(c.accumulated_account_id ? { accumulated_account_id: c.accumulated_account_id } : {}),
@@ -220,7 +253,7 @@ const life = (months: number | null) => (months ? (months % 12 === 0 ? `${months
   </section>
 
   <p v-if="error" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ error }}</p>
-  <p v-if="notice" class="cw-banner-msg cw-banner-msg--pos" role="status"><CircleCheck :size="18" aria-hidden="true" />{{ notice }}</p>
+  <p v-if="notice" class="cw-banner-msg cw-banner-msg--pos"><CircleCheck :size="18" aria-hidden="true" />{{ notice }}</p>
   <p v-if="!loading && !categories.length" class="cw-banner-msg cw-banner-msg--info"><Info :size="18" aria-hidden="true" />
     <span>No asset category exists yet. A category names the ledger accounts and the useful life the Council's policy gives that class of asset.
       <button v-if="canManage" type="button" class="cw-link" @click="tab = 'categories'; openCategory()">Add the first category</button></span></p>
@@ -242,7 +275,7 @@ const life = (months: number | null) => (months ? (months % 12 === 0 ? `${months
     <button type="button" :aria-pressed="tab === 'categories'" @click="tab = 'categories'">Categories</button>
   </div>
 
-  <section v-if="loading" class="cw-card"><div class="cw-card-body" style="padding-top: 16px"><span class="cw-skel" /><span class="cw-skel" /></div></section>
+  <CwSkeleton v-if="loading" label="the asset register" />
 
   <!-- Register -->
   <section v-else-if="tab === 'register'" class="cw-card">
@@ -333,12 +366,14 @@ const life = (months: number | null) => (months ? (months % 12 === 0 ? `${months
       <div class="cw-card-body cw-table-wrap">
         <p v-if="!categories.length" class="cw-empty"><strong>No category yet.</strong>Useful lives and residual values are the Council's accounting policy; none is assumed.</p>
         <table v-else class="cw-table">
-          <thead><tr><th>Category</th><th>Asset account</th><th>Accumulated depreciation</th><th>Depreciation expense</th><th>Useful life</th><th>Residual</th></tr></thead>
+          <thead><tr><th>Category</th><th>Asset account</th><th>Accumulated depreciation</th><th>Depreciation expense</th><th>Useful life</th><th>Residual</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             <tr v-for="k in categories" :key="k.id">
               <td><strong>{{ k.code }}</strong> {{ k.name }}</td><td>{{ k.asset_account_code }} {{ k.asset_account_name }}</td>
               <td>{{ k.accumulated_account_code ?? '—' }}</td><td>{{ k.expense_account_code ?? '—' }}</td>
               <td>{{ k.method === 'none' ? 'Not depreciated' : life(k.useful_life_months) }}</td><td>{{ k.method === 'none' ? '—' : `${Number(k.residual_pct)} %` }}</td>
+              <td><span class="cw-pill" :class="k.status === 'active' ? 'cw-pill--pos' : 'cw-pill--mute'">{{ k.status === 'active' ? 'Active' : 'Inactive' }}</span></td>
+              <td><button v-if="canManage" type="button" class="cw-icon-btn" :aria-label="`Edit ${k.name}`" @click="editCategory(k)"><Pencil :size="17" /></button></td>
             </tr>
           </tbody>
         </table>
@@ -431,18 +466,21 @@ const life = (months: number | null) => (months ? (months % 12 === 0 ? `${months
 
   <!-- Category -->
   <div v-if="addingCategory" class="cw-dialog-backdrop" @click.self="addingCategory = false" @keydown.esc="addingCategory = false">
-    <form class="cw-dialog" role="dialog" aria-modal="true" aria-label="Add an asset category" @submit.prevent="saveCategory">
-      <header><h3>Add an asset category</h3><button type="button" class="cw-icon-btn" aria-label="Close" @click="addingCategory = false"><X :size="20" /></button></header>
+    <form class="cw-dialog" role="dialog" aria-modal="true" :aria-label="editingCategory ? `Change ${editingCategory.name}` : 'Add an asset category'" @submit.prevent="saveCategory">
+      <header><h3>{{ editingCategory ? `Change ${editingCategory.name}` : 'Add an asset category' }}</h3><button type="button" class="cw-icon-btn" aria-label="Close" @click="addingCategory = false"><X :size="20" /></button></header>
       <div class="cw-dialog-body">
         <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px">
-          <label class="cw-field"><span class="cw-label">Code <span class="req">*</span></span><input v-model="c.code" class="cw-input" required /></label>
+          <label class="cw-field"><span class="cw-label">Code <span class="req">*</span></span><input v-model="c.code" class="cw-input" required :readonly="!!editingCategory" /></label>
           <label class="cw-field"><span class="cw-label">Name <span class="req">*</span></span><input v-model="c.name" class="cw-input" required minlength="2" placeholder="Motor vehicles" /></label>
         </div>
         <label class="cw-field"><span class="cw-label">Asset account (cost) <span class="req">*</span></span>
           <select v-model="c.asset_account_id" class="cw-select" required><option value="">Choose an account</option><option v-for="x in of(['fixed_asset'], ['asset'])" :key="x.id" :value="x.id">{{ x.code }} {{ x.name }}</option></select>
           <span v-if="!of(['fixed_asset'], ['asset']).length" class="cw-hint">No account in the chart is marked as a fixed asset.</span></label>
         <label class="cw-field"><span class="cw-label">Depreciation</span>
-          <select v-model="c.method" class="cw-select"><option value="straight_line">Straight line</option><option value="none">Not depreciated (land)</option></select></label>
+          <select v-model="c.method" class="cw-select" :disabled="!!editingCategory"><option value="straight_line">Straight line</option><option value="none">Not depreciated (land)</option></select>
+          <span v-if="editingCategory" class="cw-hint">The method and code stay as registered. Depreciation already approved is not changed.</span></label>
+        <label v-if="editingCategory" class="cw-field"><span class="cw-label">Status</span>
+          <select v-model="c.status" class="cw-select"><option value="active">Active</option><option value="inactive">Inactive (no new asset registered under it)</option></select></label>
         <template v-if="c.method === 'straight_line'">
           <label class="cw-field"><span class="cw-label">Accumulated depreciation account <span class="req">*</span></span>
             <select v-model="c.accumulated_account_id" class="cw-select" required><option value="">Choose an account</option><option v-for="x in of([], ['asset'])" :key="x.id" :value="x.id">{{ x.code }} {{ x.name }}</option></select></label>

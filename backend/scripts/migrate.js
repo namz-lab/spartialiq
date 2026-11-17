@@ -403,6 +403,10 @@ const MIGRATIONS = [
   '240_permit_record_fields.sql',
   // The statutory checks on a case (road, aviation, neighbouring authority, agriculture, title conflict, adverse use) and the objection steps. Rollback: migrations/rollback/241_statutory_checks_and_objection_steps.down.sql.
   '241_statutory_checks_and_objection_steps.sql',
+  // The ledger's read side: journal number series, balances carried across financial years, a year-end close that can be re-raised after a reversal, the accountant's chart and close grants. Rollback: migrations/rollback/242_finance_ledger_reporting.down.sql.
+  '242_finance_ledger_reporting.sql',
+  // The salaries journal: a `payroll` voucher type raised by its own screen and numbered SJ-, not a payroll module. Rollback: migrations/rollback/243_finance_payroll_journal.down.sql.
+  '243_finance_payroll_journal.sql',
 ]
 
 function createPool(env = process.env) {

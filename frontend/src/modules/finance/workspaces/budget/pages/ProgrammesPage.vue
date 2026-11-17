@@ -14,7 +14,7 @@ const route = useRoute()
 const store = useFinanceStore()
 const { state } = useBudget()
 const kpi = computed(() => route.name === 'bud-kpis')
-const d = computed(() => state.dashboard)
+const d = computed(() => state.data)
 const currencies = computed(() => [...new Set((d.value?.departments ?? []).map((x) => x.currency))])
 const strip = (n: string) => n.replace(/\s*\(demo\)\s*$/i, '')
 const pct = (v: string | null) => (v === null ? '—' : `${v}%`)
@@ -25,7 +25,7 @@ const width = (v: string | null) => `${Math.min(100, Math.max(0, Number(v ?? 0))
   <section class="cw-pagehead">
     <span class="cw-pagehead-icon"><component :is="kpi ? Gauge : Network" :size="56" :stroke-width="1.6" aria-hidden="true" /></span>
     <div class="cw-pagehead-text">
-      <h2>{{ kpi ? 'Performance & KPIs' : 'Programme / Cost Centres' }}</h2>
+      <h2>{{ kpi ? 'Performance & KPIs' : 'Programmes & Votes' }}</h2>
       <p>{{ kpi ? 'How far each vote has spent its budget, and where the year stands.' : 'Budget and spending for every programme and every vote (department).' }} {{ store.selectedYear?.label }}</p>
     </div>
   </section>

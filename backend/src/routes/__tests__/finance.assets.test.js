@@ -59,7 +59,7 @@ describe('the asset register', () => {
       voucher_no: `${TAG}-BUY`, voucher_type: 'journal', currency: 'USD', financial_year_id: made.yearId, posting_date: made.periods[0].from_date,
       lines: [{ ledger_account_id: made.cost, debit: '12000.00' }, { ledger_account_id: made.equity, credit: '12000.00' }],
     })
-    await call('POST', `/finance/ledger/vouchers/${j.json().data.voucher.id}/post`, as.director)
+    await call('POST', `/finance/ledger/vouchers/${j.json().data.voucher.id}/post`, as.director, { expected_version: j.json().data.voucher.version })
   })
 
   afterAll(async () => {

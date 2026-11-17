@@ -8,18 +8,21 @@
  * `cwNav`. The shell reads the finance identity (permissions) once and keeps the unread count
  * fresh; the portal loads its own data.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { Bell, Calendar, ChevronDown, ChevronRight, Menu, Power, AlertTriangle, RefreshCw } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useFinanceStore } from '../../stores/finance'
 import { financeRoleLabel } from '../../shell/roleLabels'
+import type { WorkspaceKey } from '../../shell/workspaces'
+import WorkspaceSwitcher from '../../shell/WorkspaceSwitcher.vue'
 import FinanceYearPicker from '../../components/FinanceYearPicker.vue'
 import PortalArt from './PortalArt.vue'
 import { initials, resetPortalInbox, usePortalInbox } from './usePortal'
+import { usePortalAnnouncer } from './usePortalAnnouncer'
 import './portal.css'
 
-export interface PortalNavItem { name: string; label: string; icon: Component; badge?: number }
+export interface PortalNavItem { name: string; label: string; icon: Component; badge?: number; group?: string }
 export interface PortalMenuItem { name: string; label: string; icon: Component }
 
 const props = withDefaults(defineProps<{
@@ -35,7 +38,9 @@ const props = withDefaults(defineProps<{
   menu?: PortalMenuItem[]
   showYear?: boolean
   navLabel: string
-}>(), { homeSubtitle: '', homeCrumbs: () => [], titlePrefix: '', messagesRoute: null, menu: () => [], showYear: false })
+  /** Names this workspace on the switcher between the workspaces the person holds. */
+  workspace?: WorkspaceKey | null
+}>(), { homeSubtitle: '', homeCrumbs: () => [], titlePrefix: '', messagesRoute: null, menu: () => [], showYear: false, workspace: null })
 
 const emit = defineEmits<{ (e: 'boot'): void; (e: 'logout'): void; (e: 'tick'): void }>()
 
@@ -44,6 +49,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const store = useFinanceStore()
 const { inbox, loadUnread } = usePortalInbox()
+const { polite: sayPolite, assertive: sayAssertive } = usePortalAnnouncer()
 
 const activeNav = computed(() => (route.meta.cwNav as string | undefined) ?? String(route.name ?? ''))
 const userName = computed(() => auth.user?.name ?? 'Signed in')
@@ -57,20 +63,74 @@ const isHome = computed(() => route.name === props.homeRoute)
 const title = computed(() => {
   if (isHome.value) return props.homeTitle
   const page = String(route.meta.cwTitle ?? '')
-  return props.titlePrefix ? `${props.titlePrefix} – ${page}` : page
+  // A route with no cwTitle gives the prefix alone, never a dangling "Cashier – ".
+  return props.titlePrefix && page ? `${props.titlePrefix} – ${page}` : props.titlePrefix || page
+})
+/**
+ * WCAG 2.4.2: every page has its own browser title, from its `cwTitle`. "Journals – Accounting –
+ * Vungu RDC". The router's global guard writes the workspace's one title on EVERY navigation (a
+ * filter, a pager, voucher to voucher), so the shell writes its title again after each one, not only
+ * when the title changes: `fullPath` is watched too, and `post` runs it after the guard and the render.
+ */
+const docTitle = computed(() => [title.value, props.navLabel, 'Vungu RDC'].filter((p, i) => p && (i === 0 || p !== title.value)).join(' – '))
+watch([docTitle, () => route.fullPath], ([t]) => { document.title = t }, { immediate: true, flush: 'post' })
+
+/**
+ * WCAG 2.4.3: on moving to another page, focus goes to the page (`#cw-main`, tabindex -1, named by
+ * the title) instead of staying on the link that was clicked. Only when the path changes: a filter or
+ * a pager writes the query and must keep focus where it is. A page that has put focus inside itself
+ * already (a form's first field, say) is left alone.
+ */
+const mainEl = ref<HTMLElement | null>(null)
+watch(() => route.path, () => {
+  void nextTick(() => {
+    const main = mainEl.value
+    if (!main) return
+    const at = document.activeElement
+    if (at && at !== main && main.contains(at)) return
+    main.focus({ preventScroll: true })
+  })
 })
 const crumbs = computed(() => (route.meta.cwCrumbs as { label: string; to?: string }[] | undefined) ?? [])
 
 const navOpen = ref(false)
+const sideEl = ref<HTMLElement | null>(null)
+const toggleEl = ref<HTMLElement | null>(null)
+/** The nav in runs of one group (S8): a named group is exposed as role="group", labelled by its heading. */
+const navSets = computed(() => {
+  const sets: { group?: string; id: string; items: PortalNavItem[] }[] = []
+  for (const item of props.nav) {
+    const last = sets[sets.length - 1]
+    if (last && last.group === item.group) { last.items.push(item); continue }
+    sets.push({ group: item.group, id: `cw-nav-g${sets.length}`, items: [item] })
+  }
+  return sets
+})
+/** S7: opening the menu moves focus into it (the current page's link, else the first), so it is not left behind the panel. */
+watch(navOpen, (open) => {
+  if (!open) return
+  void nextTick(() => {
+    const links = sideEl.value?.querySelectorAll<HTMLElement>('.cw-nav a') ?? []
+    ;(sideEl.value?.querySelector<HTMLElement>('.cw-nav a.is-active') ?? links[0])?.focus({ preventScroll: true })
+  })
+})
 const menuOpen = ref(false)
 const menuEl = ref<HTMLElement | null>(null)
 watch(() => route.fullPath, () => { navOpen.value = false; menuOpen.value = false })
 
 function onDocClick(e: MouseEvent): void {
   if (menuOpen.value && menuEl.value && !menuEl.value.contains(e.target as Node)) menuOpen.value = false
+  // The dimmed area (anything outside the side panel) closes the mobile menu; its own button toggles it.
+  if (navOpen.value && sideEl.value && !sideEl.value.contains(e.target as Node) && !toggleEl.value?.contains(e.target as Node)) navOpen.value = false
 }
 function onKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape') { menuOpen.value = false; navOpen.value = false }
+  if (e.key !== 'Escape') return
+  menuOpen.value = false
+  if (navOpen.value) {
+    navOpen.value = false
+    // Focus was inside the panel that is about to be hidden: bring it back to the button that opened it.
+    if (!document.activeElement || document.activeElement === document.body || sideEl.value?.contains(document.activeElement)) toggleEl.value?.focus()
+  }
 }
 
 let timer: number | undefined
@@ -104,9 +164,11 @@ async function logout(): Promise<void> {
 
 <template>
   <div class="cw" :class="{ 'is-nav-open': navOpen }">
-    <a class="sr-only" href="#cw-main">Skip to content</a>
+    <a class="sr-only cw-skip" href="#cw-main">Skip to content</a>
+    <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="announce-polite">{{ sayPolite }}</div>
+    <div class="sr-only" role="alert" aria-live="assertive" aria-atomic="true" data-testid="announce-assertive">{{ sayAssertive }}</div>
 
-    <aside class="cw-side" :aria-label="navLabel">
+    <aside id="cw-side" ref="sideEl" class="cw-side" :aria-label="navLabel">
       <div class="cw-brand">
         <PortalArt kind="crest" :size="42" />
         <div>
@@ -115,15 +177,19 @@ async function logout(): Promise<void> {
         </div>
       </div>
       <nav class="cw-nav" :aria-label="`${navLabel} pages`">
-        <RouterLink
-          v-for="item in nav" :key="item.name" :to="{ name: item.name }"
-          :class="{ 'is-active': activeNav === item.name }"
-          :aria-current="activeNav === item.name ? 'page' : undefined"
-        >
-          <component :is="item.icon" :size="24" aria-hidden="true" />
-          <span>{{ item.label }}</span>
-          <span v-if="item.badge" class="cw-badge">{{ item.badge }}</span>
-        </RouterLink>
+        <div v-for="set in navSets" :key="set.id" class="cw-nav-set" :role="set.group ? 'group' : undefined" :aria-labelledby="set.group ? set.id : undefined">
+          <p v-if="set.group" :id="set.id" class="cw-nav-group">{{ set.group }}</p>
+          <RouterLink
+            v-for="item in set.items" :key="item.name"
+            :to="{ name: item.name }"
+            :class="{ 'is-active': activeNav === item.name }"
+            :aria-current="activeNav === item.name ? 'page' : undefined"
+          >
+            <component :is="item.icon" :size="24" aria-hidden="true" />
+            <span>{{ item.label }}</span>
+            <span v-if="item.badge" class="cw-badge">{{ item.badge }}<span class="sr-only"> pending</span></span>
+          </RouterLink>
+        </div>
       </nav>
       <div class="cw-side-art"><PortalArt kind="side" /></div>
       <button type="button" class="cw-logout" @click="logout">
@@ -133,8 +199,8 @@ async function logout(): Promise<void> {
 
     <div class="cw-main">
       <header class="cw-banner">
-        <PortalArt kind="banner" class="cw-banner-art" />
-        <button type="button" class="cw-icon-btn cw-menu-toggle" aria-label="Open the menu" @click.stop="navOpen = !navOpen">
+        <div class="cw-banner-clip"><PortalArt kind="banner" class="cw-banner-art" /></div>
+        <button type="button" ref="toggleEl" class="cw-icon-btn cw-menu-toggle" aria-label="Menu" aria-controls="cw-side" :aria-expanded="navOpen ? 'true' : 'false'" @click.stop="navOpen = !navOpen">
           <Menu :size="22" aria-hidden="true" />
         </button>
         <div class="cw-banner-text">
@@ -158,6 +224,7 @@ async function logout(): Promise<void> {
           </ol>
         </div>
         <div class="cw-banner-tools">
+          <WorkspaceSwitcher v-if="workspace && store.identity" :current="workspace" />
           <div v-if="showYear && store.identity && store.readsReference" class="cw-chip cw-year"><FinanceYearPicker /></div>
           <span class="cw-chip cw-chip-date">
             <Calendar :size="22" aria-hidden="true" />
@@ -184,7 +251,7 @@ async function logout(): Promise<void> {
         </div>
       </header>
 
-      <main id="cw-main" class="cw-content" tabindex="-1">
+      <main id="cw-main" ref="mainEl" class="cw-content" tabindex="-1" :aria-label="title || undefined">
         <p v-if="store.loadingIdentity && !store.identity" class="cw-empty" role="status">Reading your finance permissions…</p>
         <div v-else-if="!store.identity" class="cw-banner-msg cw-banner-msg--neg" role="alert">
           <AlertTriangle :size="18" aria-hidden="true" />

@@ -1,7 +1,11 @@
 /**
  * Which finance workspaces a person may open, and which one they land on.
  *
- * The fixture is the live `finance.role_permission` table as of 2026-11-12 (migrations 188–208).
+ * The fixture is the `finance.role_permission` table of the acceptance database as of 2026-11-16
+ * (migrations 188–242), regenerated with:
+ *   docker exec lamis-db psql -U postgres -d vungu_acceptance_test -At -c \
+ *    "select json_object_agg(role_name, codes) from (select role_name, json_agg(permission_code order by permission_code) codes from finance.role_permission group by 1) t" \
+ *    | python3 -m json.tool --indent 4 > src/config/__tests__/fixtures/financeRoleGrants.json
  * If a migration changes a role's grants, this test should be re-run against the new table: a
  * role silently gaining or losing a workspace is a change the client must see.
  */
@@ -45,6 +49,34 @@ describe('default grants', () => {
 
   it('an unscoped departmental head still gets Department Finance, not the council budget', () => {
     expect(forRole('dept_head', [], false)).toEqual({ workspaces: ['department'], home: 'department' })
+  })
+})
+
+// Migration 242 (client direction of 2026-11-16, COUNCIL-DECISIONS K5): the accountant maintains the
+// chart and raises the year-end close. Raising the close is bookkeeping, not a committee decision,
+// so holding it no longer opens Committee Decisions.
+describe('the year-end close after migration 242', () => {
+  it('the accountant holds the chart and the year-end close', () => {
+    expect(GRANTS.accountant).toEqual(expect.arrayContaining([
+      'finance.ledger.account.manage', 'finance.ledger.close_year',
+    ]))
+  })
+
+  it('holding the year-end close does not open Committee Decisions', () => {
+    expect(forRole('accountant').workspaces).not.toContain('committee')
+    expect(workspacesFor({ role: 'accountant', permissions: ['finance.ledger.view', 'finance.ledger.close_year'], scoped: false }))
+      .toEqual({ workspaces: [], home: null })
+  })
+
+  it('the committee is still admitted by each of its other approvals', () => {
+    const others = GRANTS.finance_committee.filter((c) => c !== 'finance.ledger.close_year')
+    expect(workspacesFor({ role: 'finance_committee', permissions: others, scoped: false }))
+      .toEqual({ workspaces: ['committee'], home: 'committee' })
+    for (const code of ['finance.budget.approve', 'finance.revision.approve', 'finance.project.approve',
+      'finance.publication.approve', 'finance.rates.tariff.approve']) {
+      expect(GRANTS.finance_committee).toContain(code)
+      expect(workspacesFor({ role: 'finance_committee', permissions: [code], scoped: false }).workspaces).toEqual(['committee'])
+    }
   })
 })
 

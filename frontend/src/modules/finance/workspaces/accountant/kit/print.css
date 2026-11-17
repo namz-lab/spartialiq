@@ -1,0 +1,22 @@
+/* Printing a statement: the portal chrome goes, the page goes white. */
+.print-only { display: none; }
+@media print {
+  .cw-side, .cw-banner, .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .cw, .cw-main, body { background: #fff !important; color: #000 !important; }
+  .cw { display: block !important; }
+  .cw-card { box-shadow: none !important; border: 0 !important; }
+  .st-table th, .st-sub td, .st-sub th { background: none !important; }
+  a { color: inherit; text-decoration: none; }
+  /* S6: a wide table is printed whole, not cut at the wrap's edge. */
+  .cw-table-wrap { overflow: visible !important; }
+  .cw-table, .st-table { min-width: 0 !important; font-size: 11px; }
+  thead { display: table-header-group; }
+  tr, .st-total, .vp-sign { break-inside: avoid; }
+  caption, thead { break-after: avoid; }
+}
+.print-page-note { display: none; }
+@media print { .print-page-note { display: block; font-size: 11px; } }
+
+@page wide { size: A4 landscape; }
+@media print { .db-table { page: wide; } }

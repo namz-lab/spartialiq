@@ -8,7 +8,8 @@
  * is equal and whether the reconciliation may be completed are the server's rules; the running
  * totals of what is ticked are shown here only as a guide.
  */
-import { computed, onMounted, reactive, ref } from 'vue'
+import { announce } from '../../shared/usePortalAnnouncer'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { AlertTriangle, CircleCheck, Landmark, Link2, Sparkles, Undo2, Upload } from 'lucide-vue-next'
 import ReasonDialog from '../../shared/ReasonDialog.vue'
@@ -26,6 +27,7 @@ const detail = ref<BankStatementDetail | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const notice = ref<string | null>(null)
+watch(notice, (t) => { if (t) announce(t) })
 const busy = ref<string | null>(null)
 const cancelling = ref(false)
 const pickedLines = ref<string[]>([])
@@ -159,7 +161,7 @@ const blockers = computed<string[]>(() => {
   </section>
 
   <p v-if="error" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ error }}</p>
-  <p v-if="notice" class="cw-banner-msg cw-banner-msg--pos" role="status"><CircleCheck :size="18" aria-hidden="true" />{{ notice }}</p>
+  <p v-if="notice" class="cw-banner-msg cw-banner-msg--pos"><CircleCheck :size="18" aria-hidden="true" />{{ notice }}</p>
 
   <template v-if="!detail">
     <section class="cw-card" aria-labelledby="br-pos">

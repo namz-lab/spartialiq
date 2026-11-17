@@ -47,6 +47,10 @@ export const assetsApi = {
     return unwrap(await api.get('/finance/assets/categories'))
   },
   async createCategory(body: CategoryBody): Promise<void> { await api.post('/finance/assets/categories', body) },
+  /** Changes a category; the code stays as registered. A field left out keeps its value. */
+  async updateCategory(id: string, body: Omit<CategoryBody, 'code'> & { status?: 'active' | 'inactive' }): Promise<void> {
+    await api.patch(`/finance/assets/categories/${id}`, body)
+  },
   async assets(params?: { q?: string; category_id?: string; status?: AssetStatus }): Promise<{
     assets: FixedAsset[]; totals: { currency: Currency; assets: number; cost: string; accumulated: string; carrying_amount: string }[]
   }> { return unwrap(await api.get('/finance/assets', { params })) },

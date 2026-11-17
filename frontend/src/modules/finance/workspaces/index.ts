@@ -21,6 +21,8 @@ import './revenue/routes'
 import './executive/routes'
 import './publisher/routes'
 import './department/routes'
+import './committee/routes'
+import './administration/routes'
 
 /**
  * Every built workspace's routes, each marked with its workspace and guarded.

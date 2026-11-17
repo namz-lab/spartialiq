@@ -17,7 +17,13 @@ const {
   SORT_COLUMNS, orderBy, naturalSide, statementSections, chartTree, periodsForYear,
   validateVoucherLines, ledgerRefusal, AGEING_BUCKETS, AGEING_LABELS,
   POSITION_ROOTS, PERFORMANCE_ROOTS, ROOT_TYPES, VOUCHER_TYPES,
+  ISSUED_VOUCHER_PREFIXES, reservedNumberRefusal,
+  SYSTEM_VOUCHER_TYPES, CREATABLE_VOUCHER_TYPES, systemTypeRefusal, LINE_REFERENCES,
+  periodChangeRefusal, periodRefusals,
+  COUNTER_GROUPS, counterGroupOf, counterGroupSql, CASH_STATEMENT_NOTE, UNCLOSED_SURPLUS_LABEL,
+  longDate, incompleteSentences, closingReversalDateRefusal,
 } = require('../src/routes/finance-ledger')
+const { READINESS_CHECKS, assembleReadiness, outstandingOf } = require('../src/routes/finance-accounting')
 
 describe('the sort whitelists', () => {
   test('every listing maps its keys to qualified columns, never to the key itself', () => {
@@ -471,10 +477,10 @@ describe('the ageing buckets', () => {
 })
 
 describe('the voucher types', () => {
-  test('are the twelve the schema allows (migration 213)', () => {
+  test('are the thirteen the schema allows (migrations 213 and 243)', () => {
     expect([...VOUCHER_TYPES].sort()).toEqual([
       'asset_disposal', 'closing', 'credit_note', 'depreciation', 'journal', 'opening', 'payment',
-      'rates_bill', 'receipt', 'reversal', 'supplier_invoice', 'write_off',
+      'payroll', 'rates_bill', 'receipt', 'reversal', 'supplier_invoice', 'write_off',
     ])
   })
 
@@ -483,6 +489,451 @@ describe('the voucher types', () => {
     // a correction nobody could follow, so it is raised only by POST /vouchers/:id/reverse.
     const creatable = VOUCHER_TYPES.filter((t) => t !== 'reversal')
     expect(creatable).not.toContain('reversal')
-    expect(creatable).toHaveLength(11)
+    expect(creatable).toHaveLength(12)
+  })
+})
+
+// A typed number in the shape of an issued one would take that number before its series reached
+// it. When the series did reach it, the insert would hit uq_voucher_no, the transaction would roll
+// the counter back, and every later attempt would draw the same number again: the series would be
+// jammed for good. So a typed voucher number may never look like one the ledger issues itself.
+describe('numbers the ledger issues itself (migrations 242 and 243)', () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  // The LAST definition wins in the database: 243 redefines the function with the salaries
+  // journal's SJ added, so both files are read and the final one is the function under test.
+  const read = (file) => fs.readFileSync(path.join(__dirname, '..', 'migrations', file), 'utf8')
+  const sql = `${read('242_finance_ledger_reporting.sql')}\n${read('243_finance_payroll_journal.sql')}`
+  const body = sql.slice(sql.lastIndexOf('CREATE OR REPLACE FUNCTION finance.next_document_no'))
+  const fn = body.slice(0, body.indexOf('END $$;'))
+
+  test('the prefixes are those of finance.next_document_no whose numbers land on a voucher', () => {
+    const prefixes = [...fn.matchAll(/WHEN '([a-z_]+)' THEN '([A-Z]{2})'/g)].map((m) => [m[1], m[2]])
+    expect(prefixes).toHaveLength(14)
+    // A cashier session (CS) and an asset (FA) are numbered from a series too, but their numbers
+    // are never a voucher's, so they cannot collide on uq_voucher_no.
+    const onVouchers = prefixes.filter(([kind]) => !['cashier_session', 'asset'].includes(kind)).map(([, p]) => p)
+    expect([...ISSUED_VOUCHER_PREFIXES].sort()).toEqual(onVouchers.sort())
+    expect([...ISSUED_VOUCHER_PREFIXES].sort()).toEqual(
+      ['AD', 'BD', 'CN', 'DP', 'JV', 'OB', 'PV', 'RC', 'SI', 'SJ', 'WO', 'YC'])
+    // Seven digits, as the function pads them.
+    expect(fn).toContain("lpad(v_no::text, 7, '0')")
+  })
+
+  test.each([
+    'JV-0000012', 'jv-0000012', ' JV-0000012 ', 'CN-0000001', 'WO-0000001', 'OB-0000003',
+    'YC-0000001', 'RC-0000011', 'BD-0000002', 'SI-0000004', 'PV-0000005', 'DP-0000006', 'AD-0000007',
+    'SJ-0000001',
+  ])('%p is refused', (typed) => {
+    const refusal = reservedNumberRefusal(typed)
+    expect(refusal).toEqual({
+      status: 400, error: 'number_reserved',
+      message: `${typed.trim().toUpperCase()} is in the form of a number the ledger issues from its own `
+        + 'series, and typing it would block that series when it reaches the same number. Type the '
+        + 'number of the document instead.',
+    })
+  })
+
+  test('where a number can be left blank, the refusal says so', () => {
+    expect(reservedNumberRefusal('JV-0000012', { blankIssues: true }).message).toBe(
+      'JV-0000012 is in the form of a number the ledger issues from its own series, and typing it '
+      + 'would block that series when it reaches the same number. Leave the number blank to have one '
+      + 'issued, or type the number of the document.')
+  })
+
+  test.each([
+    'JV-000012', 'JV-00000123', 'JV-0000012-R', 'CS-0000001', 'FA-0000001', 'GL-JV-001',
+    'AC1A2B3C-TYPED', 'JV0000012', 'XJV-0000012', '', undefined, null,
+  ])('%p is allowed', (typed) => {
+    expect(reservedNumberRefusal(typed)).toBeNull()
+  })
+})
+
+describe('B-SOD: what a person may type, and the refusals the database adds (migration 242)', () => {
+  test('only a journal, an opening, a credit note and a write-off may be raised by hand', () => {
+    expect([...CREATABLE_VOUCHER_TYPES].sort()).toEqual(['credit_note', 'journal', 'opening', 'write_off'])
+    // Every type is either creatable or named as a system type, never neither.
+    expect([...CREATABLE_VOUCHER_TYPES, ...Object.keys(SYSTEM_VOUCHER_TYPES)].sort()).toEqual([...VOUCHER_TYPES].sort())
+  })
+
+  test.each([
+    ['closing', 'A year-end closing voucher is raised by the year-end close under Period Close; it cannot be typed.'],
+    ['receipt', 'A receipt is raised by the cash office, or by Rates, when the money is received; it cannot be typed.'],
+    ['rates_bill', 'A rates bill is raised by a billing run under Rates; it cannot be typed.'],
+    ['reversal', 'A reversal is raised by reversing a posted voucher; it cannot be typed.'],
+    ['supplier_invoice', 'A supplier invoice voucher is raised by Creditors when the invoice is captured; it cannot be typed.'],
+    ['payment', 'A payment voucher is raised by Creditors when the payment is prepared; it cannot be typed.'],
+    ['depreciation', 'A depreciation voucher is raised by a depreciation run in the Asset Register; it cannot be typed.'],
+    ['asset_disposal', 'An asset disposal voucher is raised by a disposal in the Asset Register; it cannot be typed.'],
+    ['payroll', "A salaries journal is raised by the salaries journal screen, from the month's totals; it cannot be typed."],
+  ])('a hand-made %s is refused with a sentence saying where it is raised', (type, message) => {
+    expect(systemTypeRefusal(type)).toEqual({ status: 400, error: 'system_type', message })
+  })
+
+  test.each(['journal', 'opening', 'credit_note', 'write_off'])('%s is not refused', (type) => {
+    expect(systemTypeRefusal(type)).toBeNull()
+  })
+
+  test('every line reference names a finance table from a fixed list, never the request', () => {
+    expect(LINE_REFERENCES.map(([column]) => column)).toEqual([
+      'ledger_account_id', 'party_id', 'against_voucher_id', 'department_id', 'programme_id',
+      'activity_id', 'project_id', 'budget_line_id'])
+    for (const [, table] of LINE_REFERENCES) expect(table).toMatch(/^finance\.[a-z_]+$/)
+  })
+
+  test('a row of another council is refused as a foreign reference, with the database sentence', () => {
+    expect(ledgerRefusal({ message: "line 2 names a party that is not in this council's records" })).toEqual({
+      status: 400, error: 'foreign_reference', message: "Line 2 names a party that is not in this council's records.",
+    })
+    expect(ledgerRefusal({ message: "voucher JV-1 names a financial year that is not in this council's records" }).error)
+      .toBe('foreign_reference')
+  })
+
+  test('a hand-inserted closing voucher, and a second live reversal, are translated', () => {
+    expect(ledgerRefusal({ message: 'a year-end closing voucher is raised only by the year-end close' })).toMatchObject({
+      status: 400, error: 'system_type',
+    })
+    expect(ledgerRefusal({ message: 'voucher JV-0000003 already has a reversal, JV-0000003-R, waiting to be posted' })).toEqual({
+      status: 409, error: 'reversal_pending',
+      message: 'Voucher JV-0000003 already has a reversal, JV-0000003-R, waiting to be posted. Have it posted '
+        + 'from the To post queue, or discard it and raise the reversal again.',
+    })
+    expect(ledgerRefusal({ code: '23505', constraint: 'uq_voucher_one_live_reversal', message: 'duplicate key' }).error)
+      .toBe('reversal_pending')
+    // An ordinary duplicate number is still a duplicate.
+    expect(ledgerRefusal({ code: '23505', constraint: 'uq_voucher_no', message: 'duplicate key' }).error).toBe('duplicate')
+  })
+})
+
+describe('B11: period changes, the year-end close and the readiness checks', () => {
+  const period = (status, no = 12) => ({ period_no: no, status })
+  const refuse = (args) => periodChangeRefusal({ yearLabel: 'FY 1992', ...args })
+
+  test('a locked period is final, whatever is asked', () => {
+    for (const next of ['open', 'closed', 'locked']) {
+      expect(refuse({ period: period('locked', 4), next })).toEqual({
+        status: 409, error: 'period_locked',
+        message: 'Period 4 is locked, which is final. A locked period is what a council sets after the '
+          + 'audit; an adjustment after it belongs in a later period.',
+      })
+    }
+  })
+
+  test('asking for the status a period already has changes nothing and says so', () => {
+    expect(refuse({ period: period('open', 3), next: 'open' })).toEqual({ status: 409, error: 'no_change', message: 'Period 3 is already open.' })
+    expect(refuse({ period: period('closed', 3), next: 'closed' })).toEqual({ status: 409, error: 'no_change', message: 'Period 3 is already closed.' })
+  })
+
+  test('a period is locked only from closed (S11a)', () => {
+    expect(refuse({ period: period('open', 4), next: 'locked' })).toEqual({
+      status: 409, error: 'lock_needs_close',
+      message: 'Period 4 is open. Close it first: a period is locked only once it is closed, so what was '
+        + 'outstanding when it closed is on the record.',
+    })
+    expect(refuse({ period: period('closed', 4), next: 'locked' })).toBeNull()
+  })
+
+  test('the final period is not locked while a book has revenue or expenditure to close (S11c, M1)', () => {
+    expect(refuse({ period: period('closed'), next: 'locked', isFinal: true, unclosedBooks: ['USD'] })).toEqual({
+      status: 409, error: 'year_not_closed',
+      message: 'Period 12 is the last of FY 1992, and the USD book still has revenue or expenditure to close. '
+        + 'Close the year first: once the last period is locked, no closing can be posted into it.',
+    })
+    expect(refuse({ period: period('closed'), next: 'locked', isFinal: true, unclosedBooks: ['USD', 'ZWG'] }).message)
+      .toMatch(/^Period 12 is the last of FY 1992, and the USD and ZWG books still have revenue or expenditure to close\./)
+    // Every book closed, or a period that is not the last: the lock is allowed.
+    expect(refuse({ period: period('closed'), next: 'locked', isFinal: true, unclosedBooks: [] })).toBeNull()
+    expect(refuse({ period: period('closed', 11), next: 'locked', isFinal: false, unclosedBooks: ['USD'] })).toBeNull()
+  })
+
+  test('the last period is not locked while a reversal of its closing waits (review M8)', () => {
+    expect(refuse({ period: period('closed'), next: 'locked', isFinal: true, closingReversalPending: true })).toEqual({
+      status: 409, error: 'closing_reversal_pending',
+      message: 'Period 12 is the last of FY 1992, and a reversal of its year-end closing is waiting to be posted. '
+        + 'Have it posted, or discard it, first: once the last period is locked it could never be posted.',
+    })
+    // Another period may be locked meanwhile; the reversal posts into the last one only.
+    expect(refuse({ period: period('closed', 11), next: 'locked', isFinal: false, closingReversalPending: true })).toBeNull()
+  })
+
+  test('a remainder after a closing is worded as a remainder, not as closed (frontend review ask 3)', () => {
+    expect(refuse({ period: period('closed', 5), next: 'open', unclosedBooks: ['USD'],
+      standingClosings: [{ currency: 'USD', voucher_no: 'YC-0000003' }] }).message)
+      .toBe('A remainder is left in the USD book of FY 1992 after YC-0000003. Reverse the year-end closing first.')
+  })
+
+  test('the periods list sends what a lock and a reopen would be told, from the same rule', () => {
+    const facts = { yearLabel: 'FY 1992', unclosedBooks: ['USD'], standingClosings: [], closingReversalPending: false }
+    expect(periodRefusals({ ...facts, period: period('closed'), isFinal: true })).toEqual({
+      lock_refusal: { error: 'year_not_closed', message: refuse({ ...facts, period: period('closed'), next: 'locked', isFinal: true }).message },
+      reopen_refusal: null,
+    })
+    expect(periodRefusals({ ...facts, period: period('open', 3), isFinal: false })).toEqual({
+      lock_refusal: { error: 'lock_needs_close', message: expect.stringMatching(/^Period 3 is open\. Close it first/) },
+      reopen_refusal: { error: 'no_change', message: 'Period 3 is already open.' },
+    })
+    expect(periodRefusals({ ...facts, period: period('locked', 4), isFinal: false })).toMatchObject({
+      lock_refusal: { error: 'period_locked' }, reopen_refusal: { error: 'period_locked' },
+    })
+    expect(periodRefusals({ ...facts, unclosedBooks: [], period: period('closed'), isFinal: true })).toEqual({
+      lock_refusal: null, reopen_refusal: null,
+    })
+  })
+
+  test('no period of a closed year is reopened until the closing is reversed (the ruling)', () => {
+    expect(refuse({ period: period('closed', 5), next: 'open', standingClosings: [{ currency: 'USD', voucher_no: 'YC-0000003' }] })).toEqual({
+      status: 409, error: 'year_closed',
+      message: 'The USD book of FY 1992 is closed by YC-0000003. Reverse the year-end closing first.',
+    })
+    expect(refuse({ period: period('closed', 5), next: 'open', standingClosings: [
+      { currency: 'USD', voucher_no: 'YC-0000003' }, { currency: 'USD', voucher_no: 'YC-0000004' },
+      { currency: 'ZWG', voucher_no: 'YC-0000005' }] }).message).toBe(
+      'The USD book of FY 1992 is closed by YC-0000003 and YC-0000004. The ZWG book of FY 1992 is closed by '
+      + 'YC-0000005. Reverse the year-end closing first.')
+    expect(refuse({ period: period('closed', 5), next: 'open', standingClosings: [] })).toBeNull()
+    expect(refuse({ period: period('open', 5), next: 'closed' })).toBeNull()
+  })
+
+  test('the year-end close\'s refusals are translated, each with its own key', () => {
+    expect(ledgerRefusal({ message: 'a year-end closing is dated the last day of the year, 1992-12-31, not 1992-06-30' })).toEqual({
+      status: 400, error: 'bad_date', message: 'A year-end closing is dated the last day of the year, 1992-12-31, not 1992-06-30.',
+    })
+    expect(ledgerRefusal({ message: 'every period of FY 1992 must be closed before its year end; still open: 3, 11' })).toEqual({
+      status: 409, error: 'periods_open', message: 'Every period of FY 1992 must be closed before its year end; still open: 3, 11.',
+    })
+    expect(ledgerRefusal({ message: 'period 12 of FY 1992 is locked, so no year-end closing can be posted into it' })).toEqual({
+      status: 409, error: 'final_period_locked',
+      message: 'Period 12 of FY 1992 is locked, so no year-end closing can be posted into it. A locked period is '
+        + 'final: correct this book in the next year.',
+    })
+    expect(ledgerRefusal({ message: 'the USD book of FY 1992 already has a closing, YC-0000004, waiting to be posted' })).toEqual({
+      status: 409, error: 'closing_pending',
+      message: 'The USD book of FY 1992 already has a closing, YC-0000004, waiting to be posted. Have it posted '
+        + 'from the To post queue, or discard it and raise the close again.',
+    })
+    expect(ledgerRefusal({ message: 'the USD book of FY 1992 has no revenue or expense balance to close' })).toEqual({
+      status: 409, error: 'nothing_to_close', message: 'The USD book of FY 1992 has no revenue or expense balance to close.',
+    })
+    expect(ledgerRefusal({ message: 'no postable accumulated-surplus account exists in the chart' }).error).toBe('no_surplus_account')
+    // A closed or locked period refusing an ordinary posting is still period_not_open.
+    expect(ledgerRefusal({ message: 'accounting period 12 is locked and accepts no postings' }).error).toBe('period_not_open')
+    // The legacy one-call close's refusal is unchanged.
+    expect(ledgerRefusal({ message: 'the USD book of FY 1991 has already been closed' }).error).toBe('already_done')
+  })
+
+  const none = { draft_vouchers: 0, cashups_unverified: 0, deposits_unposted: 0, payables_awaiting: 0, bank_statements_open: 0 }
+  const facts = (over = {}) => ({
+    counts: none, depreciation: [], unreconciled: [], debtors: [], creditors: [],
+    books: [{ currency: 'USD', balances: true, difference: '0.00' }], ...over,
+  })
+  const P = { id: 'p', period_no: 3, label: 'March', from_date: '1992-03-01', to_date: '1992-03-31', status: 'open' }
+
+  test('the checks come in the brief\'s order, then the two control reconciliations; depreciation only with an asset in use', () => {
+    expect(READINESS_CHECKS.map((c) => c.key)).toEqual([
+      'draft_vouchers', 'cashups_unverified', 'deposits_unposted', 'payables_awaiting', 'depreciation_not_run',
+      'bank_statements_open', 'bank_not_reconciled', 'debtors_control', 'creditors_control'])
+    expect(READINESS_CHECKS.map((c) => c.target)).toEqual([
+      'acc-journals', 'acc-cashups', 'acc-banking', 'acc-payable', 'acc-assets', 'acc-bank', 'acc-bank',
+      'acc-receivable', 'acc-payable'])
+    const clear = assembleReadiness(P, facts())
+    expect(clear.checks.map((c) => c.key)).not.toContain('depreciation_not_run')
+    expect(clear.checks).toHaveLength(8)
+    expect(clear.checks.every((c) => c.ok && c.count === 0 && c.detail === null)).toBe(true)
+    expect(clear).toMatchObject({ period: P, ready: true })
+    const withAsset = assembleReadiness(P, facts({ depreciation: [{ currency: 'USD', run: true }] }))
+    expect(withAsset.checks.map((c) => c.key)[4]).toBe('depreciation_not_run')
+    expect(withAsset.checks[4]).toMatchObject({ count: 0, ok: true })
+  })
+
+  test('each count comes from the data, and anything outstanding makes the period not ready', () => {
+    const r = assembleReadiness(P, facts({
+      counts: { ...none, draft_vouchers: 1, cashups_unverified: 2 },
+      depreciation: [{ currency: 'USD', run: false }, { currency: 'ZWG', run: true }],
+      unreconciled: [{ code: '1100', currency: 'USD', entries: 3 }],
+      debtors: [{ currency: 'USD', difference: '10.00' }],
+      creditors: [{ currency: 'ZWG', difference: '-4.50' }],
+      asAt: '2026-11-17',
+    }))
+    const byKey = Object.fromEntries(r.checks.map((c) => [c.key, c]))
+    expect(byKey.draft_vouchers).toEqual({
+      key: 'draft_vouchers', label: 'Draft vouchers dated in the period', count: 1, ok: false,
+      detail: '1 draft is dated in the period and not posted.', target: 'acc-journals',
+    })
+    expect(byKey.cashups_unverified).toMatchObject({ count: 2, ok: false, detail: '2 cash-ups of the period are open or awaiting verification.' })
+    expect(byKey.depreciation_not_run).toMatchObject({ count: 1, ok: false, detail: 'Not run in USD.' })
+    expect(byKey.bank_not_reconciled).toMatchObject({ count: 1, ok: false, detail: '1100 (USD): 3 entries' })
+    expect(byKey.debtors_control).toMatchObject({
+      count: 1, ok: false, detail: 'USD: the ageing less the control is 10.00',
+      label: 'Debtors ageing differs from the receivable control account (whole book, as at today)',
+    })
+    expect(byKey.creditors_control).toMatchObject({ count: 1, ok: false, detail: 'ZWG: the open items less the control is -4.50' })
+    expect(byKey.deposits_unposted).toMatchObject({ count: 0, ok: true, detail: null })
+    expect(r.ready).toBe(false)
+    expect(outstandingOf(r)).toEqual([
+      { key: 'draft_vouchers', count: 1 }, { key: 'cashups_unverified', count: 2 },
+      { key: 'depreciation_not_run', count: 1 }, { key: 'bank_not_reconciled', count: 1 },
+      // The two whole-book reconciliations say so, with the day they were read (review M1).
+      { key: 'debtors_control', count: 1, scope: 'whole_book', as_at: '2026-11-17' },
+      { key: 'creditors_control', count: 1, scope: 'whole_book', as_at: '2026-11-17' }])
+    expect(r.as_at).toBe('2026-11-17')
+  })
+
+  test('a book out of balance alone makes the period not ready, and every check can still be clear', () => {
+    const r = assembleReadiness(P, facts({ books: [{ currency: 'USD', balances: false, difference: '0.01' }] }))
+    expect(r.checks.every((c) => c.ok)).toBe(true)
+    expect(r.ready).toBe(false)
+    expect(outstandingOf(r)).toEqual([])
+  })
+})
+
+describe('B12: the statements (accounting audit M7, S13, S14)', () => {
+  test('a date is written out in words, with no time zone involved', () => {
+    expect(longDate('1993-12-31')).toBe('31 December 1993')
+    expect(longDate('1992-01-05')).toBe('5 January 1992')
+    expect(longDate('2026-02-28')).toBe('28 February 2026')
+    expect(() => longDate('31/12/1993')).toThrow(/not an ISO date/)
+  })
+
+  test('the earlier-years row carries the label the statement prints', () => {
+    expect(UNCLOSED_SURPLUS_LABEL).toBe('Surplus or deficit of earlier years not yet closed')
+  })
+
+  test('a position row with no account is grouped under equity, after the accounts, and passes through untouched', () => {
+    const rows = [
+      { currency: 'USD', ledger_account_id: 'a', account_code: '3000', account_name: 'Accumulated surplus', root_type: 'equity', balance: '1500.00' },
+      { currency: 'USD', ledger_account_id: null, account_code: null, account_name: UNCLOSED_SURPLUS_LABEL, root_type: 'equity', balance: '-104.00' },
+    ]
+    const [book] = statementSections(rows, POSITION_ROOTS)
+    const equity = book.sections.find((s) => s.root_type === 'equity')
+    expect(equity.accounts.map((a) => a.ledger_account_id)).toEqual(['a', null])
+    expect(equity.accounts[1]).toBe(rows[1])
+  })
+
+  describe('the counter-side groups of the cash statement', () => {
+    test('revenue and expense by root; then the control and asset types; then what is left by root', () => {
+      expect(counterGroupOf('revenue', null)).toBe('revenue')
+      expect(counterGroupOf('revenue', 'tax')).toBe('revenue')
+      expect(counterGroupOf('expense', 'other')).toBe('expense')
+      expect(counterGroupOf('asset', 'receivable')).toBe('receivable')
+      expect(counterGroupOf('liability', 'payable')).toBe('payable')
+      expect(counterGroupOf('liability', 'tax')).toBe('tax')
+      expect(counterGroupOf('asset', 'tax')).toBe('tax')
+      expect(counterGroupOf('asset', 'fixed_asset')).toBe('fixed_asset')
+      expect(counterGroupOf('asset', 'inventory')).toBe('other_asset')
+      expect(counterGroupOf('asset', null)).toBe('other_asset')
+      expect(counterGroupOf('liability', 'provision')).toBe('liability')
+      expect(counterGroupOf('equity', 'accumulated_surplus')).toBe('equity')
+    })
+
+    test('there is no cash group: a bank or cash account is never a counter-side', () => {
+      expect(COUNTER_GROUPS.map((g) => g.group)).toEqual(
+        ['revenue', 'expense', 'receivable', 'payable', 'tax', 'fixed_asset', 'other_asset', 'liability', 'equity'])
+      expect(() => counterGroupOf('asset', 'bank')).toThrow(/cash/)
+      expect(() => counterGroupOf('asset', 'cash')).toThrow(/cash/)
+      for (const g of COUNTER_GROUPS) expect(g.label).toMatch(/^[A-Z][a-z ,()]+$/)
+    })
+
+    test('the SQL CASE is built from the same table, and nothing in it comes from a request', () => {
+      const sql = counterGroupSql('la')
+      expect(sql).toBe("CASE WHEN la.root_type = 'revenue' THEN 'revenue' "
+        + "WHEN la.root_type = 'expense' THEN 'expense' "
+        + "WHEN la.account_type = 'receivable' THEN 'receivable' "
+        + "WHEN la.account_type = 'payable' THEN 'payable' "
+        + "WHEN la.account_type = 'tax' THEN 'tax' "
+        + "WHEN la.account_type = 'fixed_asset' THEN 'fixed_asset' "
+        + "WHEN la.root_type = 'asset' THEN 'other_asset' "
+        + "WHEN la.root_type = 'liability' THEN 'liability' "
+        + "ELSE 'equity' END")
+      expect(() => counterGroupSql('la; DROP')).toThrow(/alias/)
+    })
+
+    test('the note says it is not an IPSAS 2 cash flow statement, and states the rules', () => {
+      expect(CASH_STATEMENT_NOTE).toMatch(/^This is a statement of cash receipts and payments\. It is not a cash flow statement under IPSAS 2/)
+      expect(CASH_STATEMENT_NOTE).toMatch(/between the council's own bank and cash accounts/)
+      expect(CASH_STATEMENT_NOTE).toMatch(/Opening-balance and year-end closing vouchers are not receipts or payments/)
+      expect(CASH_STATEMENT_NOTE).toMatch(/nothing is apportioned or rounded/)
+      // Review I1: the columns tie to the receipts and payments, and a line against its voucher is negative.
+      expect(CASH_STATEMENT_NOTE).toMatch(/the inflows add up to the receipts and the outflows to the payments exactly/)
+      expect(CASH_STATEMENT_NOTE).toMatch(/tax withheld from a payment .* shows as a negative figure/)
+      expect(CASH_STATEMENT_NOTE).not.toMatch(/!/)
+    })
+  })
+
+  describe('what a statement does not yet contain, in sentences', () => {
+    const base = {
+      payableAccounts: 1, unreconciledBanks: [], ppeWithoutAssets: [], asAt: '1993-12-31',
+      yearLabel: 'FY 1993', openPeriods: null,
+    }
+
+    test('nothing missing: no sentence at all', () => {
+      expect(incompleteSentences(base)).toEqual([])
+      expect(incompleteSentences({ ...base, openPeriods: [] })).toEqual([])
+    })
+
+    test('each gap is its own sentence, in a fixed order', () => {
+      expect(incompleteSentences({
+        ...base,
+        payableAccounts: 0,
+        unreconciledBanks: [
+          { code: '1100', name: 'Main bank', currency: 'USD', reconciled_to: null },
+          { code: '1300', name: 'Second bank', currency: 'ZWG', reconciled_to: '1993-03-31' },
+        ],
+        ppeWithoutAssets: ['USD'],
+        openPeriods: [3],
+      })).toEqual([
+        'The chart has no creditors (payable) control account, so this statement shows what the council is owed and not what it owes.',
+        'The USD balance of bank account 1100 Main bank has never been reconciled to a bank statement.',
+        'The ZWG balance of bank account 1300 Second bank is reconciled only to 31 March 1993; later entries are not yet agreed to a bank statement.',
+        'The property, plant and equipment accounts carry a balance in the USD book, but the asset register holds no USD asset acquired by 31 December 1993, so no depreciation has been charged against it.',
+        'Period 3 of FY 1993 is still open, so these year-end figures may still change.',
+      ])
+    })
+
+    test('the payables sentence is worded for the statement it is printed on (review m6)', () => {
+      expect(incompleteSentences({ ...base, payableAccounts: 0 })).toEqual([
+        'The chart has no creditors (payable) control account, so this statement shows what the council is owed and not what it owes.'])
+      expect(incompleteSentences({ ...base, payableAccounts: 0, statement: 'performance' })).toEqual([
+        'The chart has no creditors (payable) control account, so expenditure is recorded only when it is paid: '
+          + 'goods and services received and not yet paid for are missing from this statement.'])
+    })
+
+    test('several open periods are listed in one sentence', () => {
+      expect(incompleteSentences({ ...base, openPeriods: [3, 5, 7] }))
+        .toEqual(['Periods 3, 5 and 7 of FY 1993 are still open, so these year-end figures may still change.'])
+      expect(incompleteSentences({ ...base, openPeriods: [11, 12] }))
+        .toEqual(['Periods 11 and 12 of FY 1993 are still open, so these year-end figures may still change.'])
+    })
+  })
+
+  describe('the reversal of a year-end closing keeps the closing\'s date (B11 review N1)', () => {
+    const closing = { voucher_no: 'YC-0000002', voucher_type: 'closing', posting_date: '1992-12-31' }
+
+    test('another date is refused, with a sentence', () => {
+      expect(closingReversalDateRefusal(closing, '1992-12-30')).toEqual({
+        status: 400, error: 'bad_date',
+        message: 'A reversal of the year-end closing YC-0000002 is dated the same day as the closing, 1992-12-31, not 1992-12-30. '
+          + 'Leave the date out, or give 1992-12-31.',
+      })
+    })
+
+    test('the same date, or none, is accepted', () => {
+      expect(closingReversalDateRefusal(closing, '1992-12-31')).toBeNull()
+      expect(closingReversalDateRefusal(closing, undefined)).toBeNull()
+      expect(closingReversalDateRefusal(closing, null)).toBeNull()
+    })
+
+    test('the database\'s own refusal (finance.raise_reversal, migration 242) is translated the same way (review m1)', () => {
+      expect(ledgerRefusal({
+        code: '22023',
+        message: 'a reversal of the year-end closing YC-0000002 is dated the same day as the closing, 1992-12-31, not 1992-12-30',
+      })).toEqual({
+        status: 400, error: 'bad_date',
+        message: 'A reversal of the year-end closing YC-0000002 is dated the same day as the closing, 1992-12-31, not 1992-12-30.',
+      })
+    })
+
+    test('any other voucher may be reversed on another date', () => {
+      expect(closingReversalDateRefusal({ ...closing, voucher_type: 'journal' }, '1993-01-15')).toBeNull()
+    })
   })
 })

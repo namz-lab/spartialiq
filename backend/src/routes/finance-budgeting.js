@@ -11,7 +11,7 @@
  * budget routes with their own permissions.
  */
 
-const { requirePermission } = require('../middleware/financePermissions')
+const { requirePermission, departmentScope } = require('../middleware/financePermissions')
 
 const ok = (reply, data) => reply.code(200).send({ success: true, data })
 const fail = (reply, status, error, message) => reply.code(status).send({ success: false, error, message })
@@ -37,8 +37,11 @@ async function financeBudgetingRoutes(fastify) {
           ORDER BY start_date DESC LIMIT 1`, [request.query.financial_year_id || null])
       const year = years[0]
       if (!year) return fail(reply, 404, 'no_year', 'No open financial year contains today. Choose a year.')
-      const Y = [year.id]
-      const spend = `p.financial_year_id = $1 AND p.account_kind = 'expenditure' AND p.status IN ('approved', 'published')`
+      // A departmental head is confined to their own votes here as everywhere else; null means council-wide.
+      const scope = await departmentScope(fastify, request)
+      const Y = [year.id, scope]
+      const inScope = (col) => `($2::uuid[] IS NULL OR ${col} = ANY($2::uuid[]))`
+      const spend = `p.financial_year_id = $1 AND p.account_kind = 'expenditure' AND p.status IN ('approved', 'published') AND ${inScope('p.department_id')}`
 
       const [totals, programmes, departments, workflow, revisions, overLines, oldCommitments, projects, periods] = await Promise.all([
         pg.query(
@@ -73,28 +76,29 @@ async function financeBudgetingRoutes(fastify) {
             GROUP BY p.currency, d.code, d.name ORDER BY p.currency, sum(p.revised_amount) DESC`, Y),
         pg.query(
           `SELECT status, count(*)::int AS n FROM finance.budget_line
-            WHERE financial_year_id = $1 AND deleted_at IS NULL GROUP BY status`, Y),
+            WHERE financial_year_id = $1 AND deleted_at IS NULL AND ${inScope('department_id')} GROUP BY status`, Y),
         pg.query(
           `SELECT r.state, count(*)::int AS n FROM finance.budget_revision r
              JOIN finance.budget_line l ON l.id = r.budget_line_id
-            WHERE l.financial_year_id = $1 AND r.deleted_at IS NULL GROUP BY r.state`, Y),
+            WHERE l.financial_year_id = $1 AND r.deleted_at IS NULL AND ${inScope('l.department_id')} GROUP BY r.state`, Y),
         pg.query(
           `SELECT count(*)::int AS n FROM finance.v_budget_line_performance p
             WHERE ${spend} AND p.actual_amount + p.open_commitments > p.revised_amount`, Y),
         pg.query(
           `SELECT count(*)::int AS n FROM finance.commitment c JOIN finance.budget_line l ON l.id = c.budget_line_id
-            WHERE l.financial_year_id = $1 AND c.deleted_at IS NULL AND c.status IN ('open', 'partially_liquidated')
+            WHERE l.financial_year_id = $1 AND ${inScope('l.department_id')} AND c.deleted_at IS NULL AND c.status IN ('open', 'partially_liquidated')
               AND c.amount > c.liquidated_amount AND c.committed_on < CURRENT_DATE - 90`, Y),
         pg.query(
           `SELECT count(*)::int AS n FROM finance.v_project_performance pp
             WHERE pp.status NOT IN ('completed', 'cancelled')
+              AND ($1::uuid[] IS NULL OR pp.department_id = ANY($1::uuid[]))
               AND COALESCE(pp.approved_budget, 0) > 0
-              AND pp.allocated_original > pp.approved_budget`).catch(() => ({ rows: [{ n: 0 }] })),
+              AND pp.allocated_original > pp.approved_budget`, [scope]).catch(() => ({ rows: [{ n: 0 }] })),
         pg.query(
           `SELECT period_no, label, to_date::text AS to_date, (to_date - CURRENT_DATE) AS days_left
              FROM finance.ledger_period
             WHERE financial_year_id = $1 AND to_date >= CURRENT_DATE
-            ORDER BY to_date LIMIT 3`, Y),
+            ORDER BY to_date LIMIT 3`, [year.id]),
       ])
 
       const count = (rows, key, value) => rows.find((r) => r[key] === value)?.n ?? 0

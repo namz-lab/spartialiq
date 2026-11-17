@@ -1,0 +1,9 @@
+/* Statement tables: figures right-aligned in tabular numerals, totals ruled off. */
+.st-table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.st-table th { text-align: left; padding: 8px 12px; font-size: 12.5px; font-weight: 600; background: var(--cw-thead); color: var(--cw-ink); white-space: nowrap; }
+.st-table td { padding: 7px 12px; border-bottom: 1px solid var(--cw-line); vertical-align: top; }
+.st-table th.st-num, .st-table td.st-num { text-align: right; white-space: nowrap; }
+.st-table tbody th[scope='row'], .st-table tfoot th[scope='row'] { padding: 7px 12px; border-bottom: 1px solid var(--cw-line); vertical-align: top; font-size: inherit; font-weight: inherit; text-align: left; background: none; white-space: normal; }
+.st-total td, .st-total th { border-top: 2px solid var(--cw-ink); border-bottom: 0; font-weight: 700; background: none; }
+.st-sub td, .st-sub th { font-weight: 600; background: var(--cw-accent-softer); }
+.st-bf td, .st-bf th { font-style: italic; color: var(--cw-ink-2); background: none; }

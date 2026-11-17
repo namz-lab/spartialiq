@@ -175,6 +175,11 @@ describe('creditors', () => {
     const { rows } = await sys.query('SELECT voucher_id FROM finance.supplier_payment WHERE id = $1', [made.payment])
     const res = await call('POST', `/finance/ledger/vouchers/${rows[0].voucher_id}/reverse`, as.accountant, { reason: 'Transfer returned by the bank' })
     expect(res.statusCode).toBe(201)
+    // B-SOD: the reversal is a draft until somebody other than its preparer posts it.
+    expect(res.json().data.reversal.status).toBe('draft')
+    const posted = await call('POST', `/finance/ledger/vouchers/${res.json().data.reversal.id}/post`, as.director,
+      { expected_version: res.json().data.reversal.version })
+    expect(posted.statusCode).toBe(200)
     expect((await open())[0]).toMatchObject({ outstanding: '500.00', payable: '500.00' })
     const summary = (await call('GET', '/finance/payables/summary', as.auditor)).json().data
     expect(summary.payable_accounts.some((a) => a.id === made.payable)).toBe(true)

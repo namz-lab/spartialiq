@@ -26,9 +26,12 @@
 // configures. Same rule the frontend's role preset used for the accounting officer.
 const READ_ONLY = /\.(view|export|view_counterparty|view_restricted|export_restricted)$/
 
+// The decisions that are the committee's. `finance.ledger.close_year` is not among them: since
+// migration 242 the accountant raises the year-end close, and admitting by it would put Committee
+// Decisions in the accountant's switcher. The committee is admitted by the five below.
 const APPROVALS = [
   'finance.budget.approve', 'finance.revision.approve', 'finance.project.approve',
-  'finance.publication.approve', 'finance.rates.tariff.approve', 'finance.ledger.close_year',
+  'finance.publication.approve', 'finance.rates.tariff.approve',
 ]
 
 const isDepartmental = (ctx) => ctx.scoped || ctx.role === 'dept_head'

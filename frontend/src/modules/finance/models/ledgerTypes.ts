@@ -168,7 +168,14 @@ export interface LedgerPeriod {
   locked_by_name?: string | null
   /** How many posted entries are in it. A period with entries cannot be made to not have them. */
   entry_count: number
+  /** The period holds the year's last day. */
+  is_final?: boolean
+  /** The server's own refusal of a lock or reopen, with its sentence; null when the change is allowed. */
+  lock_refusal?: PeriodRefusal | null
+  reopen_refusal?: PeriodRefusal | null
 }
+
+export interface PeriodRefusal { error: string; message: string }
 
 export interface LedgerPeriodList {
   periods: LedgerPeriod[]
@@ -187,10 +194,28 @@ export interface LedgerPeriodsOpened {
 
 export type VoucherType =
   | 'opening' | 'journal' | 'rates_bill' | 'receipt' | 'credit_note'
-  | 'write_off' | 'closing' | 'reversal'
+  | 'write_off' | 'closing' | 'reversal' | 'supplier_invoice' | 'payment'
+  | 'depreciation' | 'asset_disposal' | 'payroll'
 
-/** The types a person may raise by hand. A reversal is raised only by reversing an original. */
-export type CreatableVoucherType = Exclude<VoucherType, 'reversal'>
+/**
+ * The types raised by their own screen or document, never typed by hand into a journal: rates bill
+ * and receipt by Revenue & Billing, closing by Period Close, supplier invoice and payment by
+ * Creditors, depreciation and disposal by the Asset Register, and the salaries journal by its own
+ * screen (the server refuses each with 400 `system_type`).
+ */
+export type SystemVoucherType =
+  | 'rates_bill' | 'receipt' | 'closing' | 'reversal' | 'supplier_invoice' | 'payment'
+  | 'depreciation' | 'asset_disposal' | 'payroll'
+
+/** The types a person may raise by hand, as the shared (console) client types them. */
+export type CreatableVoucherType = Exclude<VoucherType, SystemVoucherType>
+
+/**
+ * What the Accounting workspace's journal editor offers. The rest are raised by the system (rates
+ * bill and receipt by Revenue & Billing, closing by Period Close); the server refuses them with
+ * 400 `system_type`.
+ */
+export type AccountingCreatableType = 'journal' | 'opening' | 'credit_note' | 'write_off'
 
 export type VoucherStatus = 'draft' | 'posted' | 'cancelled'
 
@@ -227,6 +252,14 @@ export interface VoucherSummary {
   line_count: number
   debit_total: Money | null
   credit_total: Money | null
+  /** Bumped on every edit of a draft. Post sends the one the poster reviewed. */
+  version: number
+  /** Set when the voucher was cancelled (a discarded draft keeps its number). */
+  cancelled_by: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  /** The number of a reversal draft waiting to be posted, if one is. */
+  pending_reversal_no: string | null
 }
 
 /** One double-entry line. Exactly one of `debit`/`credit` is non-zero; the other is '0.00'. */
@@ -287,13 +320,33 @@ export interface VoucherPostedBalance extends VoucherBalance {
   entry_count: number
 }
 
+export type VoucherSourceKind =
+  | 'supplier_invoice' | 'supplier_payment' | 'depreciation_run' | 'asset_disposal'
+  | 'bank_deposit' | 'rates_bill' | 'rates_receipt' | 'cash_receipt'
+
+/** The document a voucher was posted from. */
+export interface VoucherSource {
+  kind: VoucherSourceKind
+  id: string
+  label: string
+}
+
+export interface VoucherQueues {
+  to_post: number
+  mine: number
+  posted: number
+  all: number
+  /** Discarded drafts. `all` does not include them. */
+  cancelled: number
+}
+
 export interface VoucherDetail {
   voucher: VoucherSummary & {
     period_no: number | null
     period_label: string | null
     period_status: LedgerPeriodStatus | null
     financial_year_label: string
-    cancel_reason?: string | null
+    cancelled_by_name: string | null
   }
   lines: VoucherLine[]
   /** Empty while the voucher is a draft. One per line once posted. */
@@ -302,12 +355,16 @@ export interface VoucherDetail {
     id: string; voucher_no: string; posting_date: string
     status: VoucherStatus; narration: string | null
   } | null
+  /** The document this voucher was raised from, found server-side; `null` for a hand-keyed journal. */
+  source: VoucherSource | null
   /** What the draft WOULD post. */
   draft_balance: VoucherDraftBalance
   /** What the ledger actually holds for this voucher. Nil entries while it is a draft. */
   posted_balance: VoucherPostedBalance
   balances: boolean
   note: string | null
+  /** Whether the caller may cancel this draft (a closing draft is also cancelled by a holder of close_year). */
+  may_discard?: boolean
 }
 
 export interface VoucherLineBody {
@@ -327,7 +384,8 @@ export interface VoucherLineBody {
 }
 
 export interface VoucherBody {
-  voucher_no: string
+  /** Omit to let the server number it. */
+  voucher_no?: string
   voucher_type: CreatableVoucherType
   currency: Currency
   financial_year_id: string
@@ -338,10 +396,25 @@ export interface VoucherBody {
   lines: VoucherLineBody[]
 }
 
+/**
+ * The month's salaries journal, raised by its own screen (type `payroll`, number SJ- issued by the
+ * server). Not a payroll module: the lines are the totals whoever computes the salaries types in —
+ * gross and the employer's contributions debited, PAYE, NSSA and the net paid credited. A
+ * settlement line (`against_voucher_id`) makes no sense here and is left out.
+ */
+export interface SalariesJournalBody {
+  currency: Currency
+  financial_year_id: string
+  posting_date: string
+  narration?: string
+  reference?: string
+  lines: Omit<VoucherLineBody, 'against_voucher_id'>[]
+}
+
 export interface VoucherCreated {
   voucher: Pick<VoucherSummary,
     'id' | 'voucher_no' | 'voucher_type' | 'currency' | 'financial_year_id' | 'posting_date'
-    | 'status' | 'prepared_by' | 'prepared_at'>
+    | 'status' | 'prepared_by' | 'prepared_at' | 'version'>
   lines: number
   balance: VoucherBalance
   balances: boolean
@@ -356,8 +429,19 @@ export interface VoucherPosted {
 
 export interface VoucherReversed {
   reversal: Pick<VoucherSummary,
-    'id' | 'voucher_no' | 'voucher_type' | 'currency' | 'posting_date' | 'status' | 'reverses_voucher_id'>
+    'id' | 'voucher_no' | 'voucher_type' | 'currency' | 'posting_date' | 'status' | 'reverses_voucher_id'
+    | 'prepared_by' | 'version'>
   reversed: string
+  /** Always true: the reversal is a draft that somebody else posts. */
+  awaiting_post: boolean
+  note: string
+}
+
+export interface VoucherCancelled {
+  cancelled: string
+  voucher_id: string
+  status: 'cancelled'
+  cancel_reason: string
   note: string
 }
 
@@ -370,6 +454,8 @@ export interface VoucherQuery {
   to?: string
   q?: string
   party_id?: string
+  /** `to_post`: drafts the caller did not prepare. `mine`: drafts the caller prepared. */
+  queue?: 'to_post' | 'mine'
   limit?: number
   offset?: number
   sort?: 'posting_date' | 'voucher_no' | 'voucher_type' | 'status'
@@ -383,6 +469,8 @@ export interface VoucherList {
   offset: number
   /** `null` means not confined to particular votes. */
   scope_applied: string[] | null
+  /** Counted for the same year filter, so the tabs can say how many each holds. */
+  queues: VoucherQueues
   note: string
 }
 
@@ -465,8 +553,9 @@ export interface LedgerEntryQuery {
  */
 export interface TrialBalanceRow {
   currency: Currency
-  ledger_account_id: string
-  account_code: string
+  /** `null` on the unclosed-surplus row: earlier years' revenue and expenditure not yet closed. */
+  ledger_account_id: string | null
+  account_code: string | null
   account_name: string
   root_type: LedgerRootType
   report_type: LedgerReportType
@@ -503,6 +592,10 @@ export interface TrialBalanceResult {
   note: string
   /** The currencies whose book does not balance. Empty is the only acceptable value. */
   unbalanced: Currency[]
+  as_at: string
+  closing: ClosingMode
+  /** Per book: has the year been closed there? The Before/After control only matters when one is. */
+  closed: { currency: Currency; closed: boolean }[]
 }
 
 // ── One account's balance ──────────────────────────────────────────────────────────────────────
@@ -545,8 +638,10 @@ export interface AccountBalanceResult {
 
 export interface StatementAccountRow {
   currency: Currency
-  ledger_account_id: string
-  account_code: string
+  /** `null` on the one line that is not an account: the surplus or deficit of earlier years not yet closed. */
+  ledger_account_id: string | null
+  /** `null` on that same line. Print no code for it. */
+  account_code: string | null
   account_name: string
   root_type: LedgerRootType
   account_type?: LedgerAccountType | null
@@ -577,18 +672,41 @@ export interface StatementSubtotal {
 /**
  * A statement of financial position, per currency.
  *
- * `incomplete` IS NOT A FOOTNOTE. Creditors, the cashbook and bank reconciliation, and fixed assets
- * are deferred workstreams, so this statement shows what the council is owed and NOT what it owes,
- * and its bank balance is unreconciled. A position statement that silently omitted payables would
- * be the most dangerous screen in this system, so the array is rendered prominently and never
- * collapsed.
+ * `incomplete` IS NOT A FOOTNOTE. It names what this statement does not yet contain or could not
+ * confirm: for example no payable account set up, no fixed asset account, a bank account with
+ * entries after its last reconciliation, or an asset register that disagrees with the ledger. A
+ * position statement that silently omitted such a gap would be the most dangerous screen in this
+ * system, so the array is rendered prominently and never collapsed.
  */
 export interface PositionStatement {
+  financial_year?: { id: string; label: string; start_date: string; end_date: string }
+  /** The date the statement is drawn to, as the server resolved it. */
+  as_at?: string
   books: StatementBook[]
   subtotals: StatementSubtotal[]
   currencies: Currency[]
   incomplete: string[]
   note: string
+  /** Revenue less expenditure of the open year, per book. Absent for a closed book. */
+  surplus_to_date: SurplusToDate[]
+  check: PositionCheck[]
+}
+
+export interface SurplusToDate {
+  currency: Currency
+  /** Absolute; the sign is in `side`. */
+  amount: Money
+  side: 'surplus' | 'deficit'
+}
+
+export interface PositionCheck {
+  currency: Currency
+  assets: Money
+  liabilities: Money
+  equity_and_surplus: Money
+  /** Assets less liabilities less equity and surplus, as the server worked it out. */
+  difference: Money
+  balances: boolean
 }
 
 export type Periodicity = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly'
@@ -617,11 +735,28 @@ export interface PerformanceStatement {
   /** `null` when no periodicity was asked for: the statement is then the year in one column. */
   periods: StatementPeriod[] | null
   period_rows: StatementPeriodRow[]
+  /** The date the statement is drawn to, as the server resolved it. */
+  as_at?: string
+  /** Total revenue and total expenditure per book. */
+  subtotals?: StatementSubtotal[]
+  /** The result per book: an absolute amount and its side. */
+  surplus?: PerformanceResult[]
   /** Year-to-date buckets OVERLAP by design and must never be added together. */
   accumulated: boolean
   currencies: Currency[]
   incomplete: string[]
   note: string
+  /** Present with `compare: 'prior_year'`: the prior year's balance for each account. */
+  prior?: { currency: Currency; ledger_account_id: string; balance: Money }[]
+  /** `label` already names a part-year span ("FY 2025, to 30 June 2025"); use it as sent. */
+  prior_year?: { id: string; label: string; as_at: string; whole_year: boolean } | null
+}
+
+export interface PerformanceResult {
+  currency: Currency
+  /** Absolute; the sign is in `side`. */
+  amount: Money
+  side: 'surplus' | 'deficit'
 }
 
 // ── Debtor ageing ──────────────────────────────────────────────────────────────────────────────
@@ -704,6 +839,7 @@ export interface DebtorAgeingResult {
   offset: number
   by_bucket: AgeingBucketTotal[]
   by_party: AgeingPartyTotal[]
+  by_party_bucket: { currency: Currency; party_id: string | null; ageing_bucket: AgeingBucket; outstanding_amount: Money }[]
   reconciliation: AgeingReconciliation[]
   buckets: Array<{ key: AgeingBucket; label: string }>
   /** Ageing is measured against this date. It moves, so a printed statement must carry it. */
@@ -716,7 +852,202 @@ export interface DebtorAgeingResult {
 export interface YearClosed {
   closing_voucher: {
     id: string; voucher_no: string; currency: Currency
-    posting_date: string; status: VoucherStatus; entries: number
+    posting_date: string; status: VoucherStatus; entries: number; version: number
   }
+  /** The closing is a draft: it changes nothing until somebody other than its preparer posts it. */
+  awaiting_post: true
   note: string
+}
+
+// ── Balances by account, and one account's ledger ──────────────────────────────────────────────
+
+/** Whether a statement counts the closing vouchers: `before` them, or `after`. */
+export type ClosingMode = 'before' | 'after'
+
+/** A balance as the ledger shows it: `net_debit` signed, `amount` absolute, `side` where it falls. */
+export interface Bal {
+  net_debit: Money
+  amount: Money
+  side: 'Dr' | 'Cr'
+}
+
+export interface ChartBalanceRow {
+  id: string
+  code: string
+  name: string
+  root_type: LedgerRootType
+  report_type: LedgerReportType
+  account_type: LedgerAccountType | null
+  parent_id: string | null
+  is_group: boolean
+  is_postable: boolean
+  status: 'active' | 'inactive'
+  notes: string | null
+  /** A heading carries the sum of everything beneath it. Nil balances are omitted. */
+  balances: (Bal & { currency: Currency })[]
+}
+
+export interface ChartBalances {
+  accounts: ChartBalanceRow[]
+  currencies: Currency[]
+  as_at: string
+  closing: ClosingMode
+}
+
+export interface LedgerLine {
+  id: string
+  voucher_id: string
+  voucher_no: string
+  voucher_type: VoucherType
+  posting_date: string
+  narration: string | null
+  party_id: string | null
+  party_name: string | null
+  debit: Money
+  credit: Money
+  /** The running balance after this line, in this one book. */
+  balance: Bal
+  /** Non-null only on a bank account: is the entry under a reconciled statement? */
+  reconciled: boolean | null
+}
+
+export interface AccountLedgerQuery {
+  financial_year_id: string
+  currency: Currency
+  from?: string
+  to?: string
+  /** At most 500; the server's default is 100. */
+  limit?: number
+  offset?: number
+}
+
+export interface AccountLedgerResult {
+  account: LedgerAccount
+  natural_side: 'debit' | 'credit'
+  currency: Currency
+  from: string
+  to: string
+  brought_forward: Bal
+  entries: LedgerLine[]
+  totals: { debit: Money; credit: Money }
+  carried_forward: Bal
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface CashAccountRow {
+  id: string
+  code: string
+  name: string
+  account_type: 'bank' | 'cash'
+  currency: Currency
+  balance: Bal
+  last_entry: string | null
+  reconciled_to: string | null
+  reconciled_balance: Money | null
+  /** Bank accounts only; `null` for cash. */
+  unreconciled: { entries: number; debit: Money; credit: Money } | null
+}
+
+export interface CashAccounts {
+  accounts: CashAccountRow[]
+}
+
+// ── The cash statement and the ledger reports ──────────────────────────────────────────────────
+
+export interface CashStatementBook {
+  currency: Currency
+  opening: Money
+  receipts: Money
+  payments: Money
+  closing: Money
+}
+
+export type CashCounterGroup =
+  | 'revenue' | 'expense' | 'receivable' | 'payable' | 'fixed_asset' | 'tax'
+  | 'other_asset' | 'liability' | 'equity'
+
+export interface CashStatement {
+  from: string
+  to: string
+  /** `agrees` is false when the account's opening + receipts - payments is not its closing. */
+  accounts: (CashStatementBook & { id: string; code: string; name: string; agrees: boolean })[]
+  books: CashStatementBook[]
+  by_counter: {
+    currency: Currency; group: CashCounterGroup; label: string
+    /** Any of the three can be NEGATIVE: a line running against its voucher. Print as sent. */
+    inflow: Money; outflow: Money; net: Money
+  }[]
+  reconciles: { currency: Currency; movement: Money; analysed: Money; agrees: boolean }[]
+  /** States that this is a statement of cash receipts and payments, not an IPSAS 2 cash flow statement. */
+  note: string
+}
+
+export interface GeneralLedgerReportQuery {
+  financial_year_id: string
+  currency: Currency
+  from?: string
+  to?: string
+  root_type?: LedgerRootType
+  account_from?: string
+  account_to?: string
+  /** Accounts per page, at most 100; the server's default is 25. */
+  limit?: number
+  offset?: number
+}
+
+export interface GeneralLedgerReport {
+  accounts: {
+    account: { id: string; code: string; name: string; root_type: LedgerRootType }
+    brought_forward: Bal
+    entries: LedgerLine[]
+    totals: { debit: Money; credit: Money }
+    carried_forward: Bal
+  }[]
+  total_accounts: number
+  limit: number
+  offset: number
+}
+
+export interface JournalListingQuery {
+  financial_year_id: string
+  from?: string
+  to?: string
+  voucher_type?: VoucherType
+  status?: VoucherStatus
+  currency?: Currency
+  /** At most 200. */
+  limit?: number
+  offset?: number
+}
+
+export interface JournalListingVoucher {
+  id: string
+  voucher_no: string
+  voucher_type: VoucherType
+  currency: Currency
+  posting_date: string
+  status: VoucherStatus
+  narration: string | null
+  reference: string | null
+  prepared_by_name: string | null
+  posted_by_name: string | null
+  lines: {
+    line_no: number
+    account_code: string
+    account_name: string
+    party_name: string | null
+    debit: Money
+    credit: Money
+    narration: string | null
+  }[]
+  debit_total: Money
+  credit_total: Money
+}
+
+export interface JournalListing {
+  vouchers: JournalListingVoucher[]
+  total: number
+  totals: { currency: Currency; debit_total: Money; credit_total: Money }[]
 }

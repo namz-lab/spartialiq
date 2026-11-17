@@ -65,7 +65,7 @@ describe('bank reconciliation', () => {
       ...(reference ? { reference } : {}), lines,
     })
     expect(res.statusCode).toBe(201)
-    expect((await call('POST', `/finance/ledger/vouchers/${res.json().data.voucher.id}/post`, as.director)).statusCode).toBe(200)
+    expect((await call('POST', `/finance/ledger/vouchers/${res.json().data.voucher.id}/post`, as.director, { expected_version: res.json().data.voucher.version })).statusCode).toBe(200)
   }
   const detail = async () => (await call('GET', `/finance/bank/statements/${made.statement}`, as.auditor)).json().data
 

@@ -343,7 +343,7 @@ describe('cut-over from the previous accounting package', () => {
       lines: [{ ledger_account_id: made.bankAccount, debit: '10.00' }, { ledger_account_id: made.incomeAccount, credit: '10.00' }],
     })
     expect(journal.statusCode).toBe(201)
-    expect((await call('POST', `/finance/ledger/vouchers/${journal.json().data.voucher.id}/post`, as.director)).statusCode).toBe(200)
+    expect((await call('POST', `/finance/ledger/vouchers/${journal.json().data.voucher.id}/post`, as.director, { expected_version: journal.json().data.voucher.version })).statusCode).toBe(200)
     await call('POST', `/finance/migration/reconciliations/${made.recon}/refresh`, as.accountant)
     const differing = (await ours()).filter((l) => l.difference !== '0.00')
     expect(differing.map((l) => l.difference).sort()).toEqual(['-10.00', '10.00'])

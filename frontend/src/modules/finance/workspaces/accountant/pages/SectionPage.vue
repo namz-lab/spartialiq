@@ -1,17 +1,18 @@
 <script setup lang="ts">
 /**
- * An Accounting page built on a screen the finance console already has: the ledger, the
- * statements, the budget, rates, the cash-ups, banking, setup, the audit trail. The page head comes
- * from route meta (`cwTitle`, `cwLead`); `cwSection` picks the screen and how it opens.
+ * An Accounting page built on a screen the finance console already has: rates, the cash-ups,
+ * banking, setup and the audit trail. The page head comes from route meta (`cwTitle`, `cwLead`);
+ * `cwSection` picks the screen and how it opens.
  *
- * Reusing them keeps one implementation of each control (preparer ≠ poster, the blind count, the
- * period locks) instead of a second copy that could drift.
+ * This page stays local to the workspace rather than using shared/SectionPage.vue because it
+ * carries what that page does not: the cash desk the banking screen reads, and the bank-accounts
+ * table above it. Reusing the console screens keeps one implementation of each control (preparer ≠
+ * poster, the blind count, the period locks) instead of a second copy that could drift.
  */
 import { computed, defineAsyncComponent, onMounted, type Component } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import {
-  NotebookPen, BookOpen, CalendarCheck, ChartColumn, Layers, Wallet, Calculator, ReceiptText,
-  ShieldCheck, ClipboardCheck, Landmark, Settings, AlertTriangle, Info,
+  ReceiptText, ShieldCheck, ClipboardCheck, Landmark, Settings, AlertTriangle,
 } from 'lucide-vue-next'
 import { useFinanceStore } from '../../../stores/finance'
 import { formatMoney, formatDate } from '../../../composables/useMoney'
@@ -19,24 +20,14 @@ import { useAccountant } from '../useAccountant'
 import '@/views/inspector/inspector.css'
 import '../../../pages/finance.css'
 
-const Ledger = defineAsyncComponent(() => import('../../../pages/sections/LedgerSection.vue'))
-const Statements = defineAsyncComponent(() => import('../../../pages/sections/StatementsSection.vue'))
-const Budget = defineAsyncComponent(() => import('../../../pages/sections/BudgetSection.vue'))
 const Rates = defineAsyncComponent(() => import('../../../pages/sections/RatesSection.vue'))
 const Audit = defineAsyncComponent(() => import('../../../pages/sections/FinanceAuditSection.vue'))
 const Sessions = defineAsyncComponent(() => import('../../../components/cash/CashSessions.vue'))
 const Banking = defineAsyncComponent(() => import('../../../components/cash/CashBanking.vue'))
 const Setup = defineAsyncComponent(() => import('../../../components/cash/CashSetup.vue'))
 
-type Key = 'journals' | 'ledger' | 'close' | 'trial' | 'reports' | 'receivable' | 'budget' | 'revenue' | 'audit' | 'cashups' | 'bank' | 'settings'
-const SECTIONS: Record<Key, { component: Component; props?: Record<string, unknown>; icon: Component; desk?: boolean; needs?: string }> = {
-  journals: { component: Ledger, props: { only: 'vouchers' }, icon: NotebookPen },
-  ledger: { component: Ledger, props: { only: 'chart' }, icon: BookOpen },
-  close: { component: Ledger, props: { only: 'periods' }, icon: CalendarCheck },
-  trial: { component: Statements, props: { initialTab: 'trial_balance' }, icon: ChartColumn },
-  reports: { component: Statements, props: { initialTab: 'position' }, icon: Layers },
-  receivable: { component: Statements, props: { initialTab: 'ageing' }, icon: Wallet },
-  budget: { component: Budget, icon: Calculator },
+type Key = 'revenue' | 'audit' | 'cashups' | 'bank' | 'settings'
+const SECTIONS: Record<Key, { component: Component; icon: Component; desk?: boolean; needs?: string }> = {
   revenue: { component: Rates, icon: ReceiptText },
   audit: { component: Audit, icon: ShieldCheck, needs: 'finance.audit.view' },
   cashups: { component: Sessions, icon: ClipboardCheck },
@@ -51,7 +42,6 @@ const { state, loadDesk, loadDashboard } = useAccountant()
 const key = computed(() => route.meta.cwSection as Key)
 const section = computed(() => SECTIONS[key.value])
 const allowed = computed(() => !section.value.needs || store.can(section.value.needs))
-const isPayment = computed(() => key.value === 'journals' && route.query.purpose === 'payment')
 
 onMounted(() => { if (section.value.desk && !state.desk) void loadDesk() })
 
@@ -70,17 +60,19 @@ function changed(): void {
     </div>
   </section>
 
-  <p v-if="isPayment" class="cw-banner-msg cw-banner-msg--info"><Info :size="18" aria-hidden="true" />
-    A payment is recorded as a journal: debit the expense (or the creditor), credit the bank account. It is posted by somebody other than you.</p>
   <section v-if="key === 'bank'" class="cw-card" aria-labelledby="bk-h">
     <div class="cw-card-head"><h3 id="bk-h">Bank accounts in the ledger</h3></div>
     <div class="cw-card-body cw-table-wrap">
       <table v-if="state.dashboard?.banks.length" class="cw-table">
+        <caption class="sr-only">Bank accounts in the ledger</caption>
         <thead><tr><th>Account</th><th>Currency</th><th class="r">Ledger balance</th><th>Last entry</th><th>Reconciliation</th></tr></thead>
         <tbody>
           <tr v-for="b in state.dashboard.banks" :key="b.id + b.currency">
-            <td>{{ b.code }} — {{ b.name }}</td><td>{{ b.currency }}</td><td class="amt">{{ formatMoney(b.balance, b.currency) }}</td>
-            <td>{{ formatDate(b.last_entry) }}</td><td><RouterLink :to="{ name: 'acc-bank' }" class="cw-link">Reconcile</RouterLink></td>
+            <th scope="row">{{ b.code }} — {{ b.name }}</th><td>{{ b.currency }}</td><td class="amt">{{ formatMoney(b.balance, b.currency) }}</td>
+            <td>{{ formatDate(b.last_entry) }}</td><td>
+              <template v-if="b.reconciled_to !== undefined">{{ b.reconciled_to ? `Reconciled to ${formatDate(b.reconciled_to)}` : 'Never reconciled' }}</template><template v-if="(b.unreconciled_entries ?? 0) > 0"><template v-if="b.reconciled_to !== undefined"> · </template>{{ b.unreconciled_entries }} {{ b.unreconciled_entries === 1 ? 'entry' : 'entries' }} not reconciled</template> 
+              <RouterLink :to="{ name: 'acc-bank' }" class="cw-link">Reconcile</RouterLink>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -98,7 +90,7 @@ function changed(): void {
     <template v-else><span class="cw-skel" /><span class="cw-skel" /></template>
   </div>
   <div v-else class="acc-embed">
-    <component :is="section.component" v-bind="{ ...(section.props ?? {}), ...(section.desk ? { desk: state.desk } : {}) }" @changed="changed" />
+    <component :is="section.component" v-bind="{ ...(section.desk ? { desk: state.desk } : {}) }" @changed="changed" />
   </div>
 </template>
 

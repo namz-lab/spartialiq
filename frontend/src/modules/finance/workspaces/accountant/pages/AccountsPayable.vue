@@ -8,17 +8,23 @@
  * opening balances brought across at cut-over are paid here the same way as an invoice. The server
  * refuses a duplicate supplier invoice and a payment beyond what is still open.
  */
-import { computed, onMounted, reactive, ref } from 'vue'
+import { announce } from '../../shared/usePortalAnnouncer'
+import BookSwitch from '../kit/BookSwitch.vue'
+import CwSkeleton from '../kit/CwSkeleton.vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { AlertTriangle, CircleCheck, HandCoins, Info, Plus, Trash2, X } from 'lucide-vue-next'
 import { payablesApi, type OpenItem, type PayablesSummary, type PaymentMethod, type SupplierInvoice, type SupplierInvoiceDetail, type SupplierPayment } from '../../../api/payablesApi'
 import { ledgerApi } from '../../../api/ledgerApi'
 import { messageOf, useFinanceStore } from '../../../stores/finance'
+import { useAccountant } from '../useAccountant'
+import type { AgeGroup } from '../../../api/accountingApi'
 import { formatMoney, formatDate } from '../../../composables/useMoney'
 import type { Currency } from '../../../models/types'
 import type { LedgerAccount, LedgerParty } from '../../../models/ledgerTypes'
 
 const store = useFinanceStore()
+const { state: desk } = useAccountant()
 const me = computed(() => store.identity?.user_id ?? null)
 const may = (code: string) => store.can(`finance.payables.${code}`)
 
@@ -33,6 +39,7 @@ const accounts = ref<LedgerAccount[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const notice = ref<string | null>(null)
+watch(notice, (t) => { if (t) announce(t) })
 const busy = ref<string | null>(null)
 const today = new Date().toISOString().slice(0, 10)
 
@@ -77,6 +84,16 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   reversed: { label: 'Reversed', tone: 'cw-pill--mute' },
 }
 const METHOD: Record<PaymentMethod, string> = { bank_transfer: 'Bank transfer', cheque: 'Cheque', rtgs: 'RTGS', mobile_money: 'Mobile money', cash: 'Cash', other: 'Other' }
+
+/**
+ * The creditors age analysis: the dashboard's own totals per book and age, as the server sent them.
+ * Nothing is added up here.
+ */
+const AGE_COLS: { key: AgeGroup; label: string }[] = [
+  { key: 'current', label: '0–30 days' }, { key: '31_60', label: '31–60 days' }, { key: '61_90', label: '61–90 days' }, { key: 'over_90', label: 'Over 90 days' },
+]
+const ageBooks = computed(() => [...new Set((desk.dashboard?.payables ?? []).map(r => r.currency))])
+const ageCell = (c: Currency, b: AgeGroup) => desk.dashboard?.payables.find(r => r.currency === c && r.bucket === b) ?? null
 
 /** Open documents grouped by supplier and currency, for the list and for paying. */
 const bySupplier = computed(() => {
@@ -186,7 +203,7 @@ const discardPayment = (p: SupplierPayment) => act(`dp-${p.id}`, () => payablesA
   </section>
 
   <p v-if="error" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ error }}</p>
-  <p v-if="notice" class="cw-banner-msg cw-banner-msg--pos" role="status"><CircleCheck :size="18" aria-hidden="true" />{{ notice }}</p>
+  <p v-if="notice" class="cw-banner-msg cw-banner-msg--pos"><CircleCheck :size="18" aria-hidden="true" />{{ notice }}</p>
   <p v-if="summary && !summary.payable_accounts.length" class="cw-banner-msg cw-banner-msg--info"><Info :size="18" aria-hidden="true" />
     <span>The chart of accounts has no payable control account yet, so no supplier invoice can be captured. Add the creditors control account in the
       <RouterLink :to="{ name: 'acc-ledger' }" class="cw-link">General Ledger</RouterLink> and mark it as payable.</span></p>
@@ -208,14 +225,33 @@ const discardPayment = (p: SupplierPayment) => act(`dp-${p.id}`, () => payablesA
     <button type="button" :aria-pressed="tab === 'payments'" @click="tab = 'payments'">Payment vouchers</button>
   </div>
 
-  <section v-if="loading" class="cw-card"><div class="cw-card-body" style="padding-top: 16px"><span class="cw-skel" /><span class="cw-skel" /></div></section>
+  <CwSkeleton v-if="loading" label="accounts payable" />
 
   <!-- What is owed -->
   <template v-else-if="tab === 'owed'">
+    <section v-if="ageBooks.length" class="cw-card" aria-label="Creditors age analysis">
+      <div class="cw-card-head"><h3>Age analysis</h3></div>
+      <div class="cw-card-body cw-table-wrap">
+        <table class="cw-table">
+          <caption class="sr-only">What is owed to creditors, by book and by age</caption>
+          <thead><tr><th>Book</th><th v-for="c in AGE_COLS" :key="c.key" class="num">{{ c.label }}</th></tr></thead>
+          <tbody>
+            <tr v-for="c in ageBooks" :key="c">
+              <th scope="row">{{ c }}</th>
+              <td v-for="b in AGE_COLS" :key="b.key" class="num">
+                <template v-if="ageCell(c, b.key)">{{ formatMoney(ageCell(c, b.key)!.amount, c) }}<div class="cw-hint">{{ ageCell(c, b.key)!.items }} document{{ ageCell(c, b.key)!.items === 1 ? '' : 's' }}</div></template>
+                <template v-else>—</template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="cw-hint">Aged from each document's own date. Open a creditor's name for their statement of account.</p>
+      </div>
+    </section>
     <section v-if="!bySupplier.length" class="cw-card"><p class="cw-empty"><strong>Nothing is owed to creditors.</strong>An approved supplier invoice appears here until it is paid.</p></section>
     <section v-for="g in bySupplier" :key="g.key" class="cw-card" :aria-label="`${g.name}, ${g.currency}`">
       <div class="cw-card-head">
-        <h3>{{ g.name }}<small>{{ g.currency }}</small></h3><span class="cw-spacer" />
+        <h3><RouterLink class="cw-link" :to="{ name: 'acc-creditor', params: { partyId: g.party_id }, query: { book: g.currency } }">{{ g.name }}</RouterLink><small>{{ g.currency }}</small></h3><span class="cw-spacer" />
         <button v-if="may('payment.prepare')" type="button" class="cw-btn cw-btn--small cw-btn--outline" @click="openPay(g)">Prepare a payment</button>
       </div>
       <div class="cw-card-body cw-table-wrap">
@@ -223,7 +259,7 @@ const discardPayment = (p: SupplierPayment) => act(`dp-${p.id}`, () => payablesA
           <thead><tr><th>Document</th><th>Dated</th><th>Due</th><th>Age</th><th class="num">Outstanding</th><th class="num">In draft payments</th></tr></thead>
           <tbody>
             <tr v-for="i in g.items" :key="i.voucher_id">
-              <td><strong>{{ i.document_ref ?? i.voucher_no }}</strong><div class="cw-hint">{{ i.voucher_no }}<template v-if="i.voucher_type === 'opening'"> · brought across at cut-over</template></div></td>
+              <td><strong>{{ i.document_ref ?? i.voucher_no }}</strong><div class="cw-hint"><RouterLink class="cw-link" :to="{ name: 'acc-voucher', params: { id: i.voucher_id } }">{{ i.voucher_no }}</RouterLink><template v-if="i.voucher_type === 'opening'"> · brought across at cut-over</template></div></td>
               <td>{{ formatDate(i.document_date) }}</td>
               <td>{{ i.due_date ? formatDate(i.due_date) : '—' }}<div v-if="i.due_date && i.days_overdue > 0" class="cw-hint cw-neg">{{ i.days_overdue }} days overdue</div></td>
               <td><span class="cw-pill" :class="i.bucket === 'over_90' ? 'cw-pill--neg' : i.bucket === 'current' ? 'cw-pill--pos' : 'cw-pill--warn'">{{ AGE[i.bucket] }}</span></td>
@@ -245,7 +281,7 @@ const discardPayment = (p: SupplierPayment) => act(`dp-${p.id}`, () => payablesA
         <tbody>
           <tr v-for="i in invoices" :key="i.id">
             <td><button type="button" class="cw-link" @click="view(i.id)">{{ i.supplier_ref }}</button><div class="cw-hint">{{ i.invoice_no }}</div></td>
-            <td>{{ i.party_name }}</td><td>{{ formatDate(i.invoice_date) }}</td><td>{{ formatDate(i.due_date) }}</td>
+            <td><RouterLink class="cw-link" :to="{ name: 'acc-creditor', params: { partyId: i.party_id }, query: { book: i.currency } }">{{ i.party_name }}</RouterLink></td><td>{{ formatDate(i.invoice_date) }}</td><td>{{ formatDate(i.due_date) }}</td>
             <td class="num">{{ formatMoney(i.total, i.currency) }}</td><td class="num">{{ formatMoney(i.outstanding, i.currency) }}</td>
             <td><span class="cw-pill" :class="STATUS[i.status].tone">{{ STATUS[i.status].label }}</span>
               <div class="cw-hint">{{ i.status === 'awaiting_approval' ? `Captured by ${i.prepared_by_name ?? 'somebody'}` : `Approved by ${i.approved_by_name ?? 'somebody'}` }}</div></td>
@@ -297,9 +333,9 @@ const discardPayment = (p: SupplierPayment) => act(`dp-${p.id}`, () => payablesA
         <div class="ap-grid">
           <label class="cw-field"><span class="cw-label">Supplier <span class="req">*</span></span>
             <select v-model="inv.party_id" class="cw-select" required><option value="">Choose a supplier</option><option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option></select>
-            <span v-if="!suppliers.length" class="cw-hint">No supplier is in the register. Add one under <RouterLink :to="{ name: 'acc-suppliers' }" class="cw-link">Supplier Management</RouterLink>.</span></label>
+            <span v-if="!suppliers.length" class="cw-hint">No supplier is in the register. Add one under <RouterLink :to="{ name: 'acc-parties', query: { type: 'supplier' } }" class="cw-link">Parties</RouterLink>.</span></label>
           <label class="cw-field"><span class="cw-label">Supplier's invoice number <span class="req">*</span></span><input v-model="inv.supplier_ref" class="cw-input" required /></label>
-          <label class="cw-field"><span class="cw-label">Currency</span><select v-model="inv.currency" class="cw-select"><option value="USD">USD</option><option value="ZWG">ZWG</option></select></label>
+          <label class="cw-field"><span class="cw-label">Book</span><BookSwitch v-model="inv.currency" label="Book" /></label>
           <label class="cw-field"><span class="cw-label">Invoice date <span class="req">*</span></span><input v-model="inv.invoice_date" type="date" class="cw-input" required :max="inv.posting_date" /></label>
           <label class="cw-field"><span class="cw-label">Due date <span class="req">*</span></span><input v-model="inv.due_date" type="date" class="cw-input" required :min="inv.invoice_date" /></label>
           <label class="cw-field"><span class="cw-label">Posting date <span class="req">*</span></span><input v-model="inv.posting_date" type="date" class="cw-input" required />
@@ -381,6 +417,7 @@ const discardPayment = (p: SupplierPayment) => act(`dp-${p.id}`, () => payablesA
           <div><dt>Our number</dt><dd>{{ viewing.invoice.invoice_no }}</dd></div>
           <div><dt>Dated, due</dt><dd>{{ formatDate(viewing.invoice.invoice_date) }}, {{ formatDate(viewing.invoice.due_date) }}</dd></div>
           <div><dt>Credited to</dt><dd>{{ viewing.invoice.payable_code }} {{ viewing.invoice.payable_name }}</dd></div>
+          <div><dt>Voucher</dt><dd><RouterLink class="cw-link" :to="{ name: 'acc-voucher', params: { id: viewing.invoice.voucher_id } }">Open the posting</RouterLink></dd></div>
           <div><dt>Before tax, tax</dt><dd>{{ formatMoney(viewing.invoice.net_total, viewing.invoice.currency) }}, {{ formatMoney(viewing.invoice.tax_total, viewing.invoice.currency) }}</dd></div>
           <div><dt>Total</dt><dd>{{ formatMoney(viewing.invoice.total, viewing.invoice.currency) }}</dd></div>
           <div><dt>Outstanding</dt><dd>{{ formatMoney(viewing.invoice.outstanding, viewing.invoice.currency) }}</dd></div>
