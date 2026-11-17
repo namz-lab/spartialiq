@@ -90,8 +90,10 @@ const VOUCHER_TYPE_LABEL: Record<string, string> = {
   reversal: 'Reversal',
 }
 
+// The four a person may type. A rates bill, a receipt and a year-end closing are raised by their
+// own screens, and the server refuses them typed (400 system_type) — so they are not offered here.
 const CREATABLE_TYPES: CreatableVoucherType[] = [
-  'journal', 'opening', 'rates_bill', 'receipt', 'credit_note', 'write_off', 'closing',
+  'journal', 'opening', 'credit_note', 'write_off',
 ]
 
 // ── 1. The chart of accounts ──────────────────────────────────────────────────────────────────

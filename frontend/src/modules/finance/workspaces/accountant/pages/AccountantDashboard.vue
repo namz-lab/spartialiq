@@ -11,13 +11,13 @@
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import {
-  Coins, CreditCard, Scale, Gauge, TriangleAlert, ClipboardList, SquareCheckBig, Zap, BookOpen, FilePlus,
+  Coins, CreditCard, Scale, Gauge, TriangleAlert, ClipboardList, SquareCheckBig, Zap, BookOpen,
   Landmark, ChartColumn, Lock, Layers, UserRound, Users, Target, ArrowLeftRight, Bell, CircleAlert, Info,
-  Eye, Check, X, Circle, ChevronRight, ArrowRight, ArrowUp, ArrowDown, Clock, AlertTriangle, Mail,
+  Eye, Check, X, Circle, ChevronRight, ArrowRight, ArrowUp, ArrowDown, Clock, AlertTriangle, Mail, CircleCheck, CalendarCheck,
 } from 'lucide-vue-next'
 import { cashApi } from '../../../api/cashApi'
 import { messageOf, useFinanceStore } from '../../../stores/finance'
-import { formatMoney, type Currency } from '../../../composables/useMoney'
+import { formatMoney, formatDate, type Currency } from '../../../composables/useMoney'
 import { centsToText, toCents } from '../../../composables/cashMath'
 import ReasonDialog from '../../shared/ReasonDialog.vue'
 import { usePortalInbox } from '../../shared/usePortal'
@@ -29,7 +29,13 @@ const store = useFinanceStore()
 const { state, loadDashboard } = useAccountant()
 const { inbox } = usePortalInbox()
 
+// The layout loads the dashboard (and reloads it when the year changes); the shared state only ever
+// holds the latest year's answer, so this page just reads it.
 const d = computed(() => state.dashboard)
+const loading = computed(() => state.loading)
+const loadError = computed(() => state.error)
+const load = (): Promise<void> => loadDashboard(store.selectedYearId)
+const reload = load
 const reporting = computed<Currency>(() => (store.selectedYear?.reporting_currency as Currency | undefined) ?? 'USD')
 
 /** Rows of one per-currency figure with the reporting currency first. */
@@ -76,18 +82,31 @@ const RING = 2 * Math.PI * 54
 const TASK_ROUTE: Record<string, string> = {
   cashups: 'acc-cashups', vouchers: 'acc-journals', my_drafts: 'acc-journals', deposits: 'acc-banking',
   billing: 'acc-revenue', rates_receipts: 'acc-revenue', periods: 'acc-close',
+  payables: 'acc-payable', assets: 'acc-assets', bank: 'acc-bank',
 }
 const ALERT_ROUTE: Record<string, string> = { debtors: 'acc-receivable', cashups: 'acc-cashups', periods: 'acc-close', bank: 'acc-bank' }
+/** A route name the router really has, else null: a task or alert we cannot send anywhere is plain text. */
+const known = (name: string | undefined): string | null => (name && router.hasRoute(name) ? name : null)
 
-const canRecordReceipt = computed(() => store.can('finance.rates.receipt.record'))
+const canPrepare = computed(() => store.can('finance.ledger.voucher.prepare'))
 const QUICK = computed(() => [
-  { label: 'New Journal Entry', icon: BookOpen, to: { name: 'acc-journals' } },
-  { label: 'Record Payment', icon: CreditCard, to: { name: 'acc-journals', query: { purpose: 'payment' } } },
-  { label: 'Record Receipt', icon: FilePlus, to: { name: 'acc-revenue' }, disabled: !canRecordReceipt.value, why: 'Recording a rates receipt is the revenue office\'s permission, not the accountant\'s.' },
-  { label: 'Bank Reconciliation', icon: Landmark, to: { name: 'acc-bank' } },
-  { label: 'Generate Report', icon: ChartColumn, to: { name: 'acc-reports' } },
-  { label: 'Close Period', icon: Lock, to: { name: 'acc-close' } },
+  ...(canPrepare.value ? [{ label: 'New journal', icon: BookOpen, to: { name: 'acc-journal-new' } }] : []),
+  ...(canPrepare.value ? [{ label: 'Salaries journal', icon: Users, to: { name: 'acc-salaries' } }] : []),
+  { label: 'Record payment', icon: CreditCard, to: { name: 'acc-cashbook' } },
+  { label: 'Bank reconciliation', icon: Landmark, to: { name: 'acc-bank' } },
+  { label: 'Trial balance', icon: Scale, to: { name: 'acc-trial' } },
+  { label: 'Vote book', icon: Target, to: { name: 'acc-votebook' } },
+  { label: 'Period close', icon: Lock, to: { name: 'acc-close' } },
 ])
+
+/** Sign check only: a period whose end has passed is said to have ended. */
+const daysLeft = (n: number): string => (n < 0 ? `Ended ${-n} ${n === -1 ? 'day' : 'days'} ago` : n === 0 ? 'Ends today' : `${n} ${n === 1 ? 'day' : 'days'} left`)
+const alertRole = (tone: string): 'alert' | 'status' => (tone === 'neg' ? 'alert' : 'status')
+/** A server that does not send `reconciled_to` has told us nothing: no line, rather than "Never reconciled". */
+const bankStatus = (b: { reconciled_to?: string | null; unreconciled_entries?: number }) => ({
+  reconciled: b.reconciled_to === undefined ? null : b.reconciled_to ? `Reconciled to ${formatDate(b.reconciled_to)}` : 'Never reconciled',
+  entries: (b.unreconciled_entries ?? 0) > 0 ? `${b.unreconciled_entries} ${b.unreconciled_entries === 1 ? 'entry' : 'entries'} not reconciled` : null,
+})
 
 function typeOf(r: { voucher_type: string; cash_effect: string }): { label: string; cls: string } {
   if (r.voucher_type === 'receipt') return { label: 'Receipt', cls: 'cw-pill--pos' }
@@ -104,28 +123,37 @@ const notice = ref<string | null>(null)
 const returning = ref<{ id: string; session_no: string; cashier_name: string } | null>(null)
 
 async function verify(c: { id: string; session_no: string; cashier_name: string }): Promise<void> {
+  if (busy.value) return
   if (!window.confirm(`Verify ${c.cashier_name}'s count for ${c.session_no}? Any difference is posted to the cash-difference account.`)) return
   busy.value = c.id
   actionError.value = null
   try {
     const r = await cashApi.verifySession(c.id)
     notice.value = `${c.session_no} verified. ${r.note}`
-    await loadDashboard(store.selectedYearId)
+    await reload()
   } catch (err) {
     actionError.value = messageOf(err, 'The cash-up could not be verified.')
   } finally {
     busy.value = null
   }
 }
+// The return-for-recount dialog gives focus back to the icon that opened it (named outright: Safari
+// does not focus a clicked button).
+const returnOpener = ref<HTMLElement | null>(null)
+function openReturn(c: { id: string; session_no: string; cashier_name: string }, e: Event): void {
+  if (busy.value) return
+  returnOpener.value = e.currentTarget instanceof HTMLElement ? e.currentTarget : null
+  returning.value = c
+}
 async function sendBack(reason: string): Promise<void> {
-  if (!returning.value) return
+  if (!returning.value || busy.value) return
   busy.value = returning.value.id
   actionError.value = null
   try {
     await cashApi.returnSession(returning.value.id, reason)
     notice.value = `${returning.value.session_no} returned to ${returning.value.cashier_name} for a recount.`
     returning.value = null
-    await loadDashboard(store.selectedYearId)
+    await reload()
   } catch (err) {
     actionError.value = messageOf(err, 'The cash-up could not be returned.')
   } finally {
@@ -137,12 +165,14 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
 </script>
 
 <template>
-  <p v-if="state.error" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ state.error }}
-    <button type="button" class="cw-btn cw-btn--small" @click="loadDashboard(store.selectedYearId)">Retry</button></p>
+  <p v-if="loadError" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ loadError }}
+    <button type="button" class="cw-btn cw-btn--small" @click="load()">Retry</button></p>
   <p v-if="actionError" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ actionError }}</p>
   <p v-if="notice" class="cw-banner-msg cw-banner-msg--pos" role="status">{{ notice }}</p>
 
-  <div v-if="!d && state.loading" class="cw-card cw-card-body" style="padding-top: 20px"><span class="cw-skel" /><span class="cw-skel" /><span class="cw-skel" /></div>
+  <p v-if="!store.selectedYearId" class="cw-empty"><strong>No financial year is chosen.</strong>Choose a financial year in the banner above.</p>
+
+  <div v-else-if="!d && loading" class="cw-card cw-card-body" style="padding-top: 20px" aria-busy="true"><span class="cw-skel" /><span class="cw-skel" /><span class="cw-skel" /></div>
 
   <template v-else-if="d">
     <!-- ── Figures ──────────────────────────────────────────────────────────────────────── -->
@@ -193,7 +223,7 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
         </div>
       </RouterLink>
 
-      <RouterLink :to="{ name: 'acc-budget' }" class="cw-tile cw-tile--amber">
+      <RouterLink :to="{ name: 'acc-votebook' }" class="cw-tile cw-tile--amber">
         <span class="cw-tile-icon"><Gauge :size="32" aria-hidden="true" /></span>
         <div style="flex: 1">
           <p class="cw-tile-label">Budget Utilisation</p>
@@ -236,8 +266,8 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
                 <td class="r"><div v-for="n in c.counts" :key="n.currency"><span class="acc-diff" :class="Number(n.variance) === 0 ? 'is-zero' : 'is-off'">{{ formatMoney(n.variance, n.currency, { bare: true }) }}</span></div></td>
                 <td class="r" style="white-space: nowrap">
                   <button type="button" class="acc-act acc-act--view" :aria-label="`View ${c.session_no}`" @click="router.push({ name: 'acc-cashups', query: { session: c.id } })"><Eye :size="16" /></button>
-                  <button type="button" class="acc-act acc-act--ok" :aria-label="`Verify ${c.session_no}`" :disabled="busy === c.id" @click="verify(c)"><Check :size="16" /></button>
-                  <button type="button" class="acc-act acc-act--no" :aria-label="`Return ${c.session_no} for recount`" :disabled="busy === c.id" @click="returning = c"><X :size="16" /></button>
+                  <button type="button" class="acc-act acc-act--ok" :aria-label="`Verify ${c.session_no}`" :aria-disabled="busy === c.id || undefined" @click="verify(c)"><Check :size="16" /></button>
+                  <button type="button" class="acc-act acc-act--no" :aria-label="`Return ${c.session_no} for recount`" :aria-disabled="busy === c.id || undefined" @click="openReturn(c, $event)"><X :size="16" /></button>
                 </td>
               </tr>
             </tbody>
@@ -255,9 +285,10 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
           <p v-if="!d.tasks.length" class="cw-empty"><strong>Nothing is waiting.</strong>New work appears here as it arrives.</p>
           <ul v-else class="acc-tasks">
             <li v-for="(t, i) in d.tasks" :key="t.key">
-              <RouterLink :to="{ name: TASK_ROUTE[t.key] ?? 'acc-dashboard' }" :class="{ 'is-first': i === 0 }">
+              <RouterLink v-if="known(TASK_ROUTE[t.key])" :to="{ name: known(TASK_ROUTE[t.key])! }" :class="{ 'is-first': i === 0 }">
                 <Circle :size="18" aria-hidden="true" /><span>{{ t.text }}</span><ChevronRight :size="18" aria-hidden="true" />
               </RouterLink>
+              <p v-else class="acc-task-plain"><Circle :size="18" aria-hidden="true" /><span>{{ t.text }}</span></p>
             </li>
           </ul>
         </div>
@@ -267,14 +298,36 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
         <div class="cw-card-head"><h3 id="ac-qa"><Zap :size="26" class="cw-head-icon" aria-hidden="true" /> Quick Actions</h3></div>
         <div class="cw-card-body">
           <div class="acc-quick-grid">
-            <template v-for="q in QUICK" :key="q.label">
-              <span v-if="q.disabled" class="cw-action acc-qa is-disabled" :title="q.why" aria-disabled="true"><component :is="q.icon" :size="28" :stroke-width="1.6" aria-hidden="true" /><span>{{ q.label }}</span></span>
-              <RouterLink v-else :to="q.to" class="cw-action acc-qa"><component :is="q.icon" :size="28" :stroke-width="1.6" aria-hidden="true" /><span>{{ q.label }}</span></RouterLink>
-            </template>
+            <RouterLink v-for="q in QUICK" :key="q.label" :to="q.to" class="cw-action acc-qa"><component :is="q.icon" :size="28" :stroke-width="1.6" aria-hidden="true" /><span>{{ q.label }}</span></RouterLink>
           </div>
+          <p v-if="!canPrepare" class="cw-hint" style="margin: 10px 0 0">Starting a journal is for people who hold the journal preparer permission.</p>
         </div>
       </section>
     </div>
+
+    <!-- ── The books ────────────────────────────────────────────────────────────────────── -->
+    <section v-if="d.books" class="cw-card acc-books" aria-labelledby="ac-bk">
+      <div class="cw-card-head">
+        <h3 id="ac-bk"><CircleCheck :size="26" class="cw-head-icon" aria-hidden="true" /> The books</h3>
+      </div>
+      <div class="cw-card-body">
+        <p v-if="!d.books.length" class="cw-empty">Nothing is posted in {{ d.year.label }}, so there is nothing to check.</p>
+        <ul v-else class="acc-bookslist">
+          <li v-for="b in d.books" :key="b.currency">
+            <p v-if="b.balances" role="status" class="cw-banner-msg cw-banner-msg--pos"><CircleCheck :size="18" aria-hidden="true" /><strong>{{ b.currency }}</strong> book: In balance</p>
+            <p v-else role="alert" class="cw-banner-msg cw-banner-msg--neg"><AlertTriangle :size="18" aria-hidden="true" /><strong>{{ b.currency }}</strong> book: Out of balance by {{ formatMoney(b.difference, b.currency) }}</p>
+          </li>
+        </ul>
+        <p v-if="d.current_period" class="acc-period"><CalendarCheck :size="18" aria-hidden="true" />
+          <span>{{ d.current_period.label }} ends {{ formatDate(d.current_period.to_date) }}. {{ daysLeft(d.current_period.days_left) }}.</span>
+          <template v-if="d.current_period && d.readiness">
+            <strong v-if="d.readiness.ready" class="acc-ready">Ready to close</strong>
+            <RouterLink v-else-if="known('acc-close')" :to="{ name: 'acc-close' }" class="cw-link">{{ d.readiness.outstanding }} {{ d.readiness.outstanding === 1 ? 'thing' : 'things' }} outstanding <ArrowRight :size="16" aria-hidden="true" /></RouterLink>
+            <span v-else>{{ d.readiness.outstanding }} things outstanding</span>
+          </template>
+        </p>
+      </div>
+    </section>
 
     <!-- ── Position, debtors, creditors, budget ─────────────────────────────────────────── -->
     <div class="acc-row acc-row--4">
@@ -345,7 +398,7 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
     <div class="acc-row acc-row--3">
       <section class="cw-card" aria-labelledby="ac-rt">
         <div class="cw-card-head">
-          <h3 id="ac-rt"><ArrowLeftRight :size="26" class="cw-head-icon" aria-hidden="true" /> Recent Transactions</h3>
+          <h3 id="ac-rt"><ArrowLeftRight :size="26" class="cw-head-icon" aria-hidden="true" /> Recent postings</h3>
           <span class="cw-spacer" />
           <RouterLink :to="{ name: 'acc-journals' }" class="cw-link">View All <ArrowRight :size="16" aria-hidden="true" /></RouterLink>
         </div>
@@ -356,7 +409,7 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
             <tbody>
               <tr v-for="r in d.recent" :key="r.id">
                 <td style="white-space: nowrap">{{ shortDate(r.posting_date) }}</td>
-                <td style="white-space: nowrap">{{ r.voucher_no }}</td>
+                <td style="white-space: nowrap"><RouterLink :to="{ name: 'acc-voucher', params: { id: r.id } }" class="cw-link">{{ r.voucher_no }}</RouterLink></td>
                 <td class="acc-desc">{{ r.description || '—' }}</td>
                 <td><span class="cw-pill" :class="typeOf(r).cls">{{ typeOf(r).label }}</span></td>
                 <td class="amt" :class="{ 'cw-neg': Number(r.cash_effect) < 0 }">{{ Number(r.cash_effect) < 0 ? `(${money(r.amount, r.currency)})` : money(r.amount, r.currency) }}</td>
@@ -368,7 +421,7 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
 
       <section class="cw-card" aria-labelledby="ac-br">
         <div class="cw-card-head">
-          <h3 id="ac-br"><Landmark :size="26" class="cw-head-icon" aria-hidden="true" /> Bank Reconciliation</h3>
+          <h3 id="ac-br"><Landmark :size="26" class="cw-head-icon" aria-hidden="true" /> Cash and bank</h3>
           <span class="cw-spacer" />
           <RouterLink :to="{ name: 'acc-bank' }" class="cw-link">View Details <ArrowRight :size="16" aria-hidden="true" /></RouterLink>
         </div>
@@ -376,12 +429,11 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
           <p v-if="!d.banks.length" class="cw-empty">No bank account has entries.</p>
           <ul v-else class="acc-banks">
             <li v-for="b in d.banks" :key="b.id + b.currency">
-              <span>{{ b.name }} – {{ b.currency }}</span>
+              <RouterLink :to="{ name: 'acc-cashbook', query: { account: b.id } }" class="cw-link">{{ b.name }} – {{ b.currency }}</RouterLink>
               <strong class="num">{{ money(b.balance, b.currency) }}</strong>
-              <span class="acc-recon"><Clock :size="14" aria-hidden="true" /> Unreconciled</span>
+              <span v-if="bankStatus(b).reconciled" class="acc-recon" :class="{ 'is-ok': b.reconciled_to && !b.unreconciled_entries }"><Clock :size="14" aria-hidden="true" /> {{ bankStatus(b).reconciled }}<template v-if="bankStatus(b).entries"> · {{ bankStatus(b).entries }}</template></span>
             </li>
           </ul>
-          <p class="cw-hint" style="margin: 10px 0 0">Ledger balances. Matching them to bank statements is not built yet.</p>
         </div>
       </section>
 
@@ -397,12 +449,13 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
               <RouterLink :to="{ name: 'acc-messages' }"><Mail :size="19" class="acc-tone-info" aria-hidden="true" /><span>{{ inbox.unread }} unread message{{ inbox.unread === 1 ? '' : 's' }}</span><ChevronRight :size="18" aria-hidden="true" /></RouterLink>
             </li>
             <li v-for="(a, i) in d.alerts" :key="i">
-              <RouterLink :to="{ name: ALERT_ROUTE[a.key] ?? 'acc-dashboard' }">
+              <RouterLink v-if="known(ALERT_ROUTE[a.key])" :to="{ name: known(ALERT_ROUTE[a.key])! }">
                 <CircleAlert v-if="a.tone === 'neg'" :size="19" class="acc-tone-neg" aria-hidden="true" />
                 <TriangleAlert v-else-if="a.tone === 'warn'" :size="19" class="acc-tone-warn" aria-hidden="true" />
                 <Info v-else :size="19" class="acc-tone-info" aria-hidden="true" />
-                <span>{{ a.text }}</span><ChevronRight :size="18" aria-hidden="true" />
+                <span :role="alertRole(a.tone)">{{ a.text }}</span><ChevronRight :size="18" aria-hidden="true" />
               </RouterLink>
+              <p v-else class="acc-alert-plain" :role="alertRole(a.tone)">{{ a.text }}</p>
             </li>
             <li v-if="!d.alerts.length && !inbox.unread" class="cw-empty">Nothing needs your attention.</li>
           </ul>
@@ -412,6 +465,7 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
   </template>
 
   <ReasonDialog
+    :opener="returnOpener"
     v-if="returning" :title="`Return ${returning.session_no} for recount`"
     :message="`${returning.cashier_name} is asked to count the drawer again. Your reason is kept with the session.`"
     label="Why is it being returned?" submit-label="Return for recount" danger :busy="!!busy" :error="actionError"
@@ -448,7 +502,7 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
 .acc-diff.is-zero { background: var(--cw-pos-soft); color: var(--cw-pos); }
 .acc-diff.is-off { background: var(--cw-neg-soft); color: var(--cw-neg); }
 .acc-act { width: 28px; height: 28px; margin-left: 3px; border-radius: 7px; border: 1.5px solid; background: #fff; display: inline-grid; place-items: center; cursor: pointer; }
-.acc-act:disabled { opacity: 0.5; cursor: wait; }
+.acc-act[aria-disabled='true'] { opacity: 0.5; cursor: wait; }
 .acc-act--view { border-color: #bdd4f3; color: var(--cw-accent); }
 .acc-act--ok { border-color: #a6dcb8; color: var(--cw-pos); }
 .acc-act--no { border-color: #f0b4b4; color: var(--cw-neg); }
@@ -485,7 +539,15 @@ const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
 .acc-banks li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 2px; border-bottom: 1px solid var(--cw-line); font-size: 15px; }
 .acc-banks strong { text-align: right; }
 .acc-recon { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 5px; justify-self: start; padding: 2px 9px; border-radius: 7px; background: var(--cw-warn-soft); color: var(--cw-warn); font-size: 13px; font-weight: 600; }
-.acc-alert-count { min-width: 30px; height: 30px; border-radius: 15px; background: #e53935; color: #fff; display: grid; place-items: center; font-weight: 700; }
+.acc-recon.is-ok { background: var(--cw-pos-soft); color: var(--cw-pos); }
+.acc-task-plain { display: flex; align-items: center; gap: 12px; padding: 9px 10px; margin: 0; font-size: 15px; }
+.acc-alert-plain { margin: 0; padding: 9px 4px; font-size: 15px; }
+.acc-bookslist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.acc-bookslist .cw-banner-msg { margin: 0; }
+.acc-period { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; font-size: 15px; }
+.acc-ready { color: var(--cw-pos); }
+.acc-books { margin: 16px 0; }
+.acc-alert-count { min-width: 30px; height: 30px; border-radius: 15px; background: var(--cw-neg); color: #fff; display: grid; place-items: center; font-weight: 700; }
 .acc-alerts { list-style: none; margin: 0; padding: 0; }
 .acc-alerts a { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--cw-line); color: inherit; text-decoration: none; font-size: 15px; }
 .acc-alerts a:hover { background: var(--cw-accent-softer); }

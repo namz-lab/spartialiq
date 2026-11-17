@@ -1,11 +1,14 @@
 const { Pool } = require('pg')
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'vungu_master_db_v1',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || ''
-})
+// DATABASE_URL when it is set (the same database as the app), the local DB_* settings otherwise.
+const pool = new Pool(process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'vungu_master_db_v1',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || ''
+    })
 
 async function setup() {
   const client = await pool.connect()

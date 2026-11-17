@@ -19,7 +19,7 @@ import { reportingFirst, useBudget } from '../useBudget'
 const store = useFinanceStore()
 const { state, loadDashboard } = useBudget()
 
-const d = computed(() => state.dashboard)
+const d = computed(() => state.data)
 const reporting = computed<Currency>(() => d.value?.year.reporting_currency ?? 'USD')
 const totals = computed(() => reportingFirst(d.value?.totals, reporting.value))
 const main = computed(() => totals.value[0] ?? null)
@@ -87,11 +87,11 @@ const ALERT_ROUTE: Record<string, string> = {
   commitments: 'bud-commitments', projects: 'bud-projects', planning: 'bud-planning',
 }
 const QUICK = [
-  { label: 'Create Budget', icon: CirclePlus, to: { name: 'bud-planning' } },
-  { label: 'Process Virement', icon: ArrowLeftRight, to: { name: 'bud-virements' } },
-  { label: 'Capture Commitment', icon: ClipboardPen, to: { name: 'bud-commitments' } },
-  { label: 'Budget Adjustment', icon: SlidersHorizontal, to: { name: 'bud-virements' } },
-  { label: 'Generate Reports', icon: ChartColumn, to: { name: 'bud-reports' } },
+  { label: 'New Budget Line', icon: CirclePlus, to: { name: 'bud-planning' } },
+  { label: 'Revision or Virement', icon: ArrowLeftRight, to: { name: 'bud-virements' } },
+  { label: 'Approval Status', icon: ClipboardPen, to: { name: 'bud-approval' } },
+  { label: 'Explain Variances', icon: SlidersHorizontal, to: { name: 'bud-variance' } },
+  { label: 'Council Pack', icon: ChartColumn, to: { name: 'bud-submission' } },
 ]
 const dayMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 </script>
@@ -165,7 +165,7 @@ const dayMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString
               <text x="32" :y="H + 38" text-anchor="middle" font-size="11.5" fill="#1a2430">{{ labelLines(p.name)[1] }}</text>
             </g>
           </svg>
-          <p v-if="otherProgrammeCurrencies.length" class="cw-hint">{{ otherProgrammeCurrencies.join(', ') }} programmes on Programme / Cost Centres.</p>
+          <p v-if="otherProgrammeCurrencies.length" class="cw-hint">{{ otherProgrammeCurrencies.join(', ') }} programmes on Programmes &amp; Votes.</p>
         </div>
       </section>
 
@@ -189,7 +189,7 @@ const dayMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString
         <div class="cw-card-head">
           <h3 id="bd-al"><Bell :size="26" class="cw-head-icon" aria-hidden="true" /> Alerts &amp; Actions</h3>
           <span class="cw-spacer" />
-          <span class="bd-alert-count">{{ d.alerts.length }}</span>
+          <span class="bd-alert-count" :aria-label="`${d.alerts.length} alerts`">{{ d.alerts.length }}</span>
         </div>
         <div class="cw-card-body">
           <p v-if="!d.alerts.length" class="cw-empty">Nothing needs your attention.</p>
@@ -213,7 +213,7 @@ const dayMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString
         <div class="cw-card-head">
           <h3 id="bd-vt"><Layers :size="26" class="cw-head-icon" aria-hidden="true" /> Budget Performance by Vote (Top 5)</h3>
           <span class="cw-spacer" />
-          <RouterLink :to="{ name: 'bud-programmes' }" class="cw-link">View All <ArrowRight :size="16" aria-hidden="true" /></RouterLink>
+          <RouterLink :to="{ name: 'bud-programmes' }" class="cw-link">View all votes <ArrowRight :size="16" aria-hidden="true" /></RouterLink>
         </div>
         <div class="cw-card-body cw-table-wrap">
           <table class="cw-table bd-compact">
@@ -268,13 +268,15 @@ const dayMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString
         <div class="cw-card-body">
           <p v-if="!d.calendar.length" class="cw-empty">No dates ahead in this year.</p>
           <ul v-else class="bd-cal">
-            <li v-for="c in d.calendar" :key="c.date + c.text"><span class="bd-date">{{ dayMonth(c.date) }}</span><span>{{ c.text }}</span></li>
+            <li v-for="c in d.calendar" :key="c.date + c.text"><span class="bd-date">{{ dayMonth(c.date) }}</span><span class="bd-grow">{{ c.text }}</span>
+              <span v-if="c.days_left !== null" class="cw-hint">{{ c.days_left === 0 ? 'today' : `in ${c.days_left} day${c.days_left === 1 ? '' : 's'}` }}</span></li>
           </ul>
         </div>
       </section>
 
       <section class="cw-card" aria-labelledby="bd-wf">
-        <div class="cw-card-head"><h3 id="bd-wf"><Layers :size="26" class="cw-head-icon" aria-hidden="true" /> Budget Workflow Summary</h3></div>
+        <div class="cw-card-head"><h3 id="bd-wf"><Layers :size="26" class="cw-head-icon" aria-hidden="true" /> Budget Workflow Summary</h3><span class="cw-spacer" />
+          <RouterLink :to="{ name: 'bud-preparation' }" class="cw-link">By vote <ArrowRight :size="16" aria-hidden="true" /></RouterLink></div>
         <div class="cw-card-body bd-flow">
           <RouterLink :to="{ name: 'bud-approval', query: { status: 'draft' } }" class="bd-flow-tile is-draft"><FilePen :size="24" aria-hidden="true" /><strong>{{ d.workflow.draft }}</strong><span>Draft Budgets</span></RouterLink>
           <RouterLink :to="{ name: 'bud-approval', query: { status: 'submitted' } }" class="bd-flow-tile is-pending"><Hourglass :size="24" aria-hidden="true" /><strong>{{ d.workflow.submitted }}</strong><span>Pending Approval</span></RouterLink>
@@ -322,6 +324,7 @@ const dayMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString
 .bd-quick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .bd-qa { min-height: 68px; font-size: 12.5px; gap: 6px; background: #fff; }
 .bd-cal { list-style: none; margin: 0; padding: 0; }
+.bd-grow { flex: 1; }
 .bd-cal li { display: flex; align-items: center; gap: 14px; padding: 8px 2px; border-bottom: 1px solid var(--cw-line); font-size: 15px; }
 .bd-date { min-width: 74px; padding: 4px 10px; border-radius: 7px; background: #e8f0f9; color: var(--cw-accent-ink); font-weight: 700; text-align: center; white-space: nowrap; }
 .bd-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }

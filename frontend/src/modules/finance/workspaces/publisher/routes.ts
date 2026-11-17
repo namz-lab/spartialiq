@@ -34,6 +34,7 @@ const routes: RouteRecordRaw[] = [
         'Finance notices are not built yet. Site-wide announcements are made by the system administrator; a finance notice can be published today as a public document.',
         [{ name: 'pub-disclosures', label: 'Public Disclosures' }]),
       k.page('website', 'pub-website', 'Website Publishing', () => import('./pages/WebsitePublishing.vue')),
+      k.page('versions', 'pub-versions', 'Version History', () => import('./pages/VersionHistory.vue')),
       k.page('log', 'pub-log', 'Publication Log', () => import('./pages/PublicationLog.vue')),
       k.messages('pub-messages'),
     ],

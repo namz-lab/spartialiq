@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Publication: the portal shell with the publisher's navigation. */
 import { computed } from 'vue'
-import { House, LayoutTemplate, FileUp, Globe2, Wallet, FileSpreadsheet, FolderOpen, Megaphone, MonitorUp, History, Mail } from 'lucide-vue-next'
+import { House, LayoutTemplate, FileUp, Globe2, Wallet, FileSpreadsheet, FolderOpen, Megaphone, MonitorUp, History, Mail, GitBranch } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { publisherDash } from './dashboard'
@@ -17,6 +17,7 @@ const nav = computed<PortalNavItem[]>(() => [
   { name: 'pub-council', label: 'Council Documents', icon: FolderOpen },
   { name: 'pub-notices', label: 'Notices & Announcements', icon: Megaphone },
   { name: 'pub-website', label: 'Website Publishing', icon: MonitorUp },
+  { name: 'pub-versions', label: 'Version History', icon: GitBranch },
   { name: 'pub-log', label: 'Publication Log', icon: History },
 ])
 const menu = [{ name: 'pub-messages', label: 'Messages', icon: Mail }]
@@ -24,5 +25,5 @@ const menu = [{ name: 'pub-messages', label: 'Messages', icon: Mail }]
 
 <template>
   <PortalLayout :dash="publisherDash" :nav="nav" :menu="menu" home-route="pub-dashboard" home-title="Publisher Dashboard"
-    :home-crumbs="['Finance Department', 'Publisher']" messages-route="pub-messages" nav-label="Publication" :yearly="false" />
+    :home-crumbs="['Finance Department', 'Publisher']" messages-route="pub-messages" nav-label="Publication" :yearly="false" workspace="publisher" />
 </template>

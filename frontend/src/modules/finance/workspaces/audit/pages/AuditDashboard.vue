@@ -94,7 +94,8 @@ const segments = computed(() => {
             </RouterLink></li>
           </ul>
           <p v-if="d.refusals_7d" class="dx-note">{{ d.refusals_7d }} finance requests were refused for lack of permission in the last 7 days.
-            <RouterLink :to="{ name: 'aud-trail' }" class="cw-link">Audit Trail</RouterLink></p>
+            <RouterLink :to="{ name: 'aud-trail', query: { outcome: 'refused' } }" class="cw-link">Refused attempts</RouterLink> ·
+            <RouterLink :to="{ name: 'aud-exceptions' }" class="cw-link">Exceptions and Duties</RouterLink></p>
         </div>
       </section>
     </div>

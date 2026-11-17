@@ -7,7 +7,7 @@
  */
 import { computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Wallet, Banknote, ClipboardList, ChartColumnBig, ChartPie, ListOrdered, ListTodo, ChartColumn, ChevronRight, AlertTriangle, Info, CircleDot } from 'lucide-vue-next'
+import { Wallet, Banknote, ClipboardList, ChartColumnBig, ChartPie, ListOrdered, ListTodo, ChartColumn, ChevronRight, AlertTriangle, Info, CircleDot, CirclePlus, ArrowLeftRight, Hourglass, MessageSquareText } from 'lucide-vue-next'
 import DonutChart from '../../shared/DonutChart.vue'
 import BarChart from '../../shared/BarChart.vue'
 import { byCurrency, pctText } from '../../shared/useDashboard'
@@ -48,7 +48,13 @@ const recent = computed(() => {
 })
 const months = computed(() => recent.value.map((p) => new Date(`${p.from_date}T00:00:00`).toLocaleDateString('en-GB', { month: 'short' })))
 
-const TASK_ROUTE: Record<string, string> = { budget: 'dep-budget', commitments: 'dep-commitments', expenditure: 'dep-expenditure', revisions: 'dep-revisions' }
+const QUICK = [
+  { label: 'Prepare a budget line', icon: CirclePlus, to: { name: 'dep-budget', query: { status: 'draft' } } },
+  { label: 'Request a revision', icon: ArrowLeftRight, to: { name: 'dep-revisions' } },
+  { label: 'Approval status', icon: Hourglass, to: { name: 'dep-budget', query: { status: 'submitted' } } },
+  { label: 'Explain a variance', icon: MessageSquareText, to: { name: 'dep-variance' } },
+]
+const TASK_ROUTE: Record<string, string> = { budget: 'dep-budget', commitments: 'dep-commitments', expenditure: 'dep-variance', revisions: 'dep-revisions' }
 </script>
 
 <template>
@@ -85,6 +91,12 @@ const TASK_ROUTE: Record<string, string> = { budget: 'dep-budget', commitments: 
           <p v-for="t in totals.slice(1)" :key="t.currency" class="cw-tile-value-2 num">{{ money(t.available, t.currency) }}</p></div>
       </RouterLink>
     </div>
+
+    <nav class="dp-quick" aria-label="Quick actions">
+      <RouterLink v-for="q in QUICK" :key="q.label" :to="q.to" class="cw-action dp-qa">
+        <component :is="q.icon" :size="24" :stroke-width="1.6" aria-hidden="true" /><span>{{ q.label }}</span>
+      </RouterLink>
+    </nav>
 
     <div class="dx-row dx-row--2">
       <section class="cw-card" aria-labelledby="dp-ut">
@@ -132,3 +144,9 @@ const TASK_ROUTE: Record<string, string> = { budget: 'dep-budget', commitments: 
     </div>
   </template>
 </template>
+
+<style scoped>
+.dp-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+.dp-qa { min-height: 60px; flex-direction: row; gap: 10px; font-size: 14px; background: #fff; }
+@media (max-width: 760px) { .dp-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>

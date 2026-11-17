@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Internal Audit: the portal shell with the internal auditor's navigation. */
 import { computed } from 'vue'
-import { House, ClipboardList, UserCheck, Search, TriangleAlert, ListChecks, FolderOpen, ChartColumn, ShieldCheck, Mail } from 'lucide-vue-next'
+import { House, ClipboardList, UserCheck, Search, TriangleAlert, ListChecks, FolderOpen, ChartColumn, ShieldCheck, Mail, ShieldAlert, Dices, FileSpreadsheet, ListOrdered } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { auditDash } from './dashboard'
@@ -17,11 +17,15 @@ const nav = computed<PortalNavItem[]>(() => [
   { name: 'aud-evidence', label: 'Evidence', icon: FolderOpen },
   { name: 'aud-reports', label: 'Reports', icon: ChartColumn },
   { name: 'aud-trail', label: 'Audit Trail', icon: ShieldCheck },
+  { name: 'aud-exceptions', label: 'Exceptions and Duties', icon: ShieldAlert },
+  { name: 'aud-sampling', label: 'Sample Selection', icon: Dices },
+  { name: 'aud-statements', label: 'Ledger and Statements', icon: FileSpreadsheet },
+  { name: 'aud-transactions', label: 'Transactions', icon: ListOrdered },
 ])
 const menu = [{ name: 'aud-messages', label: 'Messages', icon: Mail }]
 </script>
 
 <template>
   <PortalLayout :dash="auditDash" :nav="nav" :menu="menu" home-route="aud-dashboard" home-title="Internal Auditor Dashboard"
-    :home-crumbs="['Finance Department', 'Internal Auditor']" messages-route="aud-messages" nav-label="Internal Audit" />
+    :home-crumbs="['Finance Department', 'Internal Auditor']" messages-route="aud-messages" nav-label="Internal Audit" workspace="audit" />
 </template>

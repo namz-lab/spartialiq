@@ -131,6 +131,7 @@ const { financePublicRoutes } = require('./src/routes/finance-public')
 const { financeSpatialRoutes } = require('./src/routes/finance-spatial')
 const { financeTransactionRoutes } = require('./src/routes/finance-transactions')
 const { financeLedgerRoutes } = require('./src/routes/finance-ledger')
+const { financeLedgerReadRoutes } = require('./src/routes/finance-ledger-reads')
 const { financeRatesRoutes } = require('./src/routes/finance-rates')
 const { financeCashRoutes } = require('./src/routes/finance-cash')
 const { financeAccountingRoutes } = require('./src/routes/finance-accounting')
@@ -366,6 +367,10 @@ async function build() {
     // max_connections=100 still has headroom for the survey pool (20).
     max: 30,
   })
+
+  // A hosted database (Neon) closes idle connections. node-postgres reports that as an 'error' on the pool; with no listener, Node
+  // treats it as fatal and the whole server exits. The pool drops the dead client and opens a new one on the next query, so log it.
+  server.pg.pool.on('error', (err) => { server.log.warn({ err: err.message }, '[db] an idle connection was closed by the server; it will be replaced') })
 
   await require('./src/lib/runtimeDb').assertRuntimeRole(server.pg.pool, { log: server.log })
 
@@ -746,6 +751,7 @@ async function build() {
     await server.register(financeSpatialRoutes, { prefix: '/api' })
     await server.register(financeTransactionRoutes, { prefix: '/api' })
     await server.register(financeLedgerRoutes, { prefix: '/api' })
+    await server.register(financeLedgerReadRoutes, { prefix: '/api' })
     await server.register(financeRatesRoutes, { prefix: '/api' })
     await server.register(financeCashRoutes, { prefix: '/api' })
     await server.register(financeAccountingRoutes, { prefix: '/api' })

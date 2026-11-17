@@ -7,7 +7,7 @@
  * A closed finding is not reopened; if the matter comes back it is recorded again.
  */
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { Search, TriangleAlert, ListChecks, Plus, Pencil, CircleCheck, AlertTriangle } from 'lucide-vue-next'
 import { internalAuditApi, type AuditEngagement, type AuditFinding, type FindingRisk } from '../../../api/dashboardsApi'
 import { messageOf, useFinanceStore } from '../../../stores/finance'
@@ -25,7 +25,7 @@ const canManage = computed(() => store.can('finance.audit.manage'))
 
 const all = ref<AuditFinding[]>([])
 const engagements = ref<AuditEngagement[]>([])
-const status = ref<'open' | 'closed' | 'overdue' | ''>('open')
+const status = ref<'open' | 'closed' | 'overdue' | ''>(route.query.engagement ? '' : 'open')
 const risk = ref<FindingRisk | ''>('')
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -43,8 +43,10 @@ async function load(): Promise<void> {
 }
 onMounted(load)
 
+const engagement = computed(() => (typeof route.query.engagement === 'string' ? route.query.engagement : ''))
+const engagementTitle = computed(() => engagements.value.find((e) => e.id === engagement.value)?.title ?? null)
 const shown = computed(() => all.value.filter((f) =>
-  (!status.value || (status.value === 'overdue' ? f.overdue : f.status === status.value)) && (!risk.value || f.risk === risk.value)))
+  (!engagement.value || f.engagement_id === engagement.value) && (!status.value || (status.value === 'overdue' ? f.overdue : f.status === status.value)) && (!risk.value || f.risk === risk.value)))
 const openByRisk = computed(() => (['high', 'medium', 'low'] as FindingRisk[]).map((r) => ({ risk: r, list: all.value.filter((f) => f.status === 'open' && f.risk === r) })))
 const today = new Date().toISOString().slice(0, 10)
 const overdue = computed(() => all.value.filter((f) => f.overdue))
@@ -91,6 +93,8 @@ const LEAD = {
         <button v-for="(l, v) in RISK" :key="v" type="button" :aria-pressed="risk === v" @click="risk = v as FindingRisk">{{ l }}</button>
       </div>
     </div>
+    <p v-if="engagement" class="cw-banner-msg" role="status">Showing the findings of {{ engagementTitle ?? 'one audit' }}.
+      <RouterLink :to="{ name: 'aud-findings' }" class="cw-link">Show every audit</RouterLink></p>
     <section class="cw-card">
       <div class="cw-card-body cw-table-wrap" style="padding-top: 16px">
         <p v-if="!shown.length" class="cw-empty">No findings match.</p>

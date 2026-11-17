@@ -9,6 +9,7 @@
 import { provide, watch } from 'vue'
 import PortalShell, { type PortalMenuItem, type PortalNavItem } from './PortalShell.vue'
 import { useFinanceStore } from '../../stores/finance'
+import type { WorkspaceKey } from '../../shell/workspaces'
 import type { Dashboard } from './useDashboard'
 
 const props = withDefaults(defineProps<{
@@ -21,7 +22,9 @@ const props = withDefaults(defineProps<{
   messagesRoute: string
   navLabel: string
   yearly?: boolean
-}>(), { menu: () => [], yearly: true })
+  /** Names this workspace on the switcher between the workspaces the person holds. */
+  workspace?: WorkspaceKey | null
+}>(), { menu: () => [], yearly: true, workspace: null })
 
 const store = useFinanceStore()
 
@@ -46,6 +49,6 @@ watch(() => store.selectedYearId, (id) => { if (props.yearly && store.identity &
   <PortalShell
     :nav="nav" :menu="menu" :home-route="homeRoute" :home-title="homeTitle" :home-crumbs="homeCrumbs"
     brand-sub="Local Authority Finance Management System" :messages-route="messagesRoute" :nav-label="navLabel"
-    :show-year="yearly" @boot="boot" @tick="refresh" @logout="dash.reset()"
+    :show-year="yearly" :workspace="workspace" @boot="boot" @tick="refresh" @logout="dash.reset()"
   />
 </template>

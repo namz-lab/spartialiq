@@ -6,10 +6,11 @@
  */
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileCheck2, Undo2, CalendarClock, TriangleAlert, FileText, ChartPie, Zap, Upload, FilePlus, Globe2, Layers, AlertTriangle } from 'lucide-vue-next'
+import { FileCheck2, Undo2, CalendarClock, TriangleAlert, FileText, ChartPie, Zap, Upload, FilePlus, Globe2, Layers, AlertTriangle, GitBranch } from 'lucide-vue-next'
 import DonutChart from '../../shared/DonutChart.vue'
 import { dayMonth } from '../../shared/useDashboard'
 import { publisherDash, DATASET, STATE } from '../dashboard'
+import { useFinanceStore } from '../../../stores/finance'
 
 const { state, load } = publisherDash
 const d = computed(() => state.data)
@@ -27,12 +28,15 @@ const segments = computed(() => {
   ].map((s) => ({ label: s.label, value: share(s.n), shown: `${s.n} (${share(s.n)}%)`, colour: s.colour }))
 })
 const tone = (s: string) => (s === 'published' ? 'cw-pill--pos' : s === 'approved' ? 'cw-pill--info' : s === 'pending' ? 'cw-pill--warn' : 'cw-pill--mute')
-const QUICK = [
-  { label: 'Upload Document', icon: Upload, to: 'pub-council' },
-  { label: 'Create Publication', icon: FilePlus, to: 'pub-reports' },
-  { label: 'Publish to Portal', icon: Globe2, to: 'pub-reports', query: { state: 'approved' } },
-  { label: 'Manage Categories', icon: Layers, to: 'pub-disclosures' },
-]
+// Offered only where the role holds the permission the destination needs; the server decides.
+const store = useFinanceStore()
+const QUICK = computed(() => [
+  { label: 'Upload Document', icon: Upload, to: 'pub-council', needs: 'finance.document.upload' },
+  { label: 'Request a Release', icon: FilePlus, to: 'pub-reports', query: { state: 'pending' }, needs: 'finance.publication.review' },
+  { label: 'Publish Approved', icon: Globe2, to: 'pub-reports', query: { state: 'approved' }, needs: 'finance.publication.publish' },
+  { label: 'Public Documents', icon: Layers, to: 'pub-disclosures', needs: 'finance.publication.publish' },
+  { label: 'Version History', icon: GitBranch, to: 'pub-versions' },
+].filter((q) => !q.needs || store.can(q.needs)))
 </script>
 
 <template>
@@ -52,7 +56,7 @@ const QUICK = [
       </RouterLink>
       <RouterLink :to="{ name: 'pub-reports', query: { state: 'approved' } }" class="cw-tile cw-tile--blue">
         <span class="cw-tile-icon"><CalendarClock :size="32" aria-hidden="true" /></span>
-        <div><p class="cw-tile-label">Ready to Publish</p><p class="cw-tile-value num">{{ d.states.approved }}</p><p class="cw-tile-sub">approved by someone else</p></div>
+        <div><p class="cw-tile-label">Ready to Publish</p><p class="cw-tile-value num">{{ d.states.approved }}</p><p class="cw-tile-sub">approved, not yet live</p></div>
       </RouterLink>
       <RouterLink :to="{ name: 'pub-reports', query: { state: 'pending' } }" class="cw-tile cw-tile--red">
         <span class="cw-tile-icon"><TriangleAlert :size="32" aria-hidden="true" /></span>

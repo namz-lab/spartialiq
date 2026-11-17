@@ -38,8 +38,10 @@ import type {
   LedgerAccountTree, LedgerEntryPage, LedgerEntryQuery, LedgerPartyList, LedgerPeriodList,
   LedgerPeriodStatus, LedgerPeriodsOpened, LedgerParty, LedgerAccount, PartyType, Periodicity,
   PerformanceStatement, PositionStatement, TrialBalanceResult, VoucherBody, VoucherCreated,
-  VoucherDetail, VoucherList, VoucherPosted, VoucherQuery, VoucherReversed, VoucherLineBody,
-  YearClosed, LedgerRootType, LedgerAccountType, AgeingBucket,
+  VoucherDetail, VoucherList, VoucherPosted, VoucherQuery, VoucherReversed, VoucherCancelled, VoucherLineBody,
+  YearClosed, LedgerRootType, LedgerAccountType, AgeingBucket, ClosingMode, ChartBalances,
+  AccountLedgerQuery, AccountLedgerResult, CashAccounts, CashStatement, GeneralLedgerReport,
+  GeneralLedgerReportQuery, JournalListing, JournalListingQuery, SalariesJournalBody,
 } from '../models/ledgerTypes'
 
 const unwrap = <T>(r: { data?: { data?: T } | T }): T => {
@@ -48,6 +50,13 @@ const unwrap = <T>(r: { data?: { data?: T } | T }): T => {
     ? (body as { data: T }).data
     : body) as T
 }
+
+/**
+ * A CSV export: the same endpoint as the JSON read, asked for `format=csv`, returned as a Blob for
+ * `saveBlob()` in the accountant kit. The server's text is saved as it arrives, never re-formatted.
+ */
+const csv = async (url: string, params: object): Promise<Blob> =>
+  (await api.get(url, { params: { ...params, format: 'csv' }, responseType: 'blob' })).data as Blob
 
 export interface LedgerAccountQuery {
   root_type?: LedgerRootType
@@ -132,6 +141,33 @@ export const ledgerApi = {
     return unwrap(await api.delete(`/finance/ledger/accounts/${id}`))
   },
 
+  /**
+   * The whole chart with each account's balance as at a date, one row per account in code order.
+   * A heading carries the sum of everything beneath it, summed in SQL.
+   */
+  async chartBalances(params: {
+    financial_year_id: string; as_at?: string; closing?: ClosingMode
+  }): Promise<ChartBalances> {
+    return unwrap(await api.get('/finance/ledger/chart-balances', { params }))
+  },
+
+  /**
+   * One account's ledger in one book, with brought-forward, a running balance and carried-forward.
+   * Refused with 409 for a heading, which has no entries of its own.
+   */
+  async accountLedger(id: string, params: AccountLedgerQuery): Promise<AccountLedgerResult> {
+    return unwrap(await api.get(`/finance/ledger/accounts/${id}/ledger`, { params }))
+  },
+
+  async accountLedgerCsv(id: string, params: AccountLedgerQuery): Promise<Blob> {
+    return csv(`/finance/ledger/accounts/${id}/ledger`, params)
+  },
+
+  /** The bank and cash accounts with their ledger balance and reconciliation state. */
+  async cashAccounts(financialYearId: string): Promise<CashAccounts> {
+    return unwrap(await api.get('/finance/ledger/cash-accounts', { params: { financial_year_id: financialYearId } }))
+  },
+
   async accountBalance(id: string, params?: {
     currency?: Currency; financial_year_id?: string
   }): Promise<AccountBalanceResult> {
@@ -209,36 +245,58 @@ export const ledgerApi = {
     return unwrap(await api.post('/finance/ledger/vouchers', body))
   },
 
+  /**
+   * Raise the month's salaries journal as a draft `payroll` voucher, numbered SJ- by the server.
+   * Not a hand-typed journal: the screen collects the month's totals and this writes the double
+   * entry, which somebody else then posts.
+   */
+  async createSalariesJournal(body: SalariesJournalBody): Promise<VoucherCreated> {
+    return unwrap(await api.post('/finance/ledger/salaries-journal', body))
+  },
+
   /** Draft only. A posted voucher's lines are frozen by a trigger whatever this is asked to do. */
   async updateVoucher(id: string, body: {
     posting_date?: string; narration?: string | null; reference?: string | null
     lines?: VoucherLineBody[]
-  }): Promise<{ updated: string; balance: { debit_total: string; credit_total: string; difference: string }; balances: boolean }> {
+  }): Promise<{ updated: string; version: number; balance: { debit_total: string; credit_total: string; difference: string }; balances: boolean }> {
     return unwrap(await api.patch(`/finance/ledger/vouchers/${id}`, body))
   },
 
-  /** Discard a draft. A posted voucher is never deleted; it is reversed. */
-  async discardVoucher(id: string): Promise<{ discarded: string }> {
-    return unwrap(await api.delete(`/finance/ledger/vouchers/${id}`))
+  /**
+   * Cancel a draft. The voucher is NOT deleted: it keeps its number and its lines, is marked
+   * cancelled with who cancelled it, when and why, and leaves the default registers. Only the
+   * person who prepared it may cancel it (403 `not_preparer` otherwise). The reason is optional
+   * (3 to 2000 characters); without one the server records a default sentence. A posted voucher
+   * is never cancelled; it is reversed.
+   */
+  async discardVoucher(id: string, reason?: string): Promise<VoucherCancelled> {
+    return unwrap(await api.delete(`/finance/ledger/vouchers/${id}`, reason ? { data: { reason } } : undefined))
   },
 
   /**
    * Post a voucher to the book of account. The point of no return.
    *
+   * Pass the version the poster reviewed (`voucher.version` as read when the page was opened). If
+   * the draft was changed since, the server answers 409 `changed_since_review` and posts nothing.
+   * The version is optional only so that the old console, which has none, keeps working.
+   *
    * Refused when the caller prepared it (separation of duties, a CHECK constraint), when the period
    * is not open, when it does not balance, or when an account is a heading. Every one of those is
    * enforced by the database and merely reported here.
    */
-  async postVoucher(id: string): Promise<VoucherPosted> {
-    return unwrap(await api.post(`/finance/ledger/vouchers/${id}/post`, {}))
+  async postVoucher(id: string, expectedVersion?: number): Promise<VoucherPosted> {
+    return unwrap(await api.post(`/finance/ledger/vouchers/${id}/post`,
+      expectedVersion === undefined ? {} : { expected_version: expectedVersion }))
   },
 
   /**
-   * Reverse a posted voucher.
+   * Raise a reversal of a posted voucher, as a DRAFT.
    *
-   * The original stays posted and visible — it is not cancelled, flagged or hidden — and the
-   * reversal carries the opposite entries, so the net effect on every account is nil. The reason is
-   * required and goes on the record.
+   * Nothing is posted by this call. The reversal waits in the To post queue for somebody other than
+   * its preparer, and the original stays posted and untouched until then. The reply carries the
+   * draft (`reversal`) and `awaiting_post: true`. The reason is required and goes on the record;
+   * it cannot be changed afterwards. A second reversal while one is waiting is refused (409
+   * `reversal_pending`).
    */
   async reverseVoucher(id: string, body: {
     reason: string; posting_date?: string; voucher_no?: string
@@ -264,21 +322,43 @@ export const ledgerApi = {
     currency?: Currency
     root_type?: LedgerRootType
     include_nil?: boolean
+    /** Balances as at this date; the server defaults it to the year end. */
+    as_at?: string
+    /** `after` (the default) counts the closing vouchers; `before` leaves them out. */
+    closing?: ClosingMode
   }): Promise<TrialBalanceResult> {
     return unwrap(await api.get('/finance/ledger/trial-balance', { params }))
+  },
+
+  async trialBalanceCsv(params: {
+    financial_year_id: string
+    currency?: Currency
+    root_type?: LedgerRootType
+    include_nil?: boolean
+    as_at?: string
+    closing?: ClosingMode
+  }): Promise<Blob> {
+    return csv('/finance/ledger/trial-balance', params)
   },
 
   /**
    * The statement of financial position, per currency.
    *
-   * Its `incomplete` array names what this statement does NOT contain — payables, a reconciled bank
-   * balance, fixed assets — because those workstreams are deferred. A screen must render it
-   * prominently: a position statement that silently omits payables is worse than no statement.
+   * Its `incomplete` array names what this statement does NOT contain or could not confirm: no payable
+   * account set up, no fixed asset account, a bank account with entries after its last reconciliation,
+   * an asset register that disagrees with the ledger. A screen must render it prominently: a position
+   * statement that silently omits such a gap is worse than no statement.
    */
   async position(params: {
-    financial_year_id: string; currency?: Currency
+    financial_year_id: string; currency?: Currency; as_at?: string
   }): Promise<PositionStatement> {
     return unwrap(await api.get('/finance/ledger/statements/position', { params }))
+  },
+
+  async positionCsv(params: {
+    financial_year_id: string; currency?: Currency; as_at?: string
+  }): Promise<Blob> {
+    return csv('/finance/ledger/statements/position', params)
   },
 
   /**
@@ -293,8 +373,58 @@ export const ledgerApi = {
     currency?: Currency
     periodicity?: Periodicity
     accumulated?: boolean
+    as_at?: string
+    /** Adds the prior year's balances beside this year's. */
+    compare?: 'prior_year'
   }): Promise<PerformanceStatement> {
     return unwrap(await api.get('/finance/ledger/statements/performance', { params }))
+  },
+
+  async performanceCsv(params: {
+    financial_year_id: string
+    currency?: Currency
+    periodicity?: Periodicity
+    accumulated?: boolean
+    as_at?: string
+    compare?: 'prior_year'
+  }): Promise<Blob> {
+    return csv('/finance/ledger/statements/performance', params)
+  },
+
+  /**
+   * Cash receipts and payments over a range, with the counter-side analysis. It is not an IPSAS 2
+   * cash flow statement and says so in its `note`.
+   */
+  async cashStatement(params: {
+    financial_year_id: string; from?: string; to?: string
+  }): Promise<CashStatement> {
+    return unwrap(await api.get('/finance/ledger/statements/cash', { params }))
+  },
+
+  async cashStatementCsv(params: {
+    financial_year_id: string; from?: string; to?: string
+  }): Promise<Blob> {
+    return csv('/finance/ledger/statements/cash', params)
+  },
+
+  // ── Ledger reports ──────────────────────────────────────────────────────────────────────────
+
+  /** The general ledger for one book: accounts with a brought-forward balance or an entry in range. */
+  async generalLedgerReport(params: GeneralLedgerReportQuery): Promise<GeneralLedgerReport> {
+    return unwrap(await api.get('/finance/ledger/reports/general-ledger', { params }))
+  },
+
+  async generalLedgerReportCsv(params: GeneralLedgerReportQuery): Promise<Blob> {
+    return csv('/finance/ledger/reports/general-ledger', params)
+  },
+
+  /** Vouchers with their lines, with debit and credit totals per currency. */
+  async journalListing(params: JournalListingQuery): Promise<JournalListing> {
+    return unwrap(await api.get('/finance/ledger/reports/journal-listing', { params }))
+  },
+
+  async journalListingCsv(params: JournalListingQuery): Promise<Blob> {
+    return csv('/finance/ledger/reports/journal-listing', params)
   },
 
   /**
@@ -312,15 +442,15 @@ export const ledgerApi = {
   /**
    * Year-end closing for ONE currency's book.
    *
-   * The two books close separately and no rate is applied. `posted_by` is named explicitly rather
-   * than guessed, because a closing voucher is an annual act with a signature on it, and it must be
-   * somebody other than whoever runs this.
+   * The two books close separately and no rate is applied. This raises a draft that someone else
+   * posts from the To post queue; nobody is named on the close. `posting_date`, when given, must be
+   * the last day of the year or the server answers 400 `bad_date`.
    */
   async closeYear(body: {
     financial_year_id: string
     currency: Currency
-    voucher_no: string
-    posted_by: string
+    /** Omit to let the server number the closing voucher. */
+    voucher_no?: string
     posting_date?: string
   }): Promise<YearClosed> {
     return unwrap(await api.post('/finance/ledger/close-year', body))

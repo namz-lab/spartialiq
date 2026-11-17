@@ -38,6 +38,12 @@
  *   finance.cash.lifecycle  migration 208: suspend and resume, a session found abandoned, the
  *                        witnessed supervised count, verification by a fourth person, assignment,
  *                        the session history and the audit trail
+ *   finance.accounting   the Accounting workspace's server side (migration 242 onwards): journal
+ *                        number series, balances carried across financial years, the year-end
+ *                        close and its reversal, the accountant's grants. Builds three financial
+ *                        years of its own in 1991-1993, earlier than every other row, because the
+ *                        balance function carries earlier years forward; posts to the insert-only
+ *                        ledger and removes its own rows with the immutability trigger disabled
  *   finance.security     the adversarial suite: what each caller CANNOT do. Builds a real app and
  *                        writes real rows, so it needs a disposable database like the rest
  *   finance.workflow     the budget cycle end to end through the real routes
@@ -76,6 +82,7 @@ const integration = [
   'src/routes/__tests__/finance.rates.test.js',
   'src/routes/__tests__/finance.cash.test.js',
   'src/routes/__tests__/finance.cash.lifecycle.test.js',
+  'src/routes/__tests__/finance.accounting.test.js',
   'src/routes/__tests__/finance.security.test.js',
   'src/routes/__tests__/finance.workflow.test.js',
   'src/routes/__tests__/finance.map.test.js',

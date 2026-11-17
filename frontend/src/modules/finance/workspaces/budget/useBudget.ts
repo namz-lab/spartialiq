@@ -1,29 +1,21 @@
-/** State the Budget Management screens share: the dashboard read for the selected year. */
-import { reactive } from 'vue'
+/**
+ * State the Budget Management screens share: the dashboard read for the selected year.
+ *
+ * Defined once at module level (`defineDashboard`), so the layout loads it on boot and on each tick,
+ * the dashboard and the programme pages read it, and a section page that changes something asks for
+ * it again through `portalRefresh`.
+ */
 import { budgetingApi, type BudgetingDashboard } from '../../api/budgetingApi'
-import { messageOf } from '../../stores/finance'
+import { defineDashboard } from '../shared/useDashboard'
 import type { Currency } from '../../models/types'
 
-const state = reactive({
-  dashboard: null as BudgetingDashboard | null,
-  error: null as string | null,
-  loading: false,
-})
-
-async function loadDashboard(yearId?: string | null): Promise<void> {
-  state.loading = true
-  state.error = null
-  try {
-    state.dashboard = await budgetingApi.dashboard(yearId)
-  } catch (err) {
-    state.error = messageOf(err, 'The budget dashboard could not be read.')
-  } finally {
-    state.loading = false
-  }
-}
+export const budgetDash = defineDashboard<BudgetingDashboard>(
+  (yearId) => budgetingApi.dashboard(yearId),
+  'The budget dashboard could not be read.',
+)
 
 export function resetBudget(): void {
-  state.dashboard = null
+  budgetDash.reset()
 }
 
 /** Rows of one per-currency figure, the year's reporting currency first. */
@@ -32,5 +24,5 @@ export function reportingFirst<T extends { currency: Currency }>(rows: T[] | und
 }
 
 export function useBudget() {
-  return { state, loadDashboard }
+  return { state: budgetDash.state, loadDashboard: budgetDash.load }
 }

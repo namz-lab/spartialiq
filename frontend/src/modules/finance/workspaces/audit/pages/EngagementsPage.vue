@@ -5,7 +5,7 @@
  * finance.audit.manage; everyone with the trail may read the plan.
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { ClipboardList, UserCheck, Plus, Pencil, AlertTriangle } from 'lucide-vue-next'
 import { internalAuditApi, type AuditEngagement, type EngagementStatus } from '../../../api/dashboardsApi'
 import { messageOf, useFinanceStore } from '../../../stores/finance'
@@ -91,7 +91,7 @@ const tone = (s: string) => (s === 'completed' ? 'cw-pill--pos' : s === 'in_prog
             <td>{{ a.lead_name ?? '—' }}</td>
             <td>{{ PHASE[a.phase] }}</td>
             <td><span class="cw-pill" :class="tone(a.status)">{{ STATUS[a.status] }}</span></td>
-            <td class="r num">{{ a.findings }} ({{ a.open_findings }})</td>
+            <td class="r num"><RouterLink v-if="a.findings" :to="{ name: 'aud-findings', query: { engagement: a.id } }" class="cw-link" :aria-label="`${a.findings} findings, ${a.open_findings} open, for ${a.title}`">{{ a.findings }} ({{ a.open_findings }})</RouterLink><template v-else>0</template></td>
             <td><button v-if="canManage" type="button" class="cw-btn cw-btn--small" @click="editing = a"><Pencil :size="15" aria-hidden="true" /> Change</button></td>
           </tr>
         </tbody>

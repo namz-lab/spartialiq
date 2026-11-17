@@ -3,16 +3,25 @@
  * The finance officer's dashboard (`GET /finance/dashboards/officer`): payments waiting to be
  * posted, what debtors owe, open journals, the bank balance, this month's money in and out, the
  * officer's work queue and the latest vouchers. Figures in the year's reporting currency first; the
- * other currency is listed beneath and never added to it.
+ * other currency is listed beneath and never added to it. Below them, the import batches of the
+ * year by stage (`GET /finance/imports`) and the officer's quick actions.
  */
-import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
-import { CreditCard, Users, NotebookPen, Landmark, ChartLine, ListTodo, ArrowLeftRight, ChevronRight, AlertTriangle, CircleDot } from 'lucide-vue-next'
+import { computed, onMounted, ref, watch } from 'vue'
+import { RouterLink, type RouteLocationRaw } from 'vue-router'
+import {
+  CreditCard, Users, NotebookPen, Landmark, ChartLine, ListTodo, ArrowLeftRight, ChevronRight, AlertTriangle, CircleDot,
+  Upload, Zap, HandCoins, FolderOpen, Layers,
+} from 'lucide-vue-next'
 import LineChart from '../../shared/LineChart.vue'
 import { byCurrency } from '../../shared/useDashboard'
 import { formatMoney, formatDate, type Currency } from '../../../composables/useMoney'
 import { useFinanceStore } from '../../../stores/finance'
+import { financeApi } from '../../../api/financeApi'
+import type { ImportBatch } from '../../../models/types'
+import { useFinanceNav } from '../../../shell/useFinanceNav'
 import { officerDash } from '../dashboard'
+import { byStage } from '../imports'
+import { taskLink } from '../tasks'
 
 const store = useFinanceStore()
 const { state, load } = officerDash
@@ -27,7 +36,36 @@ const flowCcy = computed(() => (d.value?.cash_flow.some((r) => r.currency === cc
 const flow = computed(() => (d.value?.cash_flow ?? []).filter((r) => r.currency === flowCcy.value))
 const dayLabels = computed(() => flow.value.map((r) => new Date(`${r.day}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })))
 
-const TASK_ROUTE: Record<string, string> = { journals: 'ofc-journals', reconciliation: 'ofc-reconciliation', receivables: 'ofc-receivables' }
+const nav = useFinanceNav()
+/** Where a task is worked; `null` when none of the person's workspaces serves it. */
+function taskTo(t: { key: string; text: string }): RouteLocationRaw | null {
+  const l = taskLink(t)
+  if ('name' in l) return { name: l.name }
+  const r = nav.resolve(l.target)
+  return r.kind === 'route' ? { name: r.name } : null
+}
+
+// Import batches of the year, by stage. Read with the officer's own import permission.
+const batches = ref<ImportBatch[] | null>(null)
+const batchesError = ref<string | null>(null)
+async function loadBatches(): Promise<void> {
+  if (!store.selectedYearId) { batches.value = []; return }
+  batchesError.value = null
+  try { batches.value = await financeApi.imports({ financial_year_id: store.selectedYearId, limit: 200 }) } catch {
+    batches.value = null
+    batchesError.value = 'The import batches could not be read.'
+  }
+}
+onMounted(loadBatches)
+watch(() => store.selectedYearId, loadBatches)
+const stages = computed(() => (batches.value ? byStage(batches.value) : []))
+
+const QUICK = [
+  { label: 'Upload an import', icon: Upload, to: 'ofc-imports' },
+  { label: 'Capture an invoice', icon: HandCoins, to: 'ofc-payments' },
+  { label: 'Prepare a journal', icon: NotebookPen, to: 'ofc-journals' },
+  { label: 'Attach a document', icon: FolderOpen, to: 'ofc-documents' },
+]
 function kind(r: { voucher_type: string; cash_effect: string }): { label: string; cls: string } {
   if (r.voucher_type === 'receipt' || (r.voucher_type !== 'rates_bill' && Number(r.cash_effect) > 0)) return { label: 'Receipt', cls: 'dx-tag--receipt' }
   if (Number(r.cash_effect) < 0) return { label: 'Payment', cls: 'dx-tag--pay' }
@@ -43,7 +81,7 @@ function kind(r: { voucher_type: string; cash_effect: string }): { label: string
 
   <template v-else-if="d">
     <div class="cw-tiles dx-tiles">
-      <RouterLink :to="{ name: 'ofc-payments' }" class="cw-tile cw-tile--blue">
+      <RouterLink :to="{ name: 'ofc-journals' }" class="cw-tile cw-tile--blue">
         <span class="cw-tile-icon"><CreditCard :size="32" aria-hidden="true" /></span>
         <div><p class="cw-tile-label">Pending Payments</p>
           <p class="cw-tile-value num">{{ payments.reduce((n, p) => n + p.n, 0) }}</p>
@@ -85,12 +123,41 @@ function kind(r: { voucher_type: string; cash_effect: string }): { label: string
         <div class="cw-card-body">
           <ul class="dx-list">
             <li v-for="(t, i) in d.tasks" :key="i">
-              <RouterLink :to="{ name: TASK_ROUTE[t.key] ?? 'ofc-dashboard' }" class="dx-item">
+              <RouterLink v-if="taskTo(t)" :to="taskTo(t)!" class="dx-item">
                 <CircleDot :size="18" :class="t.n ? 'dx-warn' : 'dx-ok'" aria-hidden="true" />
                 <span class="dx-grow">{{ t.text }}</span><span class="dx-count" :class="{ 'is-zero': !t.n }">{{ t.n }}</span><ChevronRight :size="18" aria-hidden="true" />
               </RouterLink>
+              <div v-else class="dx-item">
+                <CircleDot :size="18" :class="t.n ? 'dx-warn' : 'dx-ok'" aria-hidden="true" />
+                <span class="dx-grow">{{ t.text }} <span class="cw-hint">· worked in a workspace you do not hold</span></span><span class="dx-count" :class="{ 'is-zero': !t.n }">{{ t.n }}</span>
+              </div>
             </li>
           </ul>
+        </div>
+      </section>
+    </div>
+
+    <div class="dx-row dx-row--2">
+      <section class="cw-card" aria-labelledby="of-im">
+        <div class="cw-card-head"><h3 id="of-im"><Layers :size="24" class="cw-head-icon" aria-hidden="true" /> Imports by Stage</h3><span class="cw-spacer" />
+          <RouterLink :to="{ name: 'ofc-imports' }" class="cw-link">Imports</RouterLink></div>
+        <div class="cw-card-body">
+          <p v-if="batchesError" class="cw-empty">{{ batchesError }}</p>
+          <div v-else-if="!batches" aria-busy="true"><span class="cw-skel" /></div>
+          <p v-else-if="!batches.length" class="cw-empty">No file has been imported in this year.</p>
+          <ul v-else class="dx-kpis">
+            <li v-for="s in stages" :key="s.key" :data-stage="s.key"><span>{{ s.label }}</span><strong>{{ s.n }}</strong></li>
+          </ul>
+        </div>
+      </section>
+      <section class="cw-card" aria-labelledby="of-qa">
+        <div class="cw-card-head"><h3 id="of-qa"><Zap :size="24" class="cw-head-icon" aria-hidden="true" /> Quick Actions</h3></div>
+        <div class="cw-card-body">
+          <div class="dx-quick">
+            <RouterLink v-for="q in QUICK" :key="q.label" :to="{ name: q.to }" class="cw-action dx-qa">
+              <component :is="q.icon" :size="26" :stroke-width="1.6" aria-hidden="true" /><span>{{ q.label }}</span>
+            </RouterLink>
+          </div>
         </div>
       </section>
     </div>

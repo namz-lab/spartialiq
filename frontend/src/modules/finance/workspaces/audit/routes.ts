@@ -4,7 +4,7 @@
  * reports are read-only here. Nothing in this workspace changes a finance figure.
  */
 import type { RouteRecordRaw } from 'vue-router'
-import { FolderOpen, ChartColumn, ShieldCheck } from 'lucide-vue-next'
+import { FolderOpen, ChartColumn, FileSpreadsheet, ListOrdered } from 'lucide-vue-next'
 import { registerWorkspace } from '../../shell/workspaces'
 import { routeKit } from '../shared/routeKit'
 
@@ -26,7 +26,11 @@ const routes: RouteRecordRaw[] = [
       k.page('compliance', 'aud-compliance', 'Compliance', Findings, { cwMode: 'compliance' }),
       k.section('evidence', 'aud-evidence', 'documents', 'Evidence', 'Supporting documents held against finance records, including restricted ones.', FolderOpen),
       k.section('reports', 'aud-reports', 'reports', 'Reports', 'Budget and financial reports, including restricted exports.', ChartColumn),
-      k.section('trail', 'aud-trail', 'audit', 'Audit Trail', 'Every finance action, who took it and when, including refused attempts. Exportable.', ShieldCheck, { needs: 'finance.audit.view' }),
+      k.page('trail', 'aud-trail', 'Audit Trail', () => import('./pages/AuditTrailPage.vue')),
+      k.page('exceptions', 'aud-exceptions', 'Exceptions and Duties', () => import('./pages/ExceptionsPage.vue')),
+      k.page('sampling', 'aud-sampling', 'Sample Selection', () => import('./pages/SamplingPage.vue')),
+      k.section('statements', 'aud-statements', 'statements', 'Ledger and Statements', 'The trial balance, the statements and the debtor ageing from the posted ledger, read-only.', FileSpreadsheet),
+      k.section('transactions', 'aud-transactions', 'transactions', 'Transactions', 'The transaction register, read-only, with counterparties where your role may see them.', ListOrdered),
       k.messages('aud-messages'),
     ],
   },
@@ -36,5 +40,8 @@ registerWorkspace({
   key: 'audit',
   routes,
   home: 'aud-dashboard',
-  serves: { audit: 'aud-trail', documents: 'aud-evidence', reports: 'aud-reports' },
+  serves: {
+    audit: 'aud-trail', documents: 'aud-evidence', reports: 'aud-reports', transactions: 'aud-transactions',
+    statements: 'aud-statements', 'statements.trial-balance': 'aud-statements',
+  },
 })

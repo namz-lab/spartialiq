@@ -337,7 +337,7 @@ watch([periodicity, accumulated], () => { if (tab.value === 'performance') void 
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in trialRowsFor(book.currency)" :key="row.ledger_account_id">
+                    <tr v-for="row in trialRowsFor(book.currency)" :key="row.ledger_account_id ?? 'unclosed-surplus'">
                       <td>
                         <span class="ins-mono st-code">{{ row.account_code }}</span>
                         <br /><small class="st-sub">{{ row.account_name }}</small>
@@ -438,7 +438,7 @@ watch([periodicity, accumulated], () => { if (tab.value === 'performance') void 
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="row in section.accounts" :key="row.ledger_account_id">
+                      <tr v-for="row in section.accounts" :key="row.ledger_account_id ?? row.account_name">
                         <td>
                           <span class="ins-mono st-code">{{ row.account_code }}</span>
                           <br /><small class="st-sub">{{ row.account_name }}</small>
@@ -555,7 +555,7 @@ watch([periodicity, accumulated], () => { if (tab.value === 'performance') void 
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in section.accounts" :key="row.ledger_account_id">
+                    <tr v-for="row in section.accounts" :key="row.ledger_account_id ?? row.account_name">
                       <td>
                         <span class="ins-mono st-code">{{ row.account_code }}</span>
                         <br /><small class="st-sub">{{ row.account_name }}</small>
@@ -563,8 +563,8 @@ watch([periodicity, accumulated], () => { if (tab.value === 'performance') void 
                       <!-- A period with no activity reports nil and keeps its column. Nothing is
                            interpolated, carried forward or dropped. -->
                       <td v-for="p in performance.periods ?? []" :key="p.key" class="num">
-                        <template v-if="periodCell(book.currency, row.ledger_account_id, p.key) !== null">
-                          {{ formatMoney(periodCell(book.currency, row.ledger_account_id, p.key), book.currency, { bare: true }) }}
+                        <template v-if="periodCell(book.currency, row.ledger_account_id ?? '', p.key) !== null">
+                          {{ formatMoney(periodCell(book.currency, row.ledger_account_id ?? '', p.key), book.currency, { bare: true }) }}
                         </template>
                         <span v-else class="st-nil">nil</span>
                       </td>
