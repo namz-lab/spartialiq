@@ -1404,10 +1404,12 @@ const exportLegend = computed<LegendEntry[]>(() => {
 }
 .fin-map-canvas-lost p { margin: 0; max-width: 46ch; font-size: 13px; }
 .fin-map-canvas {
+  position: relative;
   height: 540px;
   border-radius: 10px;
   border: 1px solid rgba(15, 42, 74, 0.16);
   background: #eef2f6;
+  isolation: isolate;
 }
 .fin-map-overlay {
   position: absolute;

@@ -670,7 +670,7 @@ const provenance = computed(() => {
 .pub-map-unpublished p { margin: 0 0 8px; }
 .pub-map-unpublished p:last-child { margin-bottom: 0; }
 .pub-map-canvas-wrap { position: relative; }
-.pub-map-canvas { height: 500px; border-radius: 10px; border: 1px solid var(--ent-line, #d7dde5); background: #eef2f6; }
+.pub-map-canvas { position: relative; height: 500px; border-radius: 10px; border: 1px solid var(--ent-line, #d7dde5); background: #eef2f6; isolation: isolate; }
 /* A dead canvas is dimmed and covered; it is never left looking like an empty district. */
 .pub-map-canvas.is-dead { opacity: 0.25; filter: grayscale(1); }
 .pub-map-canvas-lost {

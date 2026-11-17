@@ -186,9 +186,24 @@ body {
   min-height: 400px;
 }
 
-.maplibregl-map {
+/* Only maps that sit inside a sized frame should stretch to that frame.
+   Applying this to every map pulls the executive ward map and the master-plan
+   map out of the page and lays them over the figures. */
+.map-container > .maplibregl-map,
+.map-wrapper.maplibregl-map {
   position: absolute;
   inset: 0;
+}
+
+/* Frames that already have a height must stay in the page flow. */
+.wm-canvas.maplibregl-map,
+.mp-map.maplibregl-map,
+.fin-map-canvas.maplibregl-map,
+.pub-map-canvas.maplibregl-map,
+.mini.maplibregl-map {
+  position: relative;
+  inset: auto;
+  width: 100%;
 }
 
 .maplibregl-popup {

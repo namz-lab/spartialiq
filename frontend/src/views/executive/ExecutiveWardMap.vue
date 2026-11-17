@@ -475,7 +475,7 @@ const reliabilityText = (r: string) => (r === 'small_base' ? 'small base, not cl
 
 .wm-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr); gap: 1rem; align-items: start; }
 @media (max-width: 52rem) { .wm-body { grid-template-columns: 1fr; } }
-.wm-canvas { width: 100%; height: 26rem; border: 1px solid var(--ent-line); border-radius: 6px; overflow: hidden; background: #f5f3ee; }
+.wm-canvas { position: relative; width: 100%; height: 26rem; border: 1px solid var(--ent-line); border-radius: 6px; overflow: hidden; background: #f5f3ee; isolation: isolate; }
 .wm-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0.5rem 0 0; padding: 0; font-size: 0.8125rem; color: var(--ent-text-2); }
 .wm-legend li { display: flex; align-items: center; gap: 0.375rem; }
 .wm-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.25); display: inline-block; }
