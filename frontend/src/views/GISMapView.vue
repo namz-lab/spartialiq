@@ -276,7 +276,7 @@ import {
 } from 'lucide-vue-next'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { addVunguBasemap } from '@/map/vunguBasemap'
+import { addVunguBasemap, highlightExactPolygon } from '@/map/vunguBasemap'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { escapeHtml } from '@/utils/escapeHtml'
 import api from '@/services/api'
@@ -536,6 +536,7 @@ async function fetchLiveStands() {
             const lng = Array.isArray(p.centroid) ? Number(p.centroid[0]) : Number(p.centroid_lng)
             const lat = Array.isArray(p.centroid) ? Number(p.centroid[1]) : Number(p.centroid_lat)
             if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null
+            const polygon = f.geometry?.type === 'Polygon' || f.geometry?.type === 'MultiPolygon'
             return {
               type: 'Feature',
               properties: {
@@ -547,7 +548,7 @@ async function fetchLiveStands() {
                 sold: String(p.status || '').toLowerCase() === 'allocated',
                 available: String(p.status || '').toLowerCase() === 'available',
               },
-              geometry: { type: 'Point', coordinates: [lng, lat] },
+              geometry: polygon ? f.geometry : { type: 'Point', coordinates: [lng, lat] },
             }
           })
           .filter(Boolean),
@@ -614,7 +615,7 @@ const LAYER_IDS: Record<string, string[]> = {
   wards:   ['vungu-wards', 'vungu-wards-label'],
   zoning:  ['vungu-vungu_proposed_peri_urban_zones', 'vungu-vungu_proposed_peri_urban_zones-master-label'],
   mining:  ['mining-fill','mining-outline'],
-  stands:  ['live-stands-circles','live-stands-labels'],
+  stands:  ['live-stands-fill','live-stands-line','live-stands-circles','live-stands-labels'],
   reports: ['reports-circles'],
 }
 function toggleLayer(lyr: typeof layerToggles[0]) {
@@ -738,7 +739,13 @@ function addAllLayers() {
   map.addLayer({ id:'mining-outline', type:'line', source:'mining', paint:{ 'line-color':'#d97706', 'line-width':2, 'line-dasharray':[4,2] } })
 
   map.addSource('live-stands', { type:'geojson', data:{ type:'FeatureCollection', features:[] } })
-  map.addLayer({ id:'live-stands-circles', type:'circle', source:'live-stands',
+  map.addLayer({ id:'live-stands-fill', type:'fill', source:'live-stands', filter:['==', '$type', 'Polygon'],
+    paint:{ 'fill-color':['match',['get','status'],'available','#0891b2','allocated','#6366f1','reserved','#f59e0b','#94a3b8'], 'fill-opacity':0.35 }
+  })
+  map.addLayer({ id:'live-stands-line', type:'line', source:'live-stands', filter:['==', '$type', 'Polygon'],
+    paint:{ 'line-color':'#0e7490', 'line-width':2 }
+  })
+  map.addLayer({ id:'live-stands-circles', type:'circle', source:'live-stands', filter:['==', '$type', 'Point'],
     paint:{ 'circle-radius':7, 'circle-color':['match',['get','status'],'available','#0891b2','allocated','#6366f1','reserved','#f59e0b','#94a3b8'], 'circle-stroke-color':'#fff', 'circle-stroke-width':2 }
   })
   map.addLayer({ id:'live-stands-labels', type:'symbol', source:'live-stands',
@@ -809,9 +816,13 @@ function addClickHandlers() {
     }
   })
 
-  map.on('click', 'live-stands-circles', e => {
-    const p = e.features?.[0]?.properties as any
+  const openStand = (e: any) => {
+    const hit = e.features?.[0]
+    const p = hit?.properties as any
     if (!p) return
+    if (hit?.geometry?.type === 'Polygon' || hit?.geometry?.type === 'MultiPolygon') {
+      highlightExactPolygon(map, hit)
+    }
     const standNo = p.stand_number || p.standNumber
     const status = p.status || '—'
     const sold = p.sold === true || String(status).toLowerCase() === 'allocated'
@@ -831,6 +842,9 @@ function addClickHandlers() {
     }
   })
 
+  map.on('click', 'live-stands-fill', openStand)
+  map.on('click', 'live-stands-circles', openStand)
+
   map.on('click', 'reports-circles', e => {
     const p = e.features?.[0]?.properties as any
     if (!p) return
@@ -845,7 +859,7 @@ function addClickHandlers() {
     }
   })
 
-  const clickable = ['vungu-wards','vungu-vungu_proposed_peri_urban_zones','mining-fill','live-stands-circles','reports-circles']
+  const clickable = ['vungu-wards','vungu-vungu_proposed_peri_urban_zones','mining-fill','live-stands-fill','live-stands-circles','reports-circles']
   clickable.forEach(id => {
     map!.on('mouseenter', id, () => { map!.getCanvas().style.cursor = 'pointer' })
     map!.on('mouseleave', id, () => { map!.getCanvas().style.cursor = '' })
@@ -858,11 +872,13 @@ function addClickHandlers() {
     const props = detail.properties || detail.feature?.properties || {}
     const stand = standFromProps(props)
     if (!stand) return
+    const derived = props.area_m2_derived ?? detail.feature?.properties?.area_m2_derived
     infoPanel.value = {
       type: 'Parcel', title: `Stand ${stand}`, color: '#1d4ed8',
       fields: [
         { label: 'Source layer', value: layer.replace(/_/g, ' ') },
         { label: 'Ward / district', value: props.ward || props.district || '—' },
+        { label: 'Area', value: derived != null ? `${Number(derived).toLocaleString()} m²` : '—' },
       ],
       actions: [{ label: 'Open property file', handler: () => router.push({ name: 'property-file', params: { standNo: stand } }) }],
     }

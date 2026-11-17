@@ -5,6 +5,14 @@
 // high-zoom tiles carry full-precision geometry.
 const { GEOM_COLUMN, GEOM_SRID } = require('../config/spatialLayers')
 
+// Land parcels, farms and stands. Their tiles keep every vertex of the stored polygon.
+const EXACT_POLYGON_LAYERS = new Set([
+  'vungu_parcels',
+  'vungu_farm_cadastre',
+  'stands',
+  'acua_stands',
+])
+
 /**
  * Validates a slippy-map tile coordinate.
  */
@@ -61,8 +69,10 @@ function buildTileQuery(layer, z, x, y) {
   }
 
   const tol = snapTolerance(z)
-  // For points simplification has no meaning; apply only to polygon/line.
-  const geomExpr = (tol > 0 && layer.geomType !== 'point')
+  // Cadastral polygons are the legal outline. Simplifying them makes a stand
+  // or farm miss its own boundary. Roads and admin boundaries still simplify.
+  const exactPolygon = EXACT_POLYGON_LAYERS.has(layer.id)
+  const geomExpr = (tol > 0 && layer.geomType !== 'point' && !exactPolygon)
     ? `ST_SimplifyPreserveTopology("${GEOM_COLUMN}", ${tol})`
     : `"${GEOM_COLUMN}"`
 

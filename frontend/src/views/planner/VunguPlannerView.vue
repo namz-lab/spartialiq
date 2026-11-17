@@ -2120,7 +2120,10 @@ function pickProp(f: Record<string, any>, keys: string[]): string {
 const parcelSummary = computed(() => {
   const f = selectedFeature.value as any
   if (!f) return null
-  const area = pickProp(f, ['area', 'shape_area', 'area_sqm', 'sqm', 'area_ha', 'hectares', 'st_area'])
+  const derived = f.area_m2_derived
+  const area = derived != null && derived !== ''
+    ? `${Number(derived).toLocaleString('en-GB')} m²`
+    : pickProp(f, ['area', 'shape_area', 'area_sqm', 'sqm', 'area_ha', 'hectares', 'st_area'])
   return {
     id:     pickProp(f, ['stand_number', 'stand_no', 'standNo', 'parcel_id', 'PARCEL', 'erf_no', 'plot_no', 'id']) || (f._layerName ?? '—'),
     zoning: pickProp(f, ['zoning', 'zone', 'use_class', 'useclass', 'land_use', 'landuse', 'category']),

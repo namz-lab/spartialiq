@@ -1147,18 +1147,30 @@ async function tilesRoutes(fastify) {
     try {
       const attrs = layer.attributes.map((a) => `"${a}"`).join(', ')
       const { rows } = await fastify.pg.query(
-        `SELECT ${attrs}, ST_AsGeoJSON(ST_SetSRID(geom, 4326), 6) AS geometry
+        `SELECT ${attrs},
+                ST_AsGeoJSON(ST_SetSRID(geom, 4326), 6) AS geometry,
+                CASE WHEN ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+                     THEN round(ST_Area(ST_SetSRID(geom, 4326)::geography)::numeric, 2)
+                END AS area_m2_derived
          FROM "${layer.table}" WHERE fid = $1`,
         [fid]
       )
       if (!rows.length) {
         return reply.code(404).send({ error: 'Feature not found' })
       }
-      const { geometry, ...properties } = rows[0]
+      const { geometry, area_m2_derived, ...properties } = rows[0]
+      const derived = area_m2_derived == null ? null : Number(area_m2_derived)
       return {
         type: 'Feature',
         geometry: JSON.parse(geometry),
-        properties: { ...properties, _layer: layerId },
+        properties: {
+          ...properties,
+          _layer: layerId,
+          ...(derived == null ? {} : {
+            area_m2_derived: derived,
+            area_ha_derived: Number((derived / 10000).toFixed(4)),
+          }),
+        },
       }
     } catch (err) {
       fastify.log.error({ err, layer: layerId, id }, 'feature lookup failed')

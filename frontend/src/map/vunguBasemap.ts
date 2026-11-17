@@ -2,6 +2,7 @@
 // Adds the PostGIS vector-tile basemap layers to any MapLibre map.
 // One call per map, after the map's 'load' event. Idempotent.
 import maplibregl from 'maplibre-gl'
+import area from '@turf/area'
 import { tileUrlTemplate, getTileLayerCatalog, getFeature, type TileLayerMeta } from '@/services/vectorTiles'
 import { absoluteApiUrl } from '@/services/runtimeOrigin'
 import {
@@ -782,6 +783,51 @@ export function pickTopHit<T extends { layer?: { id?: string } }>(hits: T[]): T 
   return best
 }
 
+const EXACT_SOURCE = 'exact-parcel'
+const EXACT_FILL = 'exact-parcel-fill'
+const EXACT_LINE = 'exact-parcel-line'
+
+/** Draw the full polygon returned by the database, not the tile-clipped outline. */
+export function highlightExactPolygon(map: any, feature: { type?: string; geometry?: { type?: string } } | null): void {
+  if (!map?.getSource || !map?.addSource) return
+  if (!map.getSource(EXACT_SOURCE)) {
+    map.addSource(EXACT_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+    map.addLayer({
+      id: EXACT_FILL,
+      type: 'fill',
+      source: EXACT_SOURCE,
+      paint: { 'fill-color': '#c2410c', 'fill-opacity': 0.28 },
+    })
+    map.addLayer({
+      id: EXACT_LINE,
+      type: 'line',
+      source: EXACT_SOURCE,
+      paint: { 'line-color': '#9a3412', 'line-width': 2.5 },
+    })
+  }
+  const geom = feature?.geometry?.type
+  const features = geom === 'Polygon' || geom === 'MultiPolygon' ? [feature] : []
+  map.getSource(EXACT_SOURCE).setData({ type: 'FeatureCollection', features })
+}
+
+function withDerivedArea(feature: any): any {
+  if (!feature?.geometry) return feature
+  const kind = feature.geometry.type
+  if (kind !== 'Polygon' && kind !== 'MultiPolygon') return feature
+  const fromServer = feature.properties?.area_m2_derived
+  const m2 = fromServer != null && Number.isFinite(Number(fromServer))
+    ? Number(fromServer)
+    : area(feature)
+  return {
+    ...feature,
+    properties: {
+      ...(feature.properties || {}),
+      area_m2_derived: Math.round(m2 * 100) / 100,
+      area_ha_derived: Math.round((m2 / 10000) * 10000) / 10000,
+    },
+  }
+}
+
 /** One map-wide click handler that picks the topmost interactive feature
  *  under the cursor and dispatches a single 'feature-click' event. Without
  *  this every catalog layer would register its own per-layer click handler
@@ -803,7 +849,10 @@ function wireGlobalClick(map: any, interactiveStyleIds: string[]): void {
     const layerId = toLayerId(hit)
     if (!layerId) return
     const fid = hit.properties && hit.properties.fid
-    const feature = fid != null ? await getFeature(layerId, Number(fid)) : null
+    const loaded = fid != null ? await getFeature(layerId, Number(fid)) : null
+    const feature = withDerivedArea(loaded)
+    const polygon = feature?.geometry?.type === 'Polygon' || feature?.geometry?.type === 'MultiPolygon'
+    if (polygon) highlightExactPolygon(map, feature)
 
     // Only admin units drill-zoom (province → districts → wards). Parcels,
     // buildings, zones, landuse, POIs never move the camera — the click just
@@ -814,7 +863,13 @@ function wireGlobalClick(map: any, interactiveStyleIds: string[]): void {
 
     map.getContainer().dispatchEvent(
       new CustomEvent('feature-click', {
-        detail: { layer: layerId, fid, lngLat: e.lngLat, feature, properties: hit.properties },
+        detail: {
+          layer: layerId,
+          fid,
+          lngLat: e.lngLat,
+          feature,
+          properties: { ...(hit.properties || {}), ...(feature?.properties || {}) },
+        },
       })
     )
   })

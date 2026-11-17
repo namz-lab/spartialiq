@@ -17,7 +17,7 @@ import { useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
 import { escapeHtml } from '@/utils/escapeHtml'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { addVunguBasemap, setBasemapLayerVisible } from '@/map/vunguBasemap'
+import { addVunguBasemap, highlightExactPolygon, setBasemapLayerVisible } from '@/map/vunguBasemap'
 import { searchMap, type SearchResult } from '@/services/vectorTiles'
 import { useCitizenCase } from '@/composables/useCitizenCase'
 import api from '@/services/api'
@@ -211,6 +211,9 @@ async function identifyStandAt(lng: number, lat: number) {
     if (!d) {
       selectedStand.value = null
       return
+    }
+    if (d.geometry && (d.geometry.type === 'Polygon' || d.geometry.type === 'MultiPolygon')) {
+      highlightExactPolygon(map, { type: 'Feature', geometry: d.geometry, properties: {} })
     }
     const acuaNote = d.kind === 'subunit'
       ? `Acua ${d.typology === 'acua_300' ? '300 m²' : ''} · parent ${d.parentStandNumber || '—'}`

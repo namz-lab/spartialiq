@@ -190,7 +190,8 @@ async function standsRoutes(fastify) {
 
       const features = rows.map((r) => {
         const avail = availabilityLabel(r.status)
-        const area = r.area_sqm != null ? Number(r.area_sqm) : (r.area_sqm_calc != null ? Number(r.area_sqm_calc) : null)
+        // The outline is the measurement. The stored figure is only a fallback.
+        const area = r.area_sqm_calc != null ? Number(r.area_sqm_calc) : (r.area_sqm != null ? Number(r.area_sqm) : null)
         const alloc = allocByStand.get(r.id)
         return {
           id: r.id,
@@ -320,6 +321,7 @@ async function standsRoutes(fastify) {
           s.use_scale, s.area_sqm, s.frontage_m, s.depth_m,
           s.price_usd, s.status, s.description,
           ST_AsGeoJSON(s.geom)::JSON     AS geometry,
+          ROUND(ST_Area(s.geom::geography)::numeric, 2) AS area_sqm_derived,
           ST_X(s.centroid)               AS centroid_lng,
           ST_Y(s.centroid)               AS centroid_lat
         FROM stands s
@@ -339,7 +341,7 @@ async function standsRoutes(fastify) {
           zoneId:       r.zone_id,
           zoneType:     r.zone_type,
           useScale:     r.use_scale,
-          areaSqm:      r.area_sqm == null ? null : Number(r.area_sqm),
+          areaSqm:      r.area_sqm_derived != null ? Number(r.area_sqm_derived) : (r.area_sqm == null ? null : Number(r.area_sqm)),
           frontageM:    r.frontage_m == null ? null : Number(r.frontage_m),
           depthM:       r.depth_m == null ? null : Number(r.depth_m),
           priceUsd:     r.price_usd == null ? null : Number(r.price_usd),
@@ -374,6 +376,7 @@ async function standsRoutes(fastify) {
            s.price_usd, s.status, s.description,
            s.reserved_until, s.allocated_at,
            ST_AsGeoJSON(s.geom)::JSON  AS geometry,
+           ROUND(ST_Area(s.geom::geography)::numeric, 2) AS area_sqm_derived,
            ST_X(s.centroid)            AS centroid_lng,
            ST_Y(s.centroid)            AS centroid_lat,
            z.zone, z.zone_type AS zone_zone_type,
@@ -403,7 +406,7 @@ async function standsRoutes(fastify) {
           zoneId:       r.zone_id,
           zoneType:     r.zone_type,
           useScale:     r.use_scale,
-          areaSqm:      r.area_sqm == null ? null : Number(r.area_sqm),
+          areaSqm:      r.area_sqm_derived != null ? Number(r.area_sqm_derived) : (r.area_sqm == null ? null : Number(r.area_sqm)),
           frontageM:    r.frontage_m == null ? null : Number(r.frontage_m),
           depthM:       r.depth_m == null ? null : Number(r.depth_m),
           priceUsd:     r.price_usd == null ? null : Number(r.price_usd),

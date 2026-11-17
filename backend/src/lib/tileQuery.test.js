@@ -42,4 +42,9 @@ describe('buildTileQuery', () => {
     const { sql } = buildTileQuery(getLayer('roads'), 9, 300, 300)
     expect(sql).toMatch(/fclass IN \('motorway'/)
   })
+  test('keeps parcel polygons exact instead of simplifying them', () => {
+    const { sql } = buildTileQuery(getLayer('vungu_parcels'), 12, 2400, 2300)
+    expect(sql).not.toMatch(/ST_SimplifyPreserveTopology/)
+    expect(sql).toMatch(/FROM "vungu_parcels"/)
+  })
 })
