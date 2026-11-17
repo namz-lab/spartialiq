@@ -8,14 +8,16 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
-// Database configuration (match your .env settings)
-const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'vungu_master_db_v1',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || ''
-};
+// Database configuration: DATABASE_URL when it is set (the same database as the app), the local DB_* settings otherwise.
+const dbConfig = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'vungu_master_db_v1',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || ''
+    };
 
 // Planner user details. The initial password is read from the environment
 // (or generated) so a real credential is never committed to source.
