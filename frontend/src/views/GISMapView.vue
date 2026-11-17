@@ -840,7 +840,7 @@ function addClickHandlers() {
         ...(sold ? [] : [{ label:'Apply for Allocation', handler:()=>router.push({ path:'/citizen', query:{ section:'new', stand: standNo } }) }]),
       ]
     }
-  })
+  }
 
   map.on('click', 'live-stands-fill', openStand)
   map.on('click', 'live-stands-circles', openStand)

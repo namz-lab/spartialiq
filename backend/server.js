@@ -369,6 +369,10 @@ async function build() {
     max: 30,
   })
 
+  // A hosted database (Neon) closes idle connections. node-postgres reports that as an 'error' on the pool; with no listener, Node
+  // treats it as fatal and the whole server exits. The pool drops the dead client and opens a new one on the next query, so log it.
+  server.pg.pool.on('error', (err) => { server.log.warn({ err: err.message }, '[db] an idle connection was closed by the server; it will be replaced') })
+
   await require('./src/lib/runtimeDb').assertRuntimeRole(server.pg.pool, { log: server.log })
 
   // The database connection follows the person asking (TENANCY_MODE: off | warn | strict; docs/TENANCY.md). Strict is the default.

@@ -371,7 +371,7 @@ onBeforeUnmount(() => { resizeObserver?.disconnect(); map.value?.remove(); map.v
 .mp-mapcard { position: relative; padding: 0.75rem; }
 .mp-toggles { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin-bottom: 0.5rem; font-size: 0.8125rem; color: var(--ent-text-2); }
 .mp-toggle { display: inline-flex; gap: 0.375rem; align-items: center; cursor: pointer; }
-.mp-map { height: 34rem; border-radius: 6px; overflow: hidden; background: #f5f3ee; }
+.mp-map { position: relative; height: 34rem; border-radius: 6px; overflow: hidden; background: #f5f3ee; isolation: isolate; }
 .mp-picked { position: absolute; left: 1.25rem; bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.125rem; padding: 0.5rem 0.75rem; background: var(--ent-surface); border: 1px solid var(--ent-line-strong, var(--ent-line)); border-radius: 6px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.15); font-size: 0.8125rem; max-width: 16rem; }
 .mp-picked span { color: var(--ent-text-3); }
 .mp-zhead { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
