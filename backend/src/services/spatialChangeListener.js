@@ -71,6 +71,9 @@ class SpatialChangeListener {
   async _connect() {
     if (this.stopped) return
     const client = new Client({ connectionString: this.connectionString })
+    // An error before the handlers below are attached (a hosted database closing the connection during connect or LISTEN) must not
+    // reach Node unhandled, which would end the whole server. This one stays for the client's life; the reconnect logic is below.
+    client.on('error', () => {})
     try {
       await client.connect()
       await client.query('LISTEN spatial_change')
@@ -98,7 +101,12 @@ class SpatialChangeListener {
     if (this.stopped) return
     const dead = this.client
     this.client = null
-    if (dead) { dead.removeAllListeners(); dead.end().catch(() => {}) }
+    if (dead) {
+      dead.removeAllListeners()
+      // removeAllListeners took the error handler too: a dying connection still reports its last error, and unheard that ends the process
+      dead.on('error', () => {})
+      dead.end().catch(() => {})
+    }
     this.stats.reconnects++
     const delay = this.reconnectDelay
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS)
