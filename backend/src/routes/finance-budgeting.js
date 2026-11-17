@@ -32,11 +32,12 @@ async function financeBudgetingRoutes(fastify) {
         `SELECT id, label, start_date::text AS start_date, end_date::text AS end_date, status, reporting_currency
            FROM finance.financial_year
           WHERE deleted_at IS NULL
-            AND (($1::uuid IS NOT NULL AND id = $1::uuid)
-                 OR ($1::uuid IS NULL AND status = 'open' AND CURRENT_DATE BETWEEN start_date AND end_date))
-          ORDER BY start_date DESC LIMIT 1`, [request.query.financial_year_id || null])
+            AND ($1::uuid IS NULL OR id = $1::uuid)
+          -- No year asked for: the open year containing today, else the latest open year, else the latest year.
+          ORDER BY (status = 'open' AND CURRENT_DATE BETWEEN start_date AND end_date) DESC,
+                   (status = 'open') DESC, start_date DESC LIMIT 1`, [request.query.financial_year_id || null])
       const year = years[0]
-      if (!year) return fail(reply, 404, 'no_year', 'No open financial year contains today. Choose a year.')
+      if (!year) return fail(reply, 404, 'no_year', 'No financial year has been set up yet. The Director of Finance creates one under Configuration.')
       // A departmental head is confined to their own votes here as everywhere else; null means council-wide.
       const scope = await departmentScope(fastify, request)
       const Y = [year.id, scope]

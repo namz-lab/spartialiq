@@ -69,12 +69,13 @@ async function financeDashboardRoutes(fastify) {
                 ORDER BY p.end_date DESC LIMIT 1) AS prior_year_id
          FROM finance.financial_year y
         WHERE y.deleted_at IS NULL
-          AND (($1::uuid IS NOT NULL AND y.id = $1::uuid)
-               OR ($1::uuid IS NULL AND y.status = 'open' AND CURRENT_DATE BETWEEN y.start_date AND y.end_date))
-        ORDER BY y.start_date DESC LIMIT 1`, [id || null])
+          AND ($1::uuid IS NULL OR y.id = $1::uuid)
+        -- No year asked for: the open year containing today, else the latest open year, else the latest year.
+        ORDER BY (y.status = 'open' AND CURRENT_DATE BETWEEN y.start_date AND y.end_date) DESC,
+                 (y.status = 'open') DESC, y.start_date DESC LIMIT 1`, [id || null])
     return rows[0] || null
   }
-  const noYear = (reply) => fail(reply, 404, 'no_year', 'No open financial year contains today. Choose a year.')
+  const noYear = (reply) => fail(reply, 404, 'no_year', 'No financial year has been set up yet. The Director of Finance creates one under Configuration.')
 
   /** A route wrapper that logs and answers 500 in one place. */
   const guarded = (name, message, handler) => async (request, reply) => {

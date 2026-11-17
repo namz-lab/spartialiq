@@ -955,6 +955,12 @@ async function start() {
       }
     }
 
+    // Keep a financial year open for today, so the finance workspaces always have one to date work in.
+    if (process.env.FINANCE_YEAR_KEEPER !== '0') {
+      const { startFinancialYearKeeper } = require('./src/services/financialYearKeeper')
+      startFinancialYearKeeper(server.pg, server.log)
+    }
+
     // Real-time QGIS <-> web sync: LISTEN on the spatial_change channel
     // (migration 109 triggers) and push SSE map refreshes for any PostGIS
     // write — including edits saved from QGIS Desktop that never touch this
