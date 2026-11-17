@@ -407,6 +407,10 @@ const MIGRATIONS = [
   '242_finance_ledger_reporting.sql',
   // The salaries journal: a `payroll` voucher type raised by its own screen and numbered SJ-, not a payroll module. Rollback: migrations/rollback/243_finance_payroll_journal.down.sql.
   '243_finance_payroll_journal.sql',
+  // Property finance on the Planning register: the Planning->Finance integration log, customer matching keys, finance.v_property_finance and the finance.property.* permissions. Rollback: migrations/rollback/244_finance_property_gis.down.sql.
+  '244_finance_property_gis.sql',
+  // Databases that started as the land-rates ledger keep legacy NOT NULL columns on finance.ledger_entry that no double-entry write populates; drop them so restored dumps can post vouchers. Rollback: migrations/rollback/245_ledger_entry_legacy_nullability.down.sql.
+  '245_ledger_entry_legacy_nullability.sql',
 ]
 
 function createPool(env = process.env) {

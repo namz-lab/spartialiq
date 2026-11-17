@@ -20,6 +20,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./PublisherLayout.vue'),
     meta: { title: 'Publication - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'pub-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'publisher', cwCrumbs: [{ label: 'Publisher', to: 'pub-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'pub-dashboard', component: () => import('./pages/PublisherDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.notBuilt('templates', 'pub-templates', 'Document Templates', 'Standard layouts for council finance documents.', LayoutTemplate,
         'Templates are not part of the finance system yet. A published dataset is laid out by the public portal itself, and a document is published as the file that was uploaded.',

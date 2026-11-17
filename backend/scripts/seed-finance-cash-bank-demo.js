@@ -38,19 +38,19 @@
  * (its own connection only), with that single test turned round to refuse FUTURE dates instead,
  * and calls them. Every other rule — numbering, costing, ledger lines, separation of duties at
  * verification — is the real code. Nothing shared is altered. Timestamps of the rows it wrote are
- * then moved to the business day (session_replication_role=replica, its own rows only).
+ * then moved to the business day (triggers off for that transaction only, its own rows only).
  *
- * SAFETY: refuses any DATABASE_URL whose host is not localhost/127.0.0.1.
+ * SAFETY: refuses any DATABASE_URL whose host is not localhost/127.0.0.1 unless the operator
+ * explicitly opts in with --allow-remote-db (SEED_ALLOW_REMOTE=1) — for a managed database
+ * they own. On such a database session_replication_role is superuser-only, so the temporary
+ * unguarding is done by disabling user triggers as the table owner instead (scripts/lib/seed-remote.js).
  */
 const { Client } = require('pg')
+const { allowRemoteDb, unguardFinanceTriggers, reguardFinanceTriggers } = require('./lib/seed-remote')
 
 const DATABASE_URL = process.env.DATABASE_URL
 if (!DATABASE_URL) { console.error('Set DATABASE_URL to the LOCAL database.'); process.exit(1) }
-const dbHost = new URL(DATABASE_URL).hostname
-if (!['127.0.0.1', 'localhost', '::1'].includes(dbHost)) {
-  console.error(`Refusing to run against ${dbHost}: this script only seeds a local database.`)
-  process.exit(1)
-}
+const dbHost = allowRemoteDb(DATABASE_URL, { what: 'seed-finance-cash-bank-demo.js' })
 const API = process.env.API_BASE || 'http://127.0.0.1:3011/api'
 const PASSWORD = 'demo1234'
 const ARGS = process.argv.slice(2)
@@ -289,7 +289,8 @@ function buildReceipt(r, point, date, bills, i) {
   if (!mobile && bills.length && r.next() < 0.22) {
     const bill = bills.shift()
     const full = bill.open
-    const amount = r.next() < 0.6 ? full : Math.max(1000, Math.min(full, Math.round(full * (0.3 + r.next() * 0.4) / 500) * 500))
+    // A part-payment is at least $10, but never more than the bill still owes.
+    const amount = r.next() < 0.6 ? full : Math.min(full, Math.max(1000, Math.round(full * (0.3 + r.next() * 0.4) / 500) * 500))
     const method = r.weighted([['cash', 70], ['mobile_money', 20], ['cheque', 10]])
     return { kind: 'rates', bill, amount, currency: 'USD', method, payer: bill.payer }
   }
@@ -431,7 +432,7 @@ async function runSession(s) {
 }
 
 async function backdateSession(id, openedAt, closes, verifiedAt, times) {
-  await db.query('SET LOCAL session_replication_role = replica')
+  await unguardFinanceTriggers(db)
   await db.query(`UPDATE finance.cashier_session SET opened_at = $2, created_at = $2, closed_at = $3, verified_at = $4,
                          returned_at = CASE WHEN returned_at IS NOT NULL THEN $5::timestamptz END WHERE id = $1`,
   [id, openedAt, closes[closes.length - 1], verifiedAt, closes.length > 1 ? closes[0].replace('16:05', '16:20') : null])
@@ -464,7 +465,7 @@ async function backdateSession(id, openedAt, closes, verifiedAt, times) {
                    WHERE e.voucher_id IN (SELECT voucher_id FROM finance.cash_receipt WHERE cashier_session_id = $1
                                           UNION ALL SELECT voucher_id FROM finance.rates_receipt WHERE cashier_session_id = $1
                                           UNION ALL SELECT difference_voucher_id FROM finance.cashier_session_count WHERE cashier_session_id = $1)`, [id, verifiedAt])
-  await db.query('SET LOCAL session_replication_role = origin')
+  await reguardFinanceTriggers(db)
 }
 
 async function history() {
@@ -509,11 +510,12 @@ async function deposits() {
       postedAt = ts(on, 14, 30)
     }
     await db.query('BEGIN')
-    await db.query('SET LOCAL session_replication_role = replica')
+    await unguardFinanceTriggers(db)
     await db.query(`UPDATE finance.bank_deposit SET created_at = $2 WHERE id = $1`, [d.deposit.id, created])
     await db.query(`UPDATE finance.voucher v SET created_at = $2, prepared_at = $2, posted_at = COALESCE($3, v.posted_at)
                      FROM finance.bank_deposit b WHERE b.id = $1 AND v.id = b.voucher_id`, [d.deposit.id, created, postedAt])
     if (postedAt) await db.query(`UPDATE finance.ledger_entry e SET posted_at = $2 FROM finance.bank_deposit b WHERE b.id = $1 AND e.voucher_id = b.voucher_id`, [d.deposit.id, postedAt])
+    await reguardFinanceTriggers(db)
     await db.query('COMMIT')
     if (made % 50 === 0) console.log(`  ${made} bankings…`)
   }
@@ -524,18 +526,22 @@ async function deposits() {
 async function today() {
   const lg = POINTS.find((p) => p.code === 'CASH-LGW')
   const mine = await one(`SELECT id, status FROM finance.cashier_session WHERE cashier_id = $1 AND business_date = CURRENT_DATE`, [S.user['demo.cashier2']])
-  if (!mine) {
-    const sess = (await api('demo.cashier2', 'POST', '/finance/cash/sessions', {
-      cash_point_id: lg.id, financial_year_id: S.year.id, floats: [{ currency: 'USD', amount: '20.00' }, { currency: 'ZWG', amount: '200.00' }],
-    })).session
+  // An open session with no receipts is one an earlier run opened and then failed on: resume it.
+  const resumable = mine && mine.status === 'open'
+    && !(await one(`SELECT 1 FROM finance.cash_receipt WHERE cashier_session_id = $1 LIMIT 1`, [mine.id]))
+  if (!mine || resumable) {
+    const sess = resumable ? { id: mine.id, session_no: (await one(`SELECT session_no FROM finance.cashier_session WHERE id = $1`, [mine.id])).session_no }
+      : (await api('demo.cashier2', 'POST', '/finance/cash/sessions', {
+        cash_point_id: lg.id, financial_year_id: S.year.id, floats: [{ currency: 'USD', amount: '20.00' }, { currency: 'ZWG', amount: '200.00' }],
+      })).session
     const r = rng(`today|${S.today}`)
     const recs = [
-      { payer: 'Lower Gweru Bottle Store', currency: 'USD', method: 'cash', lines: [{ income_code_id: S.codes['CASH-BHL'].id, unit_amount: '85.00' }] },
-      { payer: 'Chipo Dube', currency: 'USD', method: 'cash', lines: [{ income_code_id: S.codes['CASH-RFS'].id, quantity: '2' }] },
-      { payer: 'Lovemore Banda', currency: 'USD', method: 'mobile_money', method_reference: `MP${yymmdd(S.today)}.0948.K${r.int(10000, 99999)}`, deposit_account_id: S.bank, lines: [{ income_code_id: S.codes['CASH-WTR'].id, unit_amount: '18.50' }] },
-      { payer: 'Esther Mpofu', currency: 'ZWG', method: 'cash', lines: [{ income_code_id: S.codes['CASH-HAW'].id, quantity: '1' }] },
-      { payer: 'Gwesela Tuck Shop', currency: 'USD', method: 'cash', lines: [{ income_code_id: S.codes['CASH-BLC'].id, unit_amount: '120.00' }, { income_code_id: S.codes['CASH-RFS'].id, quantity: '1' }] },
-      { payer: 'Admire Tshuma', currency: 'ZWG', method: 'mobile_money', method_reference: `MP${yymmdd(S.today)}.1120.D${r.int(10000, 99999)}`, deposit_account_id: S.bank, lines: [{ income_code_id: S.codes['CASH-WTR'].id, unit_amount: '540.00' }] },
+      { payer_name: 'Lower Gweru Bottle Store', currency: 'USD', method: 'cash', lines: [{ income_code_id: S.codes['CASH-BHL'].id, unit_amount: '85.00' }] },
+      { payer_name: 'Chipo Dube', currency: 'USD', method: 'cash', lines: [{ income_code_id: S.codes['CASH-RFS'].id, quantity: '2' }] },
+      { payer_name: 'Lovemore Banda', currency: 'USD', method: 'mobile_money', method_reference: `MP${yymmdd(S.today)}.0948.K${r.int(10000, 99999)}`, deposit_account_id: S.bank, lines: [{ income_code_id: S.codes['CASH-WTR'].id, unit_amount: '18.50' }] },
+      { payer_name: 'Esther Mpofu', currency: 'ZWG', method: 'cash', lines: [{ income_code_id: S.codes['CASH-HAW'].id, quantity: '1' }] },
+      { payer_name: 'Gwesela Tuck Shop', currency: 'USD', method: 'cash', lines: [{ income_code_id: S.codes['CASH-BLC'].id, unit_amount: '120.00' }, { income_code_id: S.codes['CASH-RFS'].id, quantity: '1' }] },
+      { payer_name: 'Admire Tshuma', currency: 'ZWG', method: 'mobile_money', method_reference: `MP${yymmdd(S.today)}.1120.D${r.int(10000, 99999)}`, deposit_account_id: S.bank, lines: [{ income_code_id: S.codes['CASH-WTR'].id, unit_amount: '540.00' }] },
     ]
     for (const rc of recs) await api('demo.cashier2', 'POST', '/finance/cash/receipts', { session_id: sess.id, ...rc })
     const bills = await openBills(S.today, 'today')
@@ -666,8 +672,9 @@ async function lastClosing(cur) {
 
 async function backdateStatement(id, importedAt, reconciledAt) {
   await db.query(`UPDATE finance.bank_statement SET imported_at = $2, reconciled_at = CASE WHEN reconciled_at IS NOT NULL THEN $3::timestamptz END WHERE id = $1`, [id, importedAt, reconciledAt])
-  await db.query('BEGIN'); await db.query('SET LOCAL session_replication_role = replica')
+  await db.query('BEGIN'); await unguardFinanceTriggers(db)
   await db.query(`UPDATE finance.bank_match SET matched_at = $2 WHERE statement_id = $1`, [id, reconciledAt || importedAt])
+  await reguardFinanceTriggers(db)
   await db.query('COMMIT')
 }
 
@@ -738,9 +745,9 @@ async function report() {
 }
 
 async function clean() {
-  console.log('Removing the cash/bank demo. Immutability triggers are bypassed (session_replication_role=replica) for this transaction only, on rows this script created.')
+  console.log('Removing the cash/bank demo. Immutability triggers are bypassed (user triggers disabled as the table owner) for this transaction only, on rows this script created.')
   await db.query('BEGIN')
-  await db.query('SET LOCAL session_replication_role = replica')
+  await unguardFinanceTriggers(db)
   await db.query(`CREATE TEMP TABLE _st ON COMMIT DROP AS SELECT id FROM finance.bank_statement WHERE statement_ref LIKE 'BANK-%'`)
   await db.query(`DELETE FROM finance.bank_match_entry WHERE match_id IN (SELECT id FROM finance.bank_match WHERE statement_id IN (SELECT id FROM _st))`)
   await db.query(`DELETE FROM finance.bank_statement_line WHERE statement_id IN (SELECT id FROM _st)`)
@@ -770,6 +777,7 @@ async function clean() {
   await db.query(`DELETE FROM finance.cash_point WHERE id IN (SELECT id FROM _cp)`)
   await db.query(`DELETE FROM finance.income_code WHERE code LIKE 'CASH-%'`)
   await db.query(`DELETE FROM finance.ledger_account WHERE code LIKE 'CASH-%' OR code LIKE 'BANK-%'`)
+  await reguardFinanceTriggers(db)
   await db.query('COMMIT')
   console.log('Removed. Document numbers issued stay burned, as they would in production.')
 }

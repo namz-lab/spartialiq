@@ -18,19 +18,17 @@
  * presentation, and records every old value in demo_presentation.backup. Run --undo before
  * re-running or cleaning any finance demo seed.
  *
- * Posted ledger rows are protected by immutability triggers; the text edits run with
- * session_replication_role = replica (user triggers off) inside one transaction. Nothing numeric
+ * Posted ledger rows are protected by immutability triggers; the text edits run with user
+ * triggers disabled inside one transaction (session_replication_role on a local superuser
+ * database, ALTER TABLE ... DISABLE TRIGGER as the table owner elsewhere — scripts/lib/seed-remote.js). Nothing numeric
  * is touched, so every balance and invariant is unchanged. Refuses any non-local database.
  */
 const { Client } = require('pg')
+const { allowRemoteDb, unguardFinanceTriggers, reguardFinanceTriggers } = require('./lib/seed-remote')
 
 const url = process.env.DATABASE_URL || ''
-let host = ''
-try { host = new URL(url).hostname } catch { /* empty */ }
-if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
-  console.error(`Refusing: DATABASE_URL host "${host || '(none)'}" is not local. This script is for a local demo database only.`)
-  process.exit(1)
-}
+if (!url) { console.error('Set DATABASE_URL.'); process.exit(1) }
+allowRemoteDb(url, { what: 'finance-demo-presentation.js' })
 
 const NAMES = {
   'demo.finance-admin@vungu.test': 'Tatenda Mukarati',
@@ -66,7 +64,7 @@ async function main() {
     }
 
     await db.query('BEGIN')
-    await db.query("SET LOCAL session_replication_role = 'replica'")
+    await unguardFinanceTriggers(db)
 
     if (undo) {
       const { rows } = await db.query('SELECT DISTINCT tbl, col FROM demo_presentation.backup')
@@ -75,6 +73,7 @@ async function main() {
                          WHERE b.tbl = $1 AND b.col = $2 AND b.id = t.id::text`, [tbl, col])
       }
       await db.query('DELETE FROM demo_presentation.backup')
+      await reguardFinanceTriggers(db)
       await db.query('COMMIT')
       console.log(`Restored ${rows.length} column(s) to their seeded values.`)
       return
@@ -103,17 +102,21 @@ async function main() {
          JOIN information_schema.columns idc ON idc.table_schema = c.table_schema
               AND idc.table_name = c.table_name AND idc.column_name = 'id'
         WHERE c.table_schema = 'finance' AND tb.table_type = 'BASE TABLE'
-          AND c.data_type IN ('text', 'character varying') AND c.column_name <> 'id'`)
+          AND c.data_type IN ('text', 'character varying') AND c.column_name <> 'id'
+          AND c.is_generated = 'NEVER'`)
     for (const { table_name: t, column_name: c } of cols) {
       await rewrite(`finance.${t}`, c, `btrim(regexp_replace(t.${c}, '\\s*\\(demo\\)', '', 'g'))`, `t.${c} ~ '\\(demo\\)'`)
     }
 
     for (const [email, name] of Object.entries(NAMES)) {
       for (const col of ['full_name', 'name']) {
-        await rewrite('public.users', col, '$2', `t.email = $1`, [email, name])
+        // The name goes in as a quoted literal: as a parameter it is unused by the backup INSERT,
+        // whose type Postgres then cannot determine. NAMES is a constant in this file.
+        await rewrite('public.users', col, `'${name.replace(/'/g, "''")}'`, `t.email = $1`, [email])
       }
     }
 
+    await reguardFinanceTriggers(db)
     await db.query('COMMIT')
     console.log(`Presentation labels applied: ${changed} value(s) changed. Undo with --undo before re-running any finance seed.`)
   } catch (err) {

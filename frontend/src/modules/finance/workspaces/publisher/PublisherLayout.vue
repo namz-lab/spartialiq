@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Publication: the portal shell with the publisher's navigation. */
 import { computed } from 'vue'
-import { House, LayoutTemplate, FileUp, Globe2, Wallet, FileSpreadsheet, FolderOpen, Megaphone, MonitorUp, History, Mail, GitBranch } from 'lucide-vue-next'
+import { House, LayoutTemplate, FileUp, Globe2, Wallet, FileSpreadsheet, FolderOpen, Megaphone, MonitorUp, History, Mail, GitBranch, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { publisherDash } from './dashboard'
@@ -9,6 +9,7 @@ import '../shared/dash.css'
 
 const nav = computed<PortalNavItem[]>(() => [
   { name: 'pub-dashboard', label: 'Dashboard', icon: House },
+  { name: 'pub-gis', label: 'Property Map', icon: MapPinned },
   { name: 'pub-templates', label: 'Document Templates', icon: LayoutTemplate },
   { name: 'pub-reports', label: 'Report Publishing', icon: FileUp, badge: publisherDash.state.data?.states.approved || undefined },
   { name: 'pub-disclosures', label: 'Public Disclosures', icon: Globe2 },

@@ -40,20 +40,13 @@
  * Idempotent: every step looks for its own BUD- row first and only creates or advances what is missing.
  */
 const { Client } = require('pg')
+const { allowRemoteDb, allowRemoteApi } = require('./lib/seed-remote')
 
 const DATABASE_URL = process.env.DATABASE_URL
 if (!DATABASE_URL) { console.error('Set DATABASE_URL to the LOCAL database.'); process.exit(1) }
-const dbHost = new URL(DATABASE_URL).hostname
-if (!['127.0.0.1', 'localhost', '::1'].includes(dbHost)) {
-  console.error(`Refusing to run against ${dbHost}: this demo seed only writes to a local database.`)
-  process.exit(1)
-}
+allowRemoteDb(DATABASE_URL, { what: 'seed-finance-budget-demo.js' })
 const API = process.env.FINANCE_API || 'http://127.0.0.1:3011/api'
-const apiHost = new URL(API).hostname
-if (!['127.0.0.1', 'localhost'].includes(apiHost)) {
-  console.error(`Refusing to drive ${API}: the API must be a local server wired to the local database.`)
-  process.exit(1)
-}
+allowRemoteApi(API, { what: 'seed-finance-budget-demo.js' })
 
 const YEAR_LABEL = 'DD 2026/27 (synthetic demo — July to June, not a Council year)'
 const PASSWORD = 'demo1234'

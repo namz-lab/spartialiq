@@ -24,6 +24,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./CommitteeLayout.vue'),
     meta: { title: 'Committee Decisions - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'com-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'committee', cwCrumbs: [{ label: 'Finance Committee', to: 'com-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'com-dashboard', component: () => import('./pages/CommitteeDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.page('agenda', 'com-agenda', 'Awaiting Decision', () => import('./pages/AgendaPage.vue')),
       k.page('decided', 'com-decided', 'Decided', () => import('./pages/DecidedPage.vue')),

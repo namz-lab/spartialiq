@@ -21,6 +21,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./ManagerLayout.vue'),
     meta: { title: 'Finance Management - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'mgr-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'manager', cwCrumbs: [{ label: 'Finance Admin', to: 'mgr-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'mgr-dashboard', component: () => import('./pages/ManagerDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.page('position', 'mgr-position', 'Financial Position', () => import('./pages/FinancialPosition.vue')),
       k.page('approvals', 'mgr-approvals', 'Approvals', () => import('./pages/ApprovalsInbox.vue')),

@@ -123,7 +123,7 @@ export default defineConfig({
     allowedHosts: ['.trycloudflare.com', '.loca.lt', '.ngrok-free.app'],
     proxy: {
       '/api': {
-        target: process.env.VITE_BACKEND_PROXY || 'http://localhost:3000',
+        target: process.env.VITE_BACKEND_PROXY || 'http://localhost:3001',
         changeOrigin: true,
         secure: false
       },
@@ -131,7 +131,7 @@ export default defineConfig({
       // the backend at /uploads. Proxy them so document links / previews work
       // in dev without hard-coding the backend origin.
       '/uploads': {
-        target: process.env.VITE_BACKEND_PROXY || 'http://localhost:3000',
+        target: process.env.VITE_BACKEND_PROXY || 'http://localhost:3001',
         changeOrigin: true,
         secure: false
       },

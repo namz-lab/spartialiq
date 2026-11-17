@@ -9,7 +9,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import {
   Printer, Wallet, FileText, ArrowLeftRight, Coins, ArrowUp, ArrowDown, CreditCard, Search, Users,
   Layers, Clock, ArrowRight, Ellipsis, ChartPie, CircleCheck, CircleX, ChevronRight, Plus, X,
-  Banknote, Landmark, Smartphone, AlertTriangle,
+  Banknote, Landmark, Smartphone, AlertTriangle, MapPinned,
 } from 'lucide-vue-next'
 import { cashApi } from '../../../api/cashApi'
 import { messageOf } from '../../../stores/finance'
@@ -23,6 +23,10 @@ import ReasonDialog from '../../shared/ReasonDialog.vue'
 import QueueAddDialog from '../components/QueueAddDialog.vue'
 
 const router = useRouter()
+const findQ = ref('')
+function findProperty(): void {
+  void router.push({ name: 'cashier-gis', query: findQ.value.trim() ? { q: findQ.value.trim() } : {} })
+}
 const { state, till, loadQueue, loadDesk } = useCashier()
 
 const data = ref<CashierDashboard | null>(null)
@@ -140,6 +144,14 @@ async function removeTicket(reason: string): Promise<void> {
   <TillNotice />
   <p v-if="error" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ error }}
     <button type="button" class="cw-btn cw-btn--small" @click="load">Retry</button></p>
+
+  <form class="cd-find" role="search" @submit.prevent="findProperty">
+    <MapPinned :size="22" aria-hidden="true" class="cd-find-icon" />
+    <div class="cd-find-text"><strong>Find a citizen’s stand</strong><span>Stand number, account, name or ID number — then see it on the map and take payment.</span></div>
+    <label class="sr-only" for="cd-find-q">Stand, account, name or ID</label>
+    <input id="cd-find-q" v-model="findQ" type="search" placeholder="e.g. 1378 or HERTS-1378" />
+    <button type="submit" class="cw-btn cw-btn--primary">Find on map</button>
+  </form>
 
   <!-- ── Figures ────────────────────────────────────────────────────────────────────────── -->
   <div class="cw-tiles" :aria-busy="loading">
@@ -314,6 +326,11 @@ async function removeTicket(reason: string): Promise<void> {
 </template>
 
 <style scoped>
+.cd-find { display: flex; align-items: center; gap: 14px; background: #fff; border: 1px solid var(--cw-card-line); border-radius: var(--cw-r); box-shadow: var(--cw-shadow); padding: 12px 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.cd-find-icon { color: var(--cw-accent); flex: none; }
+.cd-find-text { display: flex; flex-direction: column; flex: 1; min-width: 220px; }
+.cd-find-text span { font-size: 12.5px; color: var(--cw-ink-2); }
+.cd-find input { height: 40px; min-width: 240px; border: 1px solid var(--cw-line-2); border-radius: 8px; padding: 0 12px; font: inherit; }
 .dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 18px; align-items: start; }
 .dash-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .glance { list-style: none; margin: 0; padding: 0; }

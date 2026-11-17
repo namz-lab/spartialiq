@@ -8,8 +8,7 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   House, CreditCard, FileText, Users, Search, Layers, ChartColumn, Mail, CircleHelp, AlertTriangle, RefreshCw,
-  Landmark, MonitorCheck, ClipboardCheck,
-} from 'lucide-vue-next'
+  Landmark, MonitorCheck, ClipboardCheck, MapPinned } from 'lucide-vue-next'
 import PortalShell, { type PortalNavItem } from '../shared/PortalShell.vue'
 import { greeting, usePortalInbox } from '../shared/usePortal'
 import { financeRoleLabel } from '../../shell/roleLabels'
@@ -35,6 +34,7 @@ const oversight = computed(() => supervises.value || verifies.value)
 const nav = computed<PortalNavItem[]>(() => [
   ...(tills.value ? [
     { name: 'cashier-dashboard', label: 'Cashier Dashboard', icon: House },
+    { name: 'cashier-gis', label: 'Find Property', icon: MapPinned },
     { name: 'cashier-pay', label: 'Take Payment', icon: CreditCard },
   ] : []),
   { name: 'cashier-receipts', label: 'Receipts', icon: FileText },

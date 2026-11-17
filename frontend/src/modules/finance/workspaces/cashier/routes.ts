@@ -30,6 +30,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./CashierLayout.vue'),
     meta: { title: 'Cash Office - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'cashier-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Find Property', gisMode: 'cashier', cwCrumbs: [{ label: 'Cashier', to: 'cashier-dashboard' }, { label: 'Find Property' }] } },
       {
         path: '', name: 'cashier-dashboard', component: () => import('./pages/CashierDashboard.vue'), meta: { cwTitle: 'Dashboard' },
         beforeEnter: supervisorLanding,

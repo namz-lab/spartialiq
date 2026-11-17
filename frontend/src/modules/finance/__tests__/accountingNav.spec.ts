@@ -42,7 +42,7 @@ describe('Accounting navigation', () => {
     expect(sets).toHaveLength(GROUPS.length)
     for (const set of sets) expect(w.get(`#${set.attributes('aria-labelledby')}`).text()).toBe(set.get('.cw-nav-group').text())
     expect(w.findAll('.cw-nav a').map((a) => a.text())).toEqual([
-      'Dashboard', 'Journals', 'Salaries Journal', 'General Ledger', 'Trial Balance', 'Cashbook', 'Bank Reconciliation', 'Cash-Up Approvals',
+      'Dashboard', 'Property Map', 'Journals', 'Salaries Journal', 'General Ledger', 'Trial Balance', 'Cashbook', 'Bank Reconciliation', 'Cash-Up Approvals',
       'Banking & Deposits', 'Debtors', 'Revenue & Billing', 'Accounts Payable', 'Parties', 'Asset Register', 'Period Close',
       'Financial Statements', 'Ledger Reports', 'Tax Control', 'Vote Book', 'Audit Trail', 'Data Migration', 'Settings',
     ])

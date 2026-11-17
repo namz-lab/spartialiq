@@ -3,8 +3,7 @@
 import { computed, watch } from 'vue'
 import {
   House, ClipboardCheck, Landmark, NotebookPen, HandCoins, Wallet, BookOpen, ChartColumn, Layers,
-  Calculator, Building2, Truck, ReceiptText, Percent, CalendarCheck, ShieldCheck, Settings, Mail, DatabaseBackup, PiggyBank, BookText, FileText, Users,
-} from 'lucide-vue-next'
+  Calculator, Building2, Truck, ReceiptText, Percent, CalendarCheck, ShieldCheck, Settings, Mail, DatabaseBackup, PiggyBank, BookText, FileText, Users, MapPinned } from 'lucide-vue-next'
 import PortalShell, { type PortalNavItem } from '../shared/PortalShell.vue'
 import { useFinanceStore } from '../../stores/finance'
 import { resetAccountant, useAccountant } from './useAccountant'
@@ -15,6 +14,7 @@ const { state, loadDashboard } = useAccountant()
 
 const nav = computed<PortalNavItem[]>(() => [
   { group: 'Desk', name: 'acc-dashboard', label: 'Dashboard', icon: House },
+  { name: 'acc-gis', label: 'Property Map', icon: MapPinned, group: 'Desk' },
   { group: 'The books', name: 'acc-journals', label: 'Journals', icon: NotebookPen },
   { group: 'The books', name: 'acc-salaries', label: 'Salaries Journal', icon: Users },
   { group: 'The books', name: 'acc-ledger', label: 'General Ledger', icon: BookOpen },

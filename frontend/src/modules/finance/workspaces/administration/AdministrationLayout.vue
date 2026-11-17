@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Finance Access Administration: the portal shell with the access administrator's navigation. */
 import { computed } from 'vue'
-import { House, Users, ScanEye, Scale, KeyRound, History, Mail } from 'lucide-vue-next'
+import { House, Users, ScanEye, Scale, KeyRound, History, Mail, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { adminDash } from './dashboard'
@@ -9,6 +9,7 @@ import '../shared/dash.css'
 
 const nav = computed<PortalNavItem[]>(() => [
   { group: 'Access', name: 'adm-dashboard', label: 'Dashboard', icon: House },
+  { name: 'adm-gis', label: 'Property Map', icon: MapPinned, group: 'Access' },
   { group: 'Access', name: 'adm-users', label: 'Finance Users', icon: Users },
   { group: 'Access', name: 'adm-effective', label: 'Effective Access', icon: ScanEye },
   { group: 'Control', name: 'adm-duties', label: 'Separation of Duties', icon: Scale },

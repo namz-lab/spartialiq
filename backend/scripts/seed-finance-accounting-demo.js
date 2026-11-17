@@ -41,27 +41,21 @@
  * when it already exists, so a re-run tops up and never duplicates.
  *
  * --clean deletes, it does not reverse: the ledger is insert-only, so (like
- * seed-general-ledger-demo.js) it sets session_replication_role = replica for one transaction to
- * suspend the immutability triggers, deletes only rows it can identify as its own, and restores
- * the role. That is why it refuses any host other than localhost/127.0.0.1.
+ * seed-general-ledger-demo.js) it suspends the immutability triggers for one transaction
+ * (session_replication_role on a local superuser database, user triggers disabled as the table
+ * owner elsewhere), deletes only rows it can identify as its own, and restores them. That is
+ * why it refuses any host other than localhost/127.0.0.1 unless --allow-remote-db is passed.
  *
  * Two books, USD and ZWG, each balancing on its own; nothing is converted (decision D4).
  */
 const { Client } = require('pg')
+const { allowRemoteDb, allowRemoteApi, unguardFinanceTriggers, reguardFinanceTriggers } = require('./lib/seed-remote')
 
 const DATABASE_URL = process.env.DATABASE_URL
 if (!DATABASE_URL) { console.error('Set DATABASE_URL to the LOCAL database.'); process.exit(1) }
-const dbUrl = new URL(DATABASE_URL)
-if (!['127.0.0.1', 'localhost'].includes(dbUrl.hostname)) {
-  console.error(`Refusing to run against ${dbUrl.hostname}: this demo seed only runs against a local database.`)
-  process.exit(1)
-}
+allowRemoteDb(DATABASE_URL, { what: 'seed-finance-accounting-demo.js' })
 const API = (process.env.SEED_API || 'http://127.0.0.1:3011').replace(/\/$/, '')
-const apiHost = new URL(API).hostname
-if (!['127.0.0.1', 'localhost'].includes(apiHost)) {
-  console.error(`Refusing to drive ${API}: only a local backend.`)
-  process.exit(1)
-}
+allowRemoteApi(API, { what: 'seed-finance-accounting-demo.js' })
 const PASSWORD = process.env.DEMO_PASSWORD || 'demo1234'
 const YEAR_LABEL = 'DD 2026/27 (synthetic demo — July to June, not a Council year)'
 const TODAY = '2026-11-17'
@@ -344,7 +338,7 @@ async function clean(db) {
   console.log('ACC- suppliers and asset categories, and the documents raised on them), and restores it.')
   await db.query('BEGIN')
   try {
-    await db.query('SET LOCAL session_replication_role = replica')
+    await unguardFinanceTriggers(db)
     await db.query(`CREATE TEMP TABLE acc_v ON COMMIT DROP AS ${MY_VOUCHERS}`)
     await db.query(`DELETE FROM finance.supplier_payment_allocation WHERE payment_id IN (SELECT id FROM finance.supplier_payment WHERE voucher_id IN (SELECT id FROM acc_v))`)
     await db.query(`DELETE FROM finance.supplier_payment WHERE voucher_id IN (SELECT id FROM acc_v)`)
@@ -368,6 +362,7 @@ async function clean(db) {
       console.log('--dry-run: every delete succeeded and was rolled back; left after delete:', rows[0])
       return
     }
+    await reguardFinanceTriggers(db)
     await db.query('COMMIT')
   } catch (err) {
     await db.query('ROLLBACK').catch(() => {})

@@ -9,6 +9,7 @@ import '../shared/dash.css'
 
 const nav = computed<PortalNavItem[]>(() => [
   { name: 'exe-dashboard', label: 'Dashboard', icon: House },
+  { name: 'exe-gis', label: 'Property Map', icon: MapPinned },
   { name: 'exe-overview', label: 'Executive Overview', icon: LayoutDashboard },
   { name: 'exe-performance', label: 'Financial Performance', icon: TrendingUp },
   { name: 'exe-position', label: 'Financial Position', icon: Scale },

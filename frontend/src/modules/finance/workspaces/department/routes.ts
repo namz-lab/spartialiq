@@ -33,6 +33,7 @@ export const departmentRoutes: RouteRecordRaw[] = [
     component: () => import('./DepartmentLayout.vue'),
     meta: { title: 'Department Finance - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'dep-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'department', cwCrumbs: [{ label: 'Department Head', to: 'dep-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'dep-dashboard', component: () => import('./pages/DepartmentDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       section('budget', 'dep-budget', 'budget', 'Department Budget',
         'Your department\'s budget requests: prepare lines, submit them, and revise the ones returned. Approval is the committee\'s, and the state of each line is shown here.',

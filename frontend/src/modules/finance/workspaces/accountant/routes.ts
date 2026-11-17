@@ -22,6 +22,7 @@ export const accountantRoutes: RouteRecordRaw[] = [
     component: () => import('./AccountantLayout.vue'),
     meta: { title: 'Accounting - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'acc-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'accountant', cwCrumbs: [{ label: 'Accountant', to: 'acc-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'acc-dashboard', component: () => import('./pages/AccountantDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       section('cash-ups', 'acc-cashups', 'cashups', 'Cash-Up Approvals', 'Verify each cashier\'s declared count, or return it for a recount. You cannot verify a drawer you counted or witnessed.'),
       { path: 'bank', name: 'acc-bank', component: () => import('./pages/BankReconciliation.vue'), meta: { cwTitle: 'Bank Reconciliation', cwCrumbs: crumbs('Bank Reconciliation') } },

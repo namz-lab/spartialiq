@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Internal Audit: the portal shell with the internal auditor's navigation. */
 import { computed } from 'vue'
-import { House, ClipboardList, UserCheck, Search, TriangleAlert, ListChecks, FolderOpen, ChartColumn, ShieldCheck, Mail, ShieldAlert, Dices, FileSpreadsheet, ListOrdered } from 'lucide-vue-next'
+import { House, ClipboardList, UserCheck, Search, TriangleAlert, ListChecks, FolderOpen, ChartColumn, ShieldCheck, Mail, ShieldAlert, Dices, FileSpreadsheet, ListOrdered, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { auditDash } from './dashboard'
@@ -9,6 +9,7 @@ import '../shared/dash.css'
 
 const nav = computed<PortalNavItem[]>(() => [
   { name: 'aud-dashboard', label: 'Dashboard', icon: House },
+  { name: 'aud-gis', label: 'Property Map', icon: MapPinned },
   { name: 'aud-plans', label: 'Audit Plans', icon: ClipboardList },
   { name: 'aud-assignments', label: 'Audit Assignments', icon: UserCheck },
   { name: 'aud-findings', label: 'Findings', icon: Search, badge: auditDash.state.data?.findings.open || undefined },

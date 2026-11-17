@@ -2,8 +2,7 @@
 /** Finance Operations: the portal shell with the finance officer's navigation, grouped by the day's work. */
 import { computed } from 'vue'
 import {
-  House, ArrowLeftRight, HandCoins, Wallet, NotebookPen, Landmark, BookOpen, ChartColumn, Mail, Upload, FileWarning, FolderOpen, FolderKanban,
-} from 'lucide-vue-next'
+  House, ArrowLeftRight, HandCoins, Wallet, NotebookPen, Landmark, BookOpen, ChartColumn, Mail, Upload, FileWarning, FolderOpen, FolderKanban, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { officerDash } from './dashboard'
@@ -12,6 +11,7 @@ import '../shared/dash.css'
 const task = (key: string) => officerDash.state.data?.tasks.filter((t) => t.key === key).reduce((n, t) => n + t.n, 0) || undefined
 const nav = computed<PortalNavItem[]>(() => [
   { name: 'ofc-dashboard', label: 'Dashboard', icon: House },
+  { name: 'ofc-gis', label: 'Property Map', icon: MapPinned },
   { name: 'ofc-imports', label: 'Imports', icon: Upload, group: 'Data' },
   { name: 'ofc-exceptions', label: 'Import Exceptions', icon: FileWarning, group: 'Data',
     badge: officerDash.state.data?.tasks.find((t) => t.text.startsWith('Import exceptions'))?.n || undefined },

@@ -16,6 +16,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./RevenueLayout.vue'),
     meta: { title: 'Revenue and Rates - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'rev-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'revenue', cwCrumbs: [{ label: 'Revenue Officer', to: 'rev-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'rev-dashboard', component: () => import('./pages/RevenueDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.section('billing', 'rev-billing', 'rates', 'Billing & Invoicing', 'Preview a billing period, raise it, and have it committed by somebody else. Each committed run issues the bills.', FileText, { props: { initialTab: 'billing' } }),
       k.page('bills', 'rev-bills', 'Bills Register', () => import('./pages/BillsRegister.vue')),

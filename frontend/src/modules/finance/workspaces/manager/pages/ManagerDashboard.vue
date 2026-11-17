@@ -13,6 +13,7 @@ import {
   Zap, ChevronRight, ListChecks, AlertTriangle, UserCog, Pencil, TriangleAlert, Upload, CalendarRange, Send, FileStack,
 } from 'lucide-vue-next'
 import BarChart from '../../shared/BarChart.vue'
+import FinanceGisMap from '../../../components/gis/FinanceGisMap.vue'
 import { shortWhen, pctText } from '../../shared/useDashboard'
 import { formatMoney, type Currency } from '../../../composables/useMoney'
 import { useFinanceStore } from '../../../stores/finance'
@@ -72,6 +73,14 @@ const activityIcon = (event: string) => (event === 'FIN_PERMISSION' || event ===
 <template>
   <p v-if="state.error" class="cw-banner-msg cw-banner-msg--neg" role="alert"><AlertTriangle :size="18" aria-hidden="true" />{{ state.error }}
     <button type="button" class="cw-btn cw-btn--small" @click="load()">Retry</button></p>
+
+  <section class="mg-gis" aria-labelledby="mg-gis-h">
+    <div class="mg-gis-head">
+      <h3 id="mg-gis-h" class="mg-h">Council property map</h3>
+      <RouterLink :to="{ name: 'mgr-gis' }" class="mg-gis-link">Open full map and analytics <ChevronRight :size="15" aria-hidden="true" /></RouterLink>
+    </div>
+    <FinanceGisMap mode="manager" compact height="600px" />
+  </section>
 
   <h3 class="mg-h">Position{{ ops?.year.label ? ` · ${ops.year.label}` : '' }}</h3>
   <div class="cw-tiles dx-tiles" :aria-busy="position.loading">
@@ -229,4 +238,8 @@ const activityIcon = (event: string) => (event === 'FIN_PERMISSION' || event ===
 <style scoped>
 .mg-h { margin: 0 0 -4px; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cw-ink-2); }
 .cw-tile-value small { font-size: 12px; font-weight: 600; color: var(--cw-ink-2); }
+.mg-gis { margin-bottom: 18px; }
+.mg-gis-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mg-gis-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--cw-accent); text-decoration: none; }
+.mg-gis-link:hover { text-decoration: underline; }
 </style>

@@ -44,28 +44,22 @@
  * trigger disabled for that one transaction, exactly as scripts/seed-general-ledger-demo.js does,
  * and only rows identified by the REV- prefix (or created against REV- accounts) are touched.
  *
- * SAFETY: refuses any DATABASE_URL whose host is not 127.0.0.1 / localhost. Never loads .env.
+ * SAFETY: refuses any DATABASE_URL whose host is not 127.0.0.1 / localhost unless the operator
+ * opts in with --allow-remote-db (SEED_ALLOW_REMOTE=1) for a managed database they own.
+ * Never loads .env.
  */
 const { Client } = require('pg')
 const crypto = require('node:crypto')
+const { allowRemoteDb, allowRemoteApi } = require('./lib/seed-remote')
 
 const DATABASE_URL = process.env.DATABASE_URL
 if (!DATABASE_URL) { console.error('DATABASE_URL is required (the LOCAL database).'); process.exit(1) }
-{
-  const host = new URL(DATABASE_URL).hostname
-  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
-    console.error(`Refusing to run: DATABASE_URL host is ${host}, not localhost.`)
-    process.exit(1)
-  }
-}
+allowRemoteDb(DATABASE_URL, { what: 'seed-finance-revenue-demo.js' })
 const argv = process.argv.slice(2)
 const flag = (f) => argv.includes(f)
 const opt = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : d }
 const API = opt('--api', process.env.API_BASE || 'http://127.0.0.1:3011')
-{
-  const host = new URL(API).hostname
-  if (!['127.0.0.1', 'localhost'].includes(host)) { console.error(`Refusing API host ${host}.`); process.exit(1) }
-}
+allowRemoteApi(API, { what: 'seed-finance-revenue-demo.js' })
 const P = 'REV'
 const TODAY = '2026-11-17'
 const PASSWORD = 'demo1234'

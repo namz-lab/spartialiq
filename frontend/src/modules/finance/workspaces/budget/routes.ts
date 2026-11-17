@@ -35,6 +35,7 @@ export const budgetRoutes: RouteRecordRaw[] = [
     component: () => import('./BudgetLayout.vue'),
     meta: { title: 'Budget Management - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'bud-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'budget', cwCrumbs: [{ label: 'Budget Officer', to: 'bud-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'bud-dashboard', component: () => import('./pages/BudgetDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
 
       // Preparation

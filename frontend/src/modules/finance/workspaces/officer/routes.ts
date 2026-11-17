@@ -21,6 +21,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./OfficerLayout.vue'),
     meta: { title: 'Finance Operations - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'ofc-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'officer', cwCrumbs: [{ label: 'Finance Officer', to: 'ofc-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'ofc-dashboard', component: () => import('./pages/OfficerDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.section('imports', 'ofc-imports', 'imports', 'Imports', 'Upload a file from another system, map its columns, validate it against the chart and its declared control count and total, and resolve its exceptions before it is committed.', Upload),
       k.page('exceptions', 'ofc-exceptions', 'Import Exceptions', () => import('./pages/ImportExceptions.vue')),

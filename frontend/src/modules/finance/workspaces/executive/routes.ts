@@ -17,6 +17,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./ExecutiveLayout.vue'),
     meta: { title: 'Executive Finance - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'exe-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'executive', cwCrumbs: [{ label: 'Chief Executive Officer', to: 'exe-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'exe-dashboard', component: () => import('./pages/ExecutiveDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.section('overview', 'exe-overview', 'overview', 'Executive Overview', 'The year\'s position period by period, and what may need your attention.', LayoutDashboard),
       k.section('performance', 'exe-performance', 'statements', 'Financial Performance', 'The statement of financial performance from the posted ledger, per currency.', TrendingUp, { props: { initialTab: 'performance' } }),

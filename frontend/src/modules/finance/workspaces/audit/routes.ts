@@ -18,6 +18,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./AuditLayout.vue'),
     meta: { title: 'Internal Audit - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'aud-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'audit', cwCrumbs: [{ label: 'Internal Auditor', to: 'aud-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'aud-dashboard', component: () => import('./pages/AuditDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.page('plans', 'aud-plans', 'Audit Plans', Plan, { cwMode: 'plan' }),
       k.page('assignments', 'aud-assignments', 'Audit Assignments', Plan, { cwMode: 'assignments' }),

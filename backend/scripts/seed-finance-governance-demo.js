@@ -42,14 +42,11 @@
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const { Client } = require('pg')
+const { allowRemoteDb, allowRemoteApi, unguardFinanceTriggers, reguardFinanceTriggers } = require('./lib/seed-remote')
 
 const DATABASE_URL = process.env.DATABASE_URL
 if (!DATABASE_URL) { console.error('DATABASE_URL is required.'); process.exit(1) }
-const HOST = new URL(DATABASE_URL).hostname
-if (!['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
-  console.error(`Refusing to run against ${HOST}: this seed is for the LOCAL database only.`)
-  process.exit(1)
-}
+allowRemoteDb(DATABASE_URL, { what: 'seed-finance-governance-demo.js' })
 const API = (process.env.API_BASE || 'http://127.0.0.1:3011').replace(/\/$/, '')
 const PASSWORD = process.env.DEMO_PASSWORD || 'demo1234'
 const SEED = 'GOV'
@@ -285,8 +282,9 @@ async function main() {
 async function backdate(db, sql, params) {
   await db.query('BEGIN')
   try {
-    await db.query("SET LOCAL session_replication_role = 'replica'")
+    await unguardFinanceTriggers(db)
     await db.query(sql, params)
+    await reguardFinanceTriggers(db)
     await db.query('COMMIT')
   } catch (err) { await db.query('ROLLBACK'); throw err }
 }

@@ -20,6 +20,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./AdministrationLayout.vue'),
     meta: { title: 'Finance Access Administration - Vungu Rural District Council' },
     children: [
+      { path: 'property-map', name: 'adm-gis', component: () => import('../shared/PropertyGisPage.vue'), meta: { cwTitle: 'Property Map', gisMode: 'administration', cwCrumbs: [{ label: 'Access Administration', to: 'adm-dashboard' }, { label: 'Property Map' }] } },
       { path: '', name: 'adm-dashboard', component: () => import('./pages/AdministrationDashboard.vue'), meta: { cwTitle: 'Dashboard' } },
       k.section('users', 'adm-users', 'access', 'Finance Users', 'Assign or change a finance role, set personal overrides and departmental scopes. Every change needs a reason and is logged.', Users, {
         needs: 'finance.users.manage_finance_roles',

@@ -7,8 +7,7 @@
 import { computed } from 'vue'
 import {
   House, Users, KeyRound, Workflow, BookOpen, CalendarRange, PlugZap, ShieldCheck, Activity, Mail,
-  Scale, Inbox, ShieldAlert, FileStack, ChartColumn, FolderOpen, Shapes,
-} from 'lucide-vue-next'
+  Scale, Inbox, ShieldAlert, FileStack, ChartColumn, FolderOpen, Shapes, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { managerDash } from './dashboard'
@@ -16,6 +15,7 @@ import '../shared/dash.css'
 
 const nav = computed<PortalNavItem[]>(() => [
   { name: 'mgr-dashboard', label: 'Dashboard', icon: House, group: 'Position' },
+  { name: 'mgr-gis', label: 'Property Map', icon: MapPinned, group: 'Position' },
   { name: 'mgr-position', label: 'Financial Position', icon: Scale, group: 'Position' },
   { name: 'mgr-statements', label: 'Statements', icon: FileStack, group: 'Position' },
   { name: 'mgr-reports', label: 'Reports', icon: ChartColumn, group: 'Position' },

@@ -3,8 +3,7 @@
 import { computed } from 'vue'
 import {
   House, FileText, HandCoins, Users, Clock, Percent, Wrench, ChartColumn, Bell, FileStack, ListChecks, ScrollText,
-  Landmark, SlidersHorizontal, TrendingUp, BadgeCheck,
-} from 'lucide-vue-next'
+  Landmark, SlidersHorizontal, TrendingUp, BadgeCheck, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { usePortalInbox } from '../shared/usePortal'
@@ -14,6 +13,7 @@ import '../shared/dash.css'
 const { inbox } = usePortalInbox()
 const nav = computed<PortalNavItem[]>(() => [
   { group: 'Desk', name: 'rev-dashboard', label: 'Dashboard', icon: House },
+  { name: 'rev-gis', label: 'Property Map', icon: MapPinned, group: 'Desk' },
   { group: 'Billing', name: 'rev-billing', label: 'Billing & Invoicing', icon: FileText },
   { group: 'Billing', name: 'rev-bills', label: 'Bills Register', icon: FileStack },
   { group: 'Billing', name: 'rev-roll', label: 'Valuation Roll', icon: Landmark },

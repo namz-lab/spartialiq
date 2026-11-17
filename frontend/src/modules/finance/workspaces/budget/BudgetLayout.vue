@@ -7,8 +7,7 @@
 import { computed } from 'vue'
 import {
   House, ClipboardList, ClipboardCheck, ChartLine, ArrowLeftRight, Layers, ChartColumn, Network,
-  FolderKanban, Gauge, Settings, Mail, Landmark, MessageSquareText, Map as MapIcon, FolderOpen, FileStack, TableProperties,
-} from 'lucide-vue-next'
+  FolderKanban, Gauge, Settings, Mail, Landmark, MessageSquareText, Map as MapIcon, FolderOpen, FileStack, TableProperties, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { budgetDash } from './useBudget'
@@ -18,6 +17,7 @@ const state = budgetDash.state
 
 const nav = computed<PortalNavItem[]>(() => [
   { group: 'Desk', name: 'bud-dashboard', label: 'Dashboard', icon: House },
+  { name: 'bud-gis', label: 'Property Map', icon: MapPinned, group: 'Desk' },
   { group: 'Preparation', name: 'bud-planning', label: 'Budget Planning', icon: ClipboardList },
   { group: 'Preparation', name: 'bud-approval', label: 'Approval Status', icon: ClipboardCheck, badge: state.data?.workflow.returned || undefined },
   { group: 'Preparation', name: 'bud-preparation', label: 'Preparation by Vote', icon: TableProperties },

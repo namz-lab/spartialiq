@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Department Finance: the portal shell with a head of department's navigation. */
 import { computed } from 'vue'
-import { House, Wallet, Layers, Receipt, FileSignature, FolderKanban, Gauge, ChartColumn, FolderOpen, Mail, ArrowLeftRight, MessageSquareText } from 'lucide-vue-next'
+import { House, Wallet, Layers, Receipt, FileSignature, FolderKanban, Gauge, ChartColumn, FolderOpen, Mail, ArrowLeftRight, MessageSquareText, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { departmentDash } from './dashboard'
@@ -12,6 +12,7 @@ const returned = computed(() => task((t) => t.query?.status === 'returned'))
 const unexplained = computed(() => task((t) => t.key === 'expenditure'))
 const nav = computed<PortalNavItem[]>(() => [
   { name: 'dep-dashboard', label: 'Dashboard', icon: House },
+  { name: 'dep-gis', label: 'Property Map', icon: MapPinned },
   { name: 'dep-budget', label: 'Department Budget', icon: Wallet, badge: returned.value || undefined },
   { name: 'dep-revisions', label: 'Budget Revisions', icon: ArrowLeftRight },
   { name: 'dep-expenditure', label: 'Budget vs Actual', icon: Receipt },

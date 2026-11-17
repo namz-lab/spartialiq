@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** Committee Decisions: the portal shell with the committee's agenda navigation. */
 import { computed } from 'vue'
-import { House, Gavel, History, Wallet, ArrowLeftRight, HardHat, Globe2, Percent, Landmark, ChartColumn, FolderOpen, Mail } from 'lucide-vue-next'
+import { House, Gavel, History, Wallet, ArrowLeftRight, HardHat, Globe2, Percent, Landmark, ChartColumn, FolderOpen, Mail, MapPinned } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { useFinanceStore } from '../../stores/finance'
@@ -12,6 +12,7 @@ const store = useFinanceStore()
 const can = (code: string) => store.can(code)
 const nav = computed<PortalNavItem[]>(() => [
   { group: 'Agenda', name: 'com-dashboard', label: 'Dashboard', icon: House },
+  { name: 'com-gis', label: 'Property Map', icon: MapPinned, group: 'Agenda' },
   { group: 'Agenda', name: 'com-agenda', label: 'Awaiting Decision', icon: Gavel, badge: pendingTotal(committeeDash.state.data) || undefined },
   { group: 'Agenda', name: 'com-decided', label: 'Decided', icon: History },
   ...(can('finance.budget.approve') ? [{ group: 'Registers', name: 'com-budget', label: 'Budget', icon: Wallet }] : []),

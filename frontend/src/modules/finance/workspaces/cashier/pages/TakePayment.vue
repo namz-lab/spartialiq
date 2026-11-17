@@ -15,7 +15,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   CreditCard, Users, Search, X, Landmark, Phone, Mail, MapPin, SquareCheckBig, Layers, FileText,
-  ReceiptText, ChevronLeft, Printer, Download, Check, AlertTriangle, CircleCheck, UserPlus,
+  ReceiptText, ChevronLeft, Printer, Download, Check, AlertTriangle, CircleCheck, UserPlus, MapPinned,
 } from 'lucide-vue-next'
 import { cashApi } from '../../../api/cashApi'
 import { ratesApi } from '../../../api/ratesApi'
@@ -347,6 +347,8 @@ function cancel(): void {
 }
 
 const step = computed(() => (issued.value ? 4 : confirming.value ? 3 : account.value ? 2 : 1))
+/** Set when the payment was started from a property on the finance map. */
+const fromParcel = computed(() => (typeof route.query.parcel === 'string' ? route.query.parcel : null))
 const walkInName = computed(() => (typeof route.query.name === 'string' ? route.query.name : ''))
 
 onMounted(async () => {
@@ -639,6 +641,7 @@ const money = (cents: bigint | null | string) => formatMoney(typeof cents === 's
           <RouterLink :to="{ name: 'cashier-dashboard' }" class="cw-btn"><ChevronLeft :size="20" aria-hidden="true" /> Dashboard</RouterLink>
           <button type="button" class="cw-btn cw-btn--outline" @click="issuedView && output?.print(issuedView)"><Printer :size="20" aria-hidden="true" /> Print Receipt</button>
           <button type="button" class="cw-btn cw-btn--outline" @click="savePdf"><Download :size="20" aria-hidden="true" /> Download PDF</button>
+          <RouterLink v-if="fromParcel" :to="{ name: 'cashier-gis', query: { parcel: fromParcel } }" class="cw-btn cw-btn--outline"><MapPinned :size="20" aria-hidden="true" /> Back to the property map</RouterLink>
           <button type="button" class="cw-btn cw-btn--primary" @click="newPayment"><CreditCard :size="20" aria-hidden="true" /> Next Payment</button>
         </template>
       </div>
