@@ -110,7 +110,7 @@ const ALERT_ROUTE: Record<string, string> = { audit: 'mgr-audit', years: 'mgr-pe
       <div class="cw-card-head"><h3 id="ex-sys">System Alerts</h3></div>
       <div class="cw-card-body">
         <p v-if="managerDash.state.error" class="cw-empty">{{ managerDash.state.error }}</p>
-        <p v-else-if="!managerDash.state.data?.alerts.length" class="cw-empty">No alerts.</p>
+        <p v-else-if="!managerDash.state.data?.alerts?.length" class="cw-empty">No alerts.</p>
         <ul v-else class="dx-list">
           <li v-for="(a, i) in managerDash.state.data.alerts" :key="i">
             <RouterLink :to="{ name: ALERT_ROUTE[a.key] ?? 'mgr-health' }" class="dx-item">

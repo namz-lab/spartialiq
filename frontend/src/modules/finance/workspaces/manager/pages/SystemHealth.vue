@@ -43,7 +43,7 @@ const ALERT_ROUTE: Record<string, string> = { audit: 'mgr-audit', years: 'mgr-pe
     <section class="cw-card" aria-labelledby="sh-a">
       <div class="cw-card-head"><h3 id="sh-a">Alerts</h3></div>
       <div class="cw-card-body">
-        <p v-if="!state.data?.alerts.length" class="cw-empty">No alerts.</p>
+        <p v-if="!state.data?.alerts?.length" class="cw-empty">No alerts.</p>
         <ul v-else class="dx-list">
           <li v-for="(a, i) in state.data.alerts" :key="i">
             <RouterLink :to="{ name: ALERT_ROUTE[a.key] ?? 'mgr-dashboard' }" class="dx-item">

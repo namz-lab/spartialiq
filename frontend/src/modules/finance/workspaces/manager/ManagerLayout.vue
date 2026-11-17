@@ -30,7 +30,7 @@ const nav = computed<PortalNavItem[]>(() => [
   { name: 'mgr-documents', label: 'Documents', icon: FolderOpen, group: 'Oversight' },
   { name: 'mgr-users', label: 'Users & Roles', icon: Users, group: 'Oversight' },
   { name: 'mgr-permissions', label: 'Permissions', icon: KeyRound, group: 'Oversight' },
-  { name: 'mgr-health', label: 'System Health', icon: Activity, group: 'Oversight', badge: managerDash.state.data?.alerts.length || undefined },
+  { name: 'mgr-health', label: 'System Health', icon: Activity, group: 'Oversight', badge: managerDash.state.data?.alerts?.length || undefined },
 ])
 const menu = [{ name: 'mgr-messages', label: 'Messages', icon: Mail }, { name: 'mgr-workflow', label: 'Workflow Setup', icon: Workflow }]
 </script>

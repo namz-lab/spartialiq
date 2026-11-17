@@ -79,7 +79,7 @@ const activityIcon = (event: string) => (event === 'FIN_PERMISSION' || event ===
       <h3 id="mg-gis-h" class="mg-h">Council property map</h3>
       <RouterLink :to="{ name: 'mgr-gis' }" class="mg-gis-link">Open full map and analytics <ChevronRight :size="15" aria-hidden="true" /></RouterLink>
     </div>
-    <FinanceGisMap mode="manager" compact height="600px" />
+    <FinanceGisMap mode="manager" compact height="780px" />
   </section>
 
   <h3 class="mg-h">Position{{ ops?.year.label ? ` · ${ops.year.label}` : '' }}</h3>
@@ -167,7 +167,7 @@ const activityIcon = (event: string) => (event === 'FIN_PERMISSION' || event ===
         <div class="cw-card-head"><h3 id="mg-alerts"><TriangleAlert :size="24" class="cw-head-icon" aria-hidden="true" /> Alerts</h3><span class="cw-spacer" />
           <RouterLink :to="{ name: 'mgr-exceptions' }" class="cw-link">Exceptions</RouterLink></div>
         <div class="cw-card-body">
-          <p v-if="!d.alerts.length" class="cw-empty">No alerts.</p>
+          <p v-if="!d.alerts?.length" class="cw-empty">No alerts.</p>
           <ul v-else class="dx-list">
             <li v-for="(a, i) in d.alerts" :key="i">
               <RouterLink :to="{ name: ALERT_ROUTE[a.key] ?? 'mgr-health' }" class="dx-item">
