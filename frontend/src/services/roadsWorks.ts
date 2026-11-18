@@ -70,3 +70,63 @@ export const roadsWorksApi = {
     return (await api.get(`/permit-applications/${encodeURIComponent(permitId)}/engineering-assessment`)).data.data
   },
 }
+
+// ── The field survey, recorded in the registers (backend src/routes/roads-works-registers.js, migration 254) ──────────
+export type SurveyRegister = 'road' | 'structure' | 'water_point' | 'council_asset'
+
+export interface SurveyWords {
+  surface: string[]; condition: string[]; building_condition: string[]; drainage: string[]
+  council_class: string[]; structure_type: string[]; operational: string[]; pump_type: string[]
+}
+
+export interface RegisterSummary {
+  roads: number; roads_surveyed: number; structures: number
+  water_points: number; water_points_known: number; council_assets: number; council_assets_located: number
+  wards: string[]
+  can_write: Record<SurveyRegister, boolean>
+  words: SurveyWords
+}
+
+export interface SurveyRoad {
+  id: string; asset_code: string; name: string | null; hierarchy: string | null; council_class: string | null; ward: string | null
+  length_m: number | null; surface: string | null; condition: string | null; width_m: number | null; drainage: string | null
+  data_quality: string; surveyed_on: string | null
+}
+export interface SurveyStructure {
+  id: string; structure_type: string; name: string | null; condition: string | null; span_m: number | null; ward: string | null
+  surveyed_on: string | null; road_asset_id: string | null; road_code: string | null; road_name: string | null; lng: number | null; lat: number | null
+}
+export interface SurveyWaterPoint {
+  id: string; asset_code: string; asset_type: string; name: string | null; ward: string | null; operational: string | null
+  pump_type: string | null; yield_note: string | null; last_repaired_on: string | null; caretaker: string | null
+  surveyed_on: string | null; lng: number | null; lat: number | null
+}
+export interface SurveyCouncilAsset {
+  id: string; asset_code: string | null; name: string | null; asset_class: string | null; department: string | null
+  condition: string | null; ward: string | null; surveyed_on: string | null; lng: number | null; lat: number | null
+}
+export interface SurveyLogLine {
+  id: string; register: SurveyRegister; record_id: string; surveyed_on: string
+  before: Record<string, unknown>; after: Record<string, unknown>; photo_ref: string | null; notes: string | null
+  recorded_role: string | null; recorded_by_name: string | null; created_at: string
+}
+export interface Paged<T> { items: T[]; total: number; limit: number; offset: number }
+export type ListFilter = { q?: string; ward?: string; state?: string; limit?: number; offset?: number }
+/** Every entry names the day surveyed; a photo number and notes go in the log. */
+export type SurveyEntry = { surveyed_on: string; photo_ref?: string; notes?: string } & Record<string, string | number | null | undefined>
+
+export const surveyApi = {
+  async summary(): Promise<RegisterSummary> { return (await api.get('/roads-works/registers')).data.data },
+  async roads(f: ListFilter): Promise<Paged<SurveyRoad>> { return (await api.get('/roads-works/roads', { params: f })).data.data },
+  async saveRoad(id: string, e: SurveyEntry): Promise<SurveyRoad> { return (await api.patch(`/roads-works/roads/${encodeURIComponent(id)}`, e)).data.data },
+  async structures(): Promise<{ items: SurveyStructure[] }> { return (await api.get('/roads-works/structures')).data.data },
+  async addStructure(e: SurveyEntry): Promise<SurveyStructure> { return (await api.post('/roads-works/structures', e)).data.data },
+  async saveStructure(id: string, e: SurveyEntry): Promise<SurveyStructure> { return (await api.patch(`/roads-works/structures/${encodeURIComponent(id)}`, e)).data.data },
+  async waterPoints(f: ListFilter): Promise<Paged<SurveyWaterPoint>> { return (await api.get('/roads-works/water-points', { params: f })).data.data },
+  async saveWaterPoint(id: string, e: SurveyEntry): Promise<SurveyWaterPoint> { return (await api.patch(`/roads-works/water-points/${encodeURIComponent(id)}`, e)).data.data },
+  async councilAssets(): Promise<{ items: SurveyCouncilAsset[] }> { return (await api.get('/roads-works/council-assets')).data.data },
+  async saveCouncilAsset(id: string, e: SurveyEntry): Promise<SurveyCouncilAsset> { return (await api.patch(`/roads-works/council-assets/${encodeURIComponent(id)}`, e)).data.data },
+  async log(register: SurveyRegister, recordId: string): Promise<SurveyLogLine[]> {
+    return (await api.get('/roads-works/survey-log', { params: { register, record_id: recordId } })).data.data.items
+  },
+}
