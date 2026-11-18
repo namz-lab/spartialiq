@@ -123,11 +123,13 @@ async function waitGates(page) {
   if (created.permits.length) {
     psql(`UPDATE spatial_planning.permit_application SET status = 'withdrawn', applicant_name = applicant_name || ' (rehearsal)'
            WHERE id IN (${created.permits.map((x) => `'${x}'`).join(',')}) AND applicant_name NOT LIKE '%(rehearsal)'`)
-    // their acknowledgement letters are voided and renumbered: a letter number is unique, and today's must be free
-    psql(`UPDATE spatial_planning.clerk_acknowledgement
-           SET voided_at = COALESCE(voided_at, now()), voided_reason = COALESCE(voided_reason, 'Demonstration rehearsal'),
-               letter_no = letter_no || '-R' || substr(id::text, 1, 6)
-           WHERE permit_application_id IN (${created.permits.map((x) => `'${x}'`).join(',')}) AND letter_no NOT LIKE '%-R%'`)
+    // their acknowledgement and refusal letters are voided and renumbered: a letter number is unique, and today's must be free
+    for (const table of ['clerk_acknowledgement', 'clerk_refusal']) {
+      psql(`UPDATE spatial_planning.${table}
+             SET voided_at = COALESCE(voided_at, now()), voided_reason = COALESCE(voided_reason, 'Demonstration rehearsal'),
+                 letter_no = letter_no || '-R' || substr(id::text, 1, 6)
+             WHERE permit_application_id IN (${created.permits.map((x) => `'${x}'`).join(',')}) AND letter_no NOT LIKE '%-R%'`)
+    }
   }
   const id1 = await lodge('Mr B. Phiri', 'extension', '1378', 'Two-bedroom extension to the existing dwelling on the stand', 'TPD/VUN/2026/0911')
   const id2 = await lodge('Mrs L. Hlongwane', 'change_of_use', '1379', 'Change of use: part of the dwelling to a tuck shop, beside the Gweru road', 'TPD/VUN/2026/0912')
@@ -200,16 +202,8 @@ async function waitGates(page) {
   await step('1.2 clerk fee card', () => showFeeCard(id1, 'c1-02-clerk-fee-paid.png'))
   await step('1.3 clerk stamp', () => stampReceipt(id1, 'ACK/2026/0911', 'c1-03-clerk-stamped.png'))
   await step('1.4 clerk mark sent', () => markSent('0911', 'c1-04-clerk-ack-sent.png'))
-  // STAND-IN, until the system does it: sending the acknowledgement records its date but leaves the case 'registered', and no
-  // screen moves it on, so the EO's approval would be refused ("A case in 'registered' cannot move to 'approved'"). The planner's
-  // status route makes the two moves the Act's path implies: acknowledged, then under review.
-  async function moveOn(id) {
-    for (const status of ['acknowledged', 'under_review']) {
-      const rev = Number(psql(`SELECT revision FROM spatial_planning.permit_application WHERE id = '${id}'`))
-      await api(planner, 'PATCH', `/permit-applications/${id}/status`, { status, expectedRevision: rev })
-    }
-  }
-  await step('1.4b case moved to under review (stand-in)', () => moveOn(id1))
+  // No status is set by hand: the sent letter makes the case Acknowledged (migration 248), the first circulation puts it in
+  // circulation, and the Act's questions put it under review (backend src/services/caseProgress.js).
   await step('1.5 planner circulation', async () => {
     // on the screen: Engineering, marked blocking, and Environmental health, each with a date to reply by
     const p = planner.page
@@ -278,7 +272,6 @@ async function waitGates(page) {
     await stampReceipt(id2, 'ACK/2026/0912', null)
     await markSent('0912', null)
     // it has been with the council a while: its clock started 65 days ago
-    await moveOn(id2)
     psql(`UPDATE spatial_planning.permit_application SET acknowledged_at = CURRENT_DATE - 65, statutory_due_date = CURRENT_DATE + 27 WHERE id = '${id2}'`)
   })
   await step('2.1 planner Act questions: yes to a State road', async () => {
