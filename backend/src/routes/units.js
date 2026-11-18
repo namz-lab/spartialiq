@@ -16,8 +16,9 @@
  * register with nothing in it says so, and a unit with no ward measure (internal audit) says that instead
  * of showing an empty map.
  *
- * The establishment comes from the organisation chart (public.admin_org_position). A post with no holder is
- * a vacancy and is shown as one; the holder's name is shown only if the holder belongs to this council.
+ * The establishment comes from the organisation chart (public.admin_org_position), grouped by section (migration 249).
+ * A post that needs a system account and has no holder is a vacancy and is shown as one; a post for staff who do not
+ * sign in is listed without being counted as vacant. The holder's name is shown only if the holder belongs to this council.
  */
 const { requireRole } = require('../middleware/jwtAuth')
 const { systemOf } = require('../lib/dbContext')
@@ -33,20 +34,32 @@ async function unitRoutes(fastify) {
   const team = createPlanningTeam(pg, fastify.log)
   const guard = requireRole(fastify, UNIT_ROLES_ALL)
 
-  /** The unit's posts. The org chart is not tenant-scoped, so a holder from another council is shown as a vacancy. */
+  /**
+   * The unit's posts, the head first, then by section and order. The org chart is not tenant-scoped, so a holder from
+   * another council is shown as no holder.
+   *
+   * A VACANCY is a post that needs a system account (it carries a system role) with nobody holding it. A post with no
+   * system role (a plant operator, a pump minder: staff who do not sign in) and no holder is not a vacancy the system can
+   * see; it is reported as `holder_not_recorded`, so the dashboard does not overstate the council's vacancies.
+   */
   async function establishment(unit, authorityId) {
     const { rows } = await systemOf(pg).query(
-      `SELECT p.id, p.title, p.system_role,
+      `SELECT p.id, p.title, p.system_role, p.section, p.reports_to,
               CASE WHEN u.id IS NOT NULL AND u.authority_id IS NOT DISTINCT FROM $2
                    THEN COALESCE(u.full_name, u.name) END AS holder_name
          FROM public.admin_org_position p
          LEFT JOIN public.users u ON u.id = p.holder_id AND u.deleted_at IS NULL
         WHERE p.unit_key = $1
-        ORDER BY (p.system_role = $3) DESC, p.sort_order, p.title`,
+        -- the head first; then each section where its first post falls in the chart's order, its posts together
+        ORDER BY COALESCE(p.system_role = $3, false) DESC,
+                 min(p.sort_order) OVER (PARTITION BY p.section), p.section NULLS FIRST, p.sort_order, p.title`,
       [unit.key, authorityId, unit.headRole])
     const posts = rows.map((r) => ({
-      id: r.id, title: r.title, system_role: r.system_role, holder_name: r.holder_name ?? null,
-      vacant: r.holder_name === null, is_head: r.system_role === unit.headRole,
+      id: r.id, title: r.title, system_role: r.system_role, section: r.section ?? null, reports_to: r.reports_to ?? null,
+      holder_name: r.holder_name ?? null,
+      vacant: r.holder_name === null && r.system_role !== null,
+      holder_not_recorded: r.holder_name === null && r.system_role === null,
+      is_head: r.system_role === unit.headRole,
     }))
     return { posts, total: posts.length, vacant: posts.filter((p) => p.vacant).length }
   }

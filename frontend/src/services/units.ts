@@ -30,8 +30,14 @@ export interface Post {
   id: string
   title: string
   system_role: string | null
+  /** The unit's section the post belongs to (migration 249); null for the head and for undivided units. */
+  section?: string | null
+  reports_to?: string | null
   holder_name: string | null
+  /** A post that needs a system account, with nobody holding it. */
   vacant: boolean
+  /** A post for staff who do not sign in, with no holder recorded: listed, not counted as vacant. */
+  holder_not_recorded?: boolean
   is_head: boolean
 }
 
