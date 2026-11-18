@@ -995,13 +995,19 @@ async function developmentManagementRoutes(fastify) {
 
   // ── Consultations ────────────────────────────────────────────────
 
+  // Circulation to the departments is automatic (migration 255): the rules in spatial_planning.circulation_rule decide
+  // which departments a case goes to, when it is acknowledged. This route makes only the referrals that are not
+  // circulation: a site inspection, an inspector's referral to the planner or the EO, and the like. Each of those names
+  // its task; a referral with no task, or a 'referral' or 'circulation' task, is circulation and is refused.
   fastify.post('/permit-applications/:id/consultations', {
-    // EO Planner circulates applications to technical departments, so 'eo' may
-    // create consultations alongside the planning officers.
     preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const b = request.body || {}
+    if (!isStr(b.task_type, 40) || ['referral', 'circulation'].includes(b.task_type)) {
+      return reply.code(409).send({ success: false, error: 'circulation_is_automatic',
+        message: 'Circulation to the departments is automatic: the case goes to the departments its kind of development needs when it is acknowledged. A case acknowledged before that can have the rules applied (Apply the circulation rules).' })
+    }
     // Accept `department` as an alias for `body_name`: the planner UI sends
     // `department`, the statutory column is `body_name`. (Fixes a 400 that
     // previously broke referral creation from the planner console.)
@@ -1041,6 +1047,45 @@ async function developmentManagementRoutes(fastify) {
     } catch (err) {
       if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })
       request.log.error({ err }, 'create consultation failed')
+      return reply.code(500).send({ success: false, error: 'internal' })
+    }
+  })
+
+  // The circulation rules (migration 255): which departments each kind of development goes to, and why.
+  fastify.get('/circulation-rules', {
+    preHandler: requireRole(fastify, PERMIT_READERS),
+  }, async (request, reply) => {
+    const type = isStr(request.query?.development_type, 40) ? request.query.development_type : null
+    const { rows } = await db(request).query(
+      `SELECT id, development_type, body_name, blocking, reply_days, ask
+         FROM spatial_planning.circulation_rule
+        WHERE active AND ($1::text IS NULL OR development_type IS NULL OR development_type = $1)
+        ORDER BY sort_order, body_name`, [type])
+    return reply.send({ success: true, data: rows })
+  })
+
+  // Apply the circulation rules to a case: for one acknowledged before circulation became automatic, or whose referrals
+  // were cancelled. Only the referrals the rules require and the case lacks are made; none is changed or removed.
+  fastify.post('/permit-applications/:id/circulate', {
+    preHandler: requireRole(fastify, ['eo', 'planner', 'planning_clerk', 'admin']),
+  }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const OPEN = ['acknowledged', 'circulation', 'objection_period', 'under_review', 'awaiting_eo_decision', 'deferred']
+    try {
+      const { rows: [c] } = await db(request).query('SELECT status FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+      if (!c) return reply.code(404).send({ success: false, error: 'not_found' })
+      if (!OPEN.includes(c.status)) {
+        return reply.code(409).send({ success: false, error: 'not_open',
+          message: c.status === 'registered' || c.status === 'pending_payment'
+            ? 'The case is circulated when it is acknowledged: send the acknowledgement first.'
+            : 'The case is decided or closed: it is not circulated.' })
+      }
+      const { rows: [r] } = await db(request).query(
+        'SELECT spatial_planning.circulate_case($1, $2) AS made',
+        [request.params.id, `the circulation rules were applied by the ${request.user.role}.`])
+      return reply.send({ success: true, data: { made: r.made } })
+    } catch (err) {
+      request.log.error({ err }, 'apply circulation rules failed')
       return reply.code(500).send({ success: false, error: 'internal' })
     }
   })

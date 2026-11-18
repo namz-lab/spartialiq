@@ -196,19 +196,17 @@ async function waitGates(page) {
     await api(eo, 'PATCH', `/agenda-items/${item.id}`, { outcome, resolution })
   }
 
-  // The planner circulates a case to the departments on the circulation screen, each with a date to reply by.
-  async function circulate(id, depts, file) {
+  // Circulation is automatic (migration 255): the acknowledgement sent the case to the departments its kind of
+  // development needs. The planner opens the circulation screen to show them.
+  async function showCirculation(id, file) {
     const p = planner.page
     await openEo(planner, id, 'circulation')
-    for (const [dept, blocking] of depts) {
-      const card = p.locator('li.tc-dept').filter({ has: p.locator('header', { hasText: dept }) }).first()
-      await card.locator('.tc-send input[type=date]').fill(addDays(14))
-      if (blocking) await card.locator('.tc-send input[type=checkbox]').check()
-      await card.getByRole('button', { name: 'Circulate' }).click(); await sleep(1800)
-    }
-    await openEo(planner, id, 'circulation')
+    await p.locator('li.tc-dept').first().waitFor({ timeout: 30000 })
     if (file) await shot(p, file)
   }
+  // The departments other than Roads and Works reply (as they would by the time the case is assessed).
+  const othersReply = (id) => psql(`UPDATE spatial_planning.application_consultation SET response_status = 'no_objection', response_received_at = now(), task_status = 'accepted'
+    WHERE permit_app_id = '${id}' AND response_status = 'pending' AND body_name <> 'engineering'`)
   // The Civil Engineering Technician answers a referral on the Roads and Works referral desk: each head of the s.26(5)
   // infrastructure-cost test, then the department's reply and its reasons.
   async function roadsWorksReply(applicant, { costs, response, notes }, file) {
@@ -236,9 +234,9 @@ async function waitGates(page) {
   await step('1.4 clerk mark sent', () => markSent('0911', 'c1-04-clerk-ack-sent.png'))
   // No status is set by hand: the sent letter makes the case Acknowledged (migration 248), the first circulation puts it in
   // circulation, and the Act's questions put it under review (backend src/services/caseProgress.js).
-  await step('1.5 planner circulation', () =>
-    // Roads and Works, marked blocking, and Environmental health
-    circulate(id1, [['Roads and Works', true], ['Environmental health', false]], 'c1-05-planner-circulation.png'))
+  await step('1.5 planner: the circulation the acknowledgement made', () =>
+    // Roads and Works (blocking) and Environmental health, each with its reply date: the rules for an extension
+    showCirculation(id1, 'c1-05-planner-circulation.png'))
   await step('1.5b Roads and Works replies: no objection, no cost to the council', () =>
     // A two-bedroom extension on a serviced stand adds nothing to the council's roads, parking, drains, sewers or water.
     roadsWorksReply('Phiri', {
@@ -324,8 +322,9 @@ async function waitGates(page) {
     await p.locator('[data-testid="statutory-checks"]').scrollIntoViewIfNeeded()
     await shot(p, 'c2-02-planner-referral-sent.png')
   })
-  await step('2.2b planner circulates to Roads and Works', () =>
-    circulate(id2, [['Roads and Works', true]], 'c2-02b-planner-circulates-roads-works.png'))
+  await step('2.2b planner: the circulation the acknowledgement made', () =>
+    // Roads and Works and Environmental health (both blocking) and Fire: the rules for a change of use
+    showCirculation(id2, 'c2-02b-circulation.png'))
   await step('2.2c Roads and Works objects', () =>
     // The Gweru road is a State road: an access onto it is for the minister responsible for roads, not the council (the
     // referral of step 2.2). The council's concern is the traffic and parking the shop would bring, and the bend.
@@ -333,6 +332,7 @@ async function waitGates(page) {
       costs: NO_COST, response: 'objection',
       notes: 'Objection. The stand has no room for customer parking, so customers would stop on the shoulder of the Gweru road, on a bend where drivers cannot see far ahead. The Gweru road is a State road: any access onto it is for the Department of Roads, already referred under s.40(2)(c). No cost to the council under s.26(5) if the application is refused.',
     }, 'c2-02c-roads-works-objection.png'))
+  await step('2.2d the other departments reply', async () => { othersReply(id2) })
   let objection
   await step('2.3 clerk records the objection', async () => {
     objection = await api(clerk, 'POST', `/permit-applications/${id2}/objections`, { objector_name: 'Mr J. Khumalo', grounds_detail: 'Noise and traffic from a shop beside the road, and no parking for customers.' })

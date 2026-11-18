@@ -166,12 +166,8 @@ async function fileResponse() {
         response_received_at: new Date().toISOString(),
       })
     } else {
-      await dmApi.createConsultation(selected.value.id, {
-        department: 'environmental_health',
-        outcome: a.verdict,
-        response: summariseChecks(),
-        notes: a.notes || null,
-      })
+      // Circulation is automatic: a case its rules did not send to Environmental health has no referral to answer.
+      throw new Error('This case was not circulated to Environmental health, so there is no referral to answer. The appraisal is kept on this device.')
     }
     a.reviewedAt = new Date().toISOString()
     hc.save()

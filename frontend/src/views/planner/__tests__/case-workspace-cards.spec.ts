@@ -8,7 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 
 // vi.mock is hoisted above the const declarations, so the spies must be too.
 const {
-  listEvents, listPermitMeetings, listMeetings, recordAgendaOutcome, scheduleOnAgenda, createMeeting,
+  listEvents, listPermitMeetings, listMeetings, recordAgendaOutcome, scheduleOnAgenda, createMeeting, circulationRules,
 } = vi.hoisted(() => ({
   listEvents: vi.fn(),
   listPermitMeetings: vi.fn(),
@@ -16,8 +16,13 @@ const {
   recordAgendaOutcome: vi.fn(),
   scheduleOnAgenda: vi.fn(),
   createMeeting: vi.fn(),
+  circulationRules: vi.fn(async () => []),
 }))
 
+vi.mock('@/services/eoPlannerService', () => ({
+  eoPlannerService: { circulationRules },
+  departmentLabel: (n: string) => (n === 'engineering' ? 'Roads and Works' : n.charAt(0).toUpperCase() + n.slice(1)),
+}))
 vi.mock('@/services/developmentManagementService', () => ({
   dmApi: { listEvents, listPermitMeetings, listMeetings, recordAgendaOutcome, scheduleOnAgenda, createMeeting },
 }))
@@ -52,17 +57,26 @@ const AGENDA = {
 beforeEach(() => vi.clearAllMocks())
 
 describe('ApplicationTrackCard', () => {
-  it('renders the completeness count, per-submittal status and the referral list', () => {
+  it('renders the completeness count, per-submittal status and the circulation the rules make', async () => {
+    circulationRules.mockResolvedValue([
+      { id: 'r1', development_type: null, body_name: 'engineering', blocking: true, reply_days: 14, ask: 'The s.26(5) test.' },
+      { id: 'r2', development_type: 'subdivision', body_name: 'survey', blocking: true, reply_days: 14, ask: 'The layout.' },
+    ])
     const w = mount(ApplicationTrackCard, {
       props: { devType: 'subdivision', satisfied: { title_deed: true, fee_receipt: true } },
     })
+    await flushPromises()
+    expect(circulationRules).toHaveBeenCalledWith('subdivision')
     const text = w.text()
     // subdivision = 5 common + 3 survey submittals, 2 satisfied
     expect(text).toContain('2 / 8')
     expect(text).toContain('Received')
     expect(text).toContain('Outstanding')
     expect(text).toContain('Surveyor-General diagram / general plan')
-    expect(text).toContain('Roads Authority')       // real referral, not invented status
+    // the departments come from the server's circulation rules, not a list kept in the browser
+    expect(text).toContain('Roads and Works')
+    expect(text).toContain('Survey')
+    expect(text).toContain('Decision waits')
     expect(text).toContain('Public hearing required')
     expect(text).toContain('90')                     // statutory days
   })

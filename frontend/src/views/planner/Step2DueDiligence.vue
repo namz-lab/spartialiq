@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import jsPDF from 'jspdf'
-import { dmApi } from '@/services/developmentManagementService'
+import { dmApi, type Consultation } from '@/services/developmentManagementService'
+import { departmentLabel } from '@/services/eoPlannerService'
 import { usePlannerCase } from '@/composables/usePlannerCase'
 import { devTypeLabel } from '@/composables/useApplicationPipeline'
 import { useUiFeedback } from '@/composables/useUiFeedback'
 import {
-  CheckCircle2, XCircle, MinusCircle, Send, ChevronDown, ChevronRight,
+  CheckCircle2, XCircle, MinusCircle, ChevronDown, ChevronRight,
   FileDown, AlertTriangle, CheckCircle, ListChecks,
 } from 'lucide-vue-next'
 import ZoningAssessmentCard from './ZoningAssessmentCard.vue'
@@ -107,36 +108,23 @@ const verdictLabel: Record<'pending'|'pass'|'fail_with_concerns'|'pass_with_conc
   fail_with_concerns:  'Material non-conformances flagged',
 }
 
-// ── External referrals ──────────────────────────────────────────────
-const referralPick = ref<string>('')
-const referralResponse = ref('')
-async function addReferral() {
-  if (!current.value?.permitId || !referralPick.value) return
+// ── Circulation ─────────────────────────────────────────────────────
+// Automatic (backend migration 255): the case goes to the departments its kind of development needs when it is
+// acknowledged. The step shows those referrals and their replies, read from the server.
+const circulated = ref<Consultation[]>([])
+async function loadCirculation(id: string | null | undefined) {
+  circulated.value = []
+  if (!id) return
   try {
-    // Send `body_name` (the statutory consultation column); `department` is
-    // kept as a tolerated alias. Previously only `department` was sent, which
-    // the backend rejected with 400 — referral creation was silently broken.
-    const created = await dmApi.createConsultation(current.value.permitId, {
-      department: referralPick.value,
-      body_name: referralPick.value,
-      response_notes: referralResponse.value,
-      outcome: 'pending',
-    } as any)
-    current.value.dueDiligence.referrals.push({
-      department: referralPick.value,
-      contactedAt: (created as any).circulated_at ?? (created as any).created_at ?? new Date().toISOString(),
-      response: referralResponse.value,
-      outcome: 'pending',
-    })
-    referralPick.value = ''
-    referralResponse.value = ''
-    save()
-    fb.showToast('Referral logged', 'success')
-  } catch (e: any) {
-    fb.openMessageBox({ kind:'error', title:'Could not log referral',
-      message: fb.parseApiError(e, 'The server rejected the referral.') })
-  }
+    circulated.value = (await dmApi.listConsultations(id))
+      .filter(c => !c.task_type || c.task_type === 'circulation' || c.task_type === 'referral')
+  } catch { circulated.value = [] }
 }
+watch(() => current.value?.permitId, (id) => { void loadCirculation(id) }, { immediate: true })
+const replyLabel = (c: Consultation) => ({
+  pending: 'awaiting a reply', no_objection: 'no objection', objection: 'objection',
+  conditional_approval: 'no objection, with conditions', no_response: 'no reply in time',
+} as Record<string, string>)[c.response_status ?? 'pending'] ?? (c.response_status ?? 'awaiting a reply')
 
 // ── Completion & report generation ──────────────────────────────────
 const allChecksDone = computed(() => summary.value?.total.pending === 0)
@@ -253,14 +241,14 @@ function generateReport() {
   y += 2; divider()
 
   // ── Referrals ─────────────────────────────────────────────────
-  writeLine('External Referrals', { bold:true, size:11 })
-  if (!c.dueDiligence.referrals.length) {
-    writeLine('No external referrals issued.')
+  writeLine('Circulation (automatic, by the circulation rules)', { bold:true, size:11 })
+  if (!circulated.value.length) {
+    writeLine('Not yet circulated: the case is circulated when it is acknowledged.')
   } else {
-    for (const r of c.dueDiligence.referrals) {
-      writeLine(`• ${r.department}  —  ${r.outcome}  (${new Date(r.contactedAt).toLocaleDateString()})`, { size:9.5 })
-      if (r.response && r.response.trim()) {
-        writeLine(`    ${r.response.trim()}`, { size:9, color:[71,85,105] })
+    for (const r of circulated.value) {
+      writeLine(`• ${departmentLabel(r.body_name || r.department || '')}  —  ${replyLabel(r)}${r.blocking ? '  (blocking)' : ''}  (sent ${r.circulated_at ? new Date(r.circulated_at).toLocaleDateString() : '—'})`, { size:9.5 })
+      if (r.response_status && r.response_status !== 'pending' && r.response_notes && r.response_notes.trim()) {
+        writeLine(`    ${r.response_notes.trim()}`, { size:9, color:[71,85,105] })
       }
     }
   }
@@ -441,17 +429,16 @@ function generateReport() {
     </section>
 
     <section class="dd-card">
-      <header>External referrals</header>
-      <ul class="dd-ref-list">
-        <li v-for="(r, i) in current.dueDiligence.referrals" :key="i">
-          <strong>{{ r.department }}</strong> — {{ r.outcome }} ({{ new Date(r.contactedAt).toLocaleDateString() }})
+      <header>Circulation</header>
+      <p class="dd-ref-note">Automatic: when the case is acknowledged it goes to the departments its kind of development needs.
+        Their replies come back here.</p>
+      <ul v-if="circulated.length" class="dd-ref-list" data-testid="dd-circulation">
+        <li v-for="r in circulated" :key="r.id">
+          <strong>{{ departmentLabel(r.body_name || r.department || '') }}</strong> — {{ replyLabel(r) }}<template v-if="r.blocking"> · the decision waits for it</template>
+          <template v-if="r.response_due_at && (r.response_status ?? 'pending') === 'pending'"> · reply by {{ new Date(r.response_due_at).toLocaleDateString() }}</template>
         </li>
       </ul>
-      <div class="dd-ref-add">
-        <input v-model="referralPick" placeholder="Department / utility being referred to" />
-        <input v-model="referralResponse" placeholder="Initial response (optional)" />
-        <button class="dd-btn ok" :disabled="!referralPick.trim()" @click="addReferral"><Send :size="11" /> Log referral</button>
-      </div>
+      <p v-else class="dd-ref-note">Not yet circulated: the case is circulated when its acknowledgement is sent.</p>
     </section>
 
     <SurveyRequestsCard @gate-change="surveyGate = $event" />
@@ -516,6 +503,7 @@ function generateReport() {
   background:#fff; outline:none; resize:vertical; font-family:inherit; }
 
 /* Title deed + referrals (unchanged) */
+.dd-ref-note { margin: 0.25rem 0 0.5rem; font-size: 0.8125rem; color: var(--ent-text-3, #64748b); }
 .dd-check { display:flex; align-items:center; gap:0.4rem;
   padding:0.5rem 0.75rem; font-size:0.72rem; color:#475569; }
 .dd-conflict { display:flex; flex-direction:column; gap:0.3rem; padding:0 0.75rem 0.75rem; }

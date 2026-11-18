@@ -3,16 +3,18 @@
 // server (application_consultation), not the case file's local copy, so the
 // specialist's response actually reaches the planner.
 //
-// mode="referrals"   technical circulation: roads, EMA, neighbouring
-//                    authorities, Engineering Services, Environmental Health.
-//                    Follow up overdue replies; record paper replies.
+// mode="referrals"   technical circulation. It is automatic (backend migration 255): the case goes to the departments
+//                    its kind of development needs when it is acknowledged. Here the planner follows the replies,
+//                    chases overdue ones and records paper replies; a case acknowledged before circulation was
+//                    automatic can have the rules applied.
 // mode="inspection"  request a site inspection from a Development Control
 //                    Officer and review the findings they return.
 import { computed, reactive, ref, watch } from 'vue'
 import { dmApi, type Consultation } from '@/services/developmentManagementService'
+import { eoPlannerService } from '@/services/eoPlannerService'
 import { useUiFeedback } from '@/composables/useUiFeedback'
 import {
-  REFERRAL_BODIES, SITE_INSPECTION_BODY, SITE_INSPECTION_TASK, DEFAULT_RESPONSE_DAYS,
+  SITE_INSPECTION_BODY, SITE_INSPECTION_TASK, DEFAULT_RESPONSE_DAYS,
   referralState, responseStatus, isSiteInspection, dueDateFrom, RESPONSE_LABEL,
 } from '../referralRules'
 import UiFeedback from '@/components/UiFeedback.vue'
@@ -50,7 +52,23 @@ const rows = computed(() => all.value
 const overdue = computed(() => rows.value.filter(c => referralState(c) === 'overdue').length)
 const sentTo = computed(() => new Set(rows.value.map(c => c.body_name || c.department)))
 
-// ── New referral / inspection request ─────────────────────────────────────
+// ── Circulation by the rules (a case acknowledged before it was automatic) ─────
+const applying = ref(false)
+async function applyRules() {
+  if (!props.permitId) return
+  applying.value = true
+  try {
+    const { made } = await eoPlannerService.applyCirculationRules(props.permitId)
+    fb.showToast(made ? `Circulated to ${made} department(s) by the rules.` : 'The case already has every referral the rules require.', 'success')
+    await load()
+  } catch (e) {
+    fb.openMessageBox({ kind: 'warn', title: 'Not circulated', message: fb.parseApiError(e, 'The rules could not be applied.') })
+  } finally {
+    applying.value = false
+  }
+}
+
+// ── Site inspection request ───────────────────────────────────────────────
 const draft = reactive({
   body: props.mode === 'inspection' ? SITE_INSPECTION_BODY : '',
   customBody: '',
@@ -150,19 +168,19 @@ const STATE_LABEL = { responded: 'Responded', overdue: 'Overdue', awaiting: 'Awa
   <div class="cr">
     <p v-if="!permitId" class="cr-hint">Register the application first; referrals attach to the permit record.</p>
     <template v-else>
-      <form class="cr-form" @submit.prevent="send">
-        <h3>{{ mode === 'inspection' ? 'Request a site inspection' : 'Refer the application' }}</h3>
+      <div v-if="mode === 'referrals'" class="cr-form" data-testid="cr-automatic">
+        <h3>Circulation</h3>
+        <p class="cr-hint">Circulation is automatic: when the case is acknowledged it goes to the departments its kind of
+          development needs, each with its reply date. Follow the replies below, chase overdue ones and record a reply
+          that came on paper.</p>
+        <UiButton variant="secondary" size="sm" :disabled="applying" @click="applyRules">
+          {{ applying ? 'Applying…' : 'Apply the circulation rules' }}
+        </UiButton>
+        <p class="cr-hint">For a case acknowledged before circulation was automatic: sends only what the rules require and the case lacks.</p>
+      </div>
+      <form v-else class="cr-form" @submit.prevent="send">
+        <h3>Request a site inspection</h3>
         <div class="cr-grid">
-          <label v-if="mode === 'referrals'" class="cr-wide">Refer to
-            <select v-model="draft.body">
-              <option value="" disabled>Choose a body</option>
-              <option v-for="b in REFERRAL_BODIES" :key="b" :value="b">{{ b }}{{ sentTo.has(b) ? ' — already referred' : '' }}</option>
-              <option value="__other">Other…</option>
-            </select>
-          </label>
-          <label v-if="mode === 'referrals' && draft.body === '__other'" class="cr-wide">Name of body
-            <input v-model="draft.customBody" />
-          </label>
           <label>Reply due<input v-model="draft.due" type="date" /></label>
           <label>Priority
             <select v-model="draft.priority">

@@ -12,6 +12,7 @@ import {
   type BuildingPlan, type EnforcementOrder,
 } from './developmentManagementService'
 import { isPermitApproved, isPermitInCirculation, normalizeStatus } from '@/composables/useApplicationPipeline'
+import api from './api'
 
 // 90-day statutory determination clock per RTCP Act s.26
 export const STATUTORY_DETERMINATION_DAYS = 90
@@ -34,10 +35,11 @@ export interface CirculationStatus {
   outstandingCount: number
 }
 
-// The standing circulation list. In a rural district council roads, traffic, stormwater, and water and sewer are all the
-// Department of Roads and Works', so one referral (key 'engineering') goes to it and is answered on its own referral desk,
-// with the infrastructure-cost test of s.26(5). Older cases may still carry 'traffic' or 'water_sewer' referrals: they
-// are shown, and answered on the same desk.
+// The departments a case can be circulated to. Circulation is automatic (backend migration 255): when a case is
+// acknowledged, the rules (spatial_planning.circulation_rule) send it to the ones its kind of development needs. In a
+// rural district council roads, traffic, stormwater, and water and sewer are all the Department of Roads and Works', so
+// one referral (key 'engineering') goes to it and is answered on its own referral desk, with the infrastructure-cost test
+// of s.26(5). Older cases may still carry 'traffic' or 'water_sewer' referrals: they are shown, and answered there too.
 export const ALL_TECH_DEPARTMENTS = [
   'environmental_health',
   'survey',
@@ -60,6 +62,16 @@ export const departmentLabel = (name: string): string =>
 /** Does Roads and Works answer this referral (on its own desk)? */
 export const answeredByRoadsAndWorks = (name: string): boolean =>
   ['engineering', 'roads and works', 'roads_and_works', 'traffic', 'water_sewer'].includes(name.toLowerCase()) || name.toLowerCase().startsWith('engineering')
+
+/** A circulation rule: a department a kind of development goes to, and why (backend GET /circulation-rules). */
+export interface CirculationRule {
+  id: string
+  development_type: string | null
+  body_name: string
+  blocking: boolean
+  reply_days: number
+  ask: string
+}
 
 export const eoPlannerService = {
   // ── Intake & due-diligence queue ─────────────────────────────────
@@ -106,8 +118,11 @@ export const eoPlannerService = {
       const key = (c.body_name || c.department || '').toString()
       if (key) byDept.set(key, c)
     }
-    // the standing list, then any other referral this case carries
-    const names: string[] = [...ALL_TECH_DEPARTMENTS, ...[...byDept.keys()].filter(k => !(ALL_TECH_DEPARTMENTS as readonly string[]).includes(k))]
+    // the departments the case was circulated to (by the rules, or by hand before they existed); circulation tasks only,
+    // not site inspections or inspectors' referrals
+    const names: string[] = [...byDept.entries()]
+      .filter(([, c]) => !c.task_type || c.task_type === 'circulation' || c.task_type === 'referral')
+      .map(([k]) => k)
     const departments = names.map(name => {
       const c = byDept.get(name)
       return {
@@ -121,20 +136,14 @@ export const eoPlannerService = {
     return { permit_application_id: permitId, departments, outstandingCount }
   },
 
-  async circulate(
-    permitId: string,
-    department: string,
-    opts: { notes?: string; priority?: Consultation['priority']; response_due_at?: string; blocking?: boolean } = {},
-  ): Promise<void> {
-    await dmApi.createConsultation(permitId, {
-      department,
-      body_name: department,
-      outcome: 'pending',
-      notes: opts.notes ?? null,
-      priority: opts.priority,
-      response_due_at: opts.response_due_at,
-      blocking: opts.blocking,
-    } as Partial<Consultation>)
+  /** The circulation rules, for one kind of development (or all). */
+  async circulationRules(developmentType?: string | null): Promise<CirculationRule[]> {
+    return (await api.get('/circulation-rules', { params: developmentType ? { development_type: developmentType } : {} })).data.data
+  },
+
+  /** Apply the rules to a case acknowledged before circulation was automatic: makes only the referrals it lacks. */
+  async applyCirculationRules(permitId: string): Promise<{ made: number }> {
+    return (await api.post(`/permit-applications/${encodeURIComponent(permitId)}/circulate`)).data.data
   },
 
   // ── Objections ───────────────────────────────────────────────────

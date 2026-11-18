@@ -190,12 +190,9 @@ async function fileReview(row: StoredEnvReview): Promise<boolean> {
         response_received_at: new Date().toISOString(),
       })
     } else {
-      await dmApi.createConsultation(row.permitId, {
-        department: 'environment',
-        outcome: outcomeFor(row.recommendation),
-        response: notes,
-        notes: `Environmental review · risk ${row.risk}`,
-      })
+      // Circulation is automatic: a case its rules did not send to Environment has no referral to answer, and one is
+      // not made here. The review stays on this device.
+      return false
     }
     return true
   } catch {
