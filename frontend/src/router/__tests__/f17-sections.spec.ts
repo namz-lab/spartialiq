@@ -32,7 +32,7 @@ describe('F17 — EO console pane renders its sections', () => {
     // What the planner and the clerk prepare is folded away until it is asked for; everything else is in the rail.
     const PREPARED = 4
     expect(w.findAll('.eo-nav-item').length).toBe(SECTION_KEYS.length - PREPARED)
-    expect(w.findAll('.eo-nav-group').map(g => g.text())).toEqual(['Your cases', 'Registers', 'Office'])
+    expect(w.findAll('.eo-nav-group').map(g => g.text())).toEqual(['Your team', 'Your cases', 'Registers', 'Office'])
     await w.find('.eo-nav-more').trigger('click')
 
     // Opened, the rail is the contract: one entry per section key, no more, no fewer.
@@ -47,7 +47,7 @@ describe('F17 — EO console pane renders its sections', () => {
 
     // Your cases / Prepared for you / Registers / Office, so seventeen entries read as four lists, in the order the work goes.
     const groups = w.findAll('.eo-nav-group').map(g => g.text())
-    expect(groups).toEqual(['Your cases', 'Prepared for you', 'Registers', 'Office'])
+    expect(groups).toEqual(['Your team', 'Your cases', 'Prepared for you', 'Registers', 'Office'])
     expect(labels.some(l => l.includes('Public notice'))).toBe(true)
 
     // Embedded: the shell owns brand + profile, so this pane must not repeat them.
