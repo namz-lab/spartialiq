@@ -8,6 +8,8 @@ const { requireRole } = require('../middleware/jwtAuth')
 const READ_ROLES = [
   'admin', 'gis_officer', 'planner', 'planning_clerk', 'eo', 'env_officer',
   'building_inspector', 'surveyor',
+  // The Department of Roads and Works reads its own registers (it writes them through roads-works-registers.js).
+  'engineer', 'civil_technician', 'roads_foreman', 'water_technician',
 ]
 const WRITE_ROLES = ['admin', 'gis_officer', 'planner']
 

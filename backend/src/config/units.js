@@ -18,7 +18,9 @@ const UNITS = [
   { key: 'engineering', label: 'Roads and Works', post: 'District Engineer', headRole: 'engineer', section: 'engineering',
     memberRoles: ['civil_technician', 'roads_foreman', 'water_technician'],
     sections: ['engineering'],
-    desks: [{ label: 'Parcel and asset map', path: '/gis-officer-portal' }] },
+    // Its registers, referrals and plant are views of its own dashboard. (The GIS officer's portal, linked here before,
+    // is not open to the department or the Chief Executive.)
+    desks: [] },
   { key: 'social_admin', label: 'Human Resources, Social Services and Administration', post: 'Human Resources, Social Services & Administration Officer',
     headRole: 'hr_social_officer', section: 'social_services', sections: ['social_services', 'hr'], desks: [] },
   { key: 'audit', label: 'Internal Audit', post: 'Internal Auditor', headRole: 'auditor', section: 'audit', sections: ['audit'],
