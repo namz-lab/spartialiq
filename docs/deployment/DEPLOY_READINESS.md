@@ -51,6 +51,27 @@ node scripts/e2e-deploy-readiness.mjs
 
 ## Still human / external
 
-- Cloudflare Turnstile **site + secret** from the council dashboard (cannot invent).
+- Cloudflare Turnstile **site + secret** from the council dashboard (cannot invent). Steps below.
 - Real allottee CSV from Finance / Property File.
 - Deeds Registry and Surveyor-General interfaces (X4/X7 stay paper + register until then).
+
+## The sign-in security check (Cloudflare Turnstile) on Render
+
+Without it the hosted sign-in form says "The security check is not configured. Contact the council.", and
+no real account can sign in: the API refuses any login, registration or password reset whose challenge it
+cannot verify (`backend/src/utils/captchaChallenge.js`). Only the `@vungu.test` demo accounts get past it,
+because the image sets `ALLOW_DEMO_LOGIN=1`.
+
+1. **Create the widget** (Cloudflare dashboard → Turnstile → Add widget). Hostname: the public host,
+   `spartialiq.onrender.com` (add the council's own domain too when it moves). Mode: *Managed*.
+   Cloudflare shows two keys: a **site key** (public) and a **secret key** (keep private).
+2. **Set both on the Render web service** (Environment):
+   - `VITE_TURNSTILE_SITE_KEY` = the site key. It is built into the app, so the Dockerfile declares it as
+     a build `ARG`; Render passes service variables to a Docker build only that way.
+   - `TURNSTILE_SECRET_KEY` = the secret key. Read by the API at run time; never put it in the frontend.
+3. **Redeploy** (Manual Deploy → *Clear build cache & deploy*), so the frontend is rebuilt with the site key.
+4. **Check**: the sign-in page shows the Turnstile box instead of the "not configured" message, and a real
+   account signs in.
+
+Locally nothing is needed: without the variables the app uses Cloudflare's published always-pass test
+keys, and only outside production.

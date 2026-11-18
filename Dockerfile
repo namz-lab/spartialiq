@@ -4,6 +4,12 @@ WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# The Cloudflare Turnstile SITE key (public; it is in every page) is built into the app, so it must reach
+# this stage. Render passes a service's environment variables to a Docker build only as declared ARGs:
+# set VITE_TURNSTILE_SITE_KEY on the Render service. Without it the sign-in form says "The security check
+# is not configured". The matching SECRET key is TURNSTILE_SECRET_KEY, read by the API at run time only.
+ARG VITE_TURNSTILE_SITE_KEY
+ENV VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
 ENV VITE_ALLOW_DEMO_LOGIN=1
 ENV DISABLE_PWA=1
 ENV NODE_OPTIONS=--max-old-space-size=2048
