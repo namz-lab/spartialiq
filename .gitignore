@@ -19,3 +19,8 @@ pos/.vercel/
 logs/
 .cursor/
 *.log
+
+# Office lock files, made while a document is open
+~$*
+# The demo screenshot script's record of the rehearsal cases it made on the demo copy (docs/manuals/tools/capture-demo-steps.js)
+docs/manuals/tools/demo-created.json
