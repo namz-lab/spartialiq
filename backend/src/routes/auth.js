@@ -93,6 +93,8 @@ const INVITABLE_ROLES = new Set([
   'cash_supervisor',
   // Migration 216: heads of the Executive Arm's other units.
   'engineer', 'hr_social_officer',
+  // Migration 250: engineering staff under the Engineer.
+  'civil_technician', 'roads_foreman', 'water_technician',
 ])
 
 const VALID_USER_ROLES = new Set([
@@ -108,6 +110,8 @@ const VALID_USER_ROLES = new Set([
   'cash_supervisor',
   // Migration 216: heads of the Executive Arm's other units.
   'engineer', 'hr_social_officer',
+  // Migration 250: engineering staff under the Engineer.
+  'civil_technician', 'roads_foreman', 'water_technician',
 ])
 
 // Council staff = employees. Identical to INVITABLE_ROLES today, but named

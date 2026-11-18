@@ -59,7 +59,12 @@ onMounted(load)
 watch(() => props.unit, load)
 
 const isChief = computed(() => auth.user?.role === 'accounting_officer')
-const roleLabel = computed(() => (isChief.value ? 'Chief Executive' : (dash.value?.unit.post ?? 'Unit head')))
+// A unit's members (migration 250) are named by their own post, not the head's.
+const MEMBER_LABEL: Record<string, string> = {
+  civil_technician: 'Civil Technician', roads_foreman: 'Roads Foreman', water_technician: 'Water and Sanitation Technician',
+}
+const roleLabel = computed(() => (isChief.value ? 'Chief Executive'
+  : MEMBER_LABEL[auth.user?.role ?? ''] ?? (dash.value?.unit.post ?? 'Unit head')))
 
 function handleLogout() {
   auth.logout()

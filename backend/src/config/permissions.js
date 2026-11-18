@@ -37,12 +37,16 @@ const FINANCE_ROLES = [
 /** Heads of the Executive Arm's other units (migration 216). Each arrives with a unit dashboard at /units/<key>. */
 const UNIT_ROLES = ['engineer', 'hr_social_officer']
 
+/** Migration 250: engineering staff under the Engineer. Members of the Engineering and Works unit (config/units.js). */
+const ENGINEERING_ROLES = ['civil_technician', 'roads_foreman', 'water_technician']
+
 const ALL_ROLES = [
   'admin', 'planner', 'eo', 'env_officer', 'building_inspector',
   'planning_clerk', 'surveyor', 'gis_officer',
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
   ...FINANCE_ROLES,
   ...UNIT_ROLES,
+  ...ENGINEERING_ROLES,
   'viewer', 'registered', 'public',
 ]
 
@@ -53,6 +57,7 @@ const STAFF_ROLES = [
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
   ...FINANCE_ROLES,
   ...UNIT_ROLES,
+  ...ENGINEERING_ROLES,
 ]
 
 /** Council clients (citizens). Never staff; they see only their own records. */
@@ -91,6 +96,9 @@ const ROLE_LABELS = {
   accounting_officer: { name: 'Accounting Officer (CEO)',    short: 'CEO',        summary: 'Reads the council’s whole financial position, the cash office and the audit trail. Writes nothing in this phase.' },
   cash_supervisor:    { name: 'Cash Supervisor',             short: 'Supervisor', summary: 'Watches every till, recovers an abandoned drawer by a witnessed count, assigns cashiers and verifies cash-ups. Takes no money and keeps no book.' },
   engineer:           { name: 'Engineer',                    short: 'Engineer',   summary: 'Heads Engineering and Works: roads, water points, council assets and projects. Reads own unit’s dashboard and ward maps.' },
+  civil_technician:   { name: 'Civil Technician',            short: 'Civil Tech', summary: 'Under the Engineer: designs, supervises and inspects roads and civil works. Reads the Engineering and Works dashboard.' },
+  roads_foreman:      { name: 'Roads Foreman',               short: 'Foreman',    summary: 'Under the Civil Technician: runs the road gangs and plant on site. Reads the Engineering and Works dashboard.' },
+  water_technician:   { name: 'Water and Sanitation Technician', short: 'Water Tech', summary: 'Under the Engineer: water points, boreholes and sanitation. Reads the Engineering and Works dashboard.' },
   hr_social_officer:  { name: 'HR, Social Services & Administration Officer', short: 'HR & Social', summary: 'Heads Human Resources, Social Services and Administration. Reads own unit’s dashboard and ward maps.' },
   viewer:             { name: 'Citizen (legacy account)',    short: 'Citizen',    summary: 'A client account from before self-registration. Same access as a registered citizen.' },
   registered:         { name: 'Registered citizen',          short: 'Citizen',    summary: 'Applies, pays and tracks their own case. Issued on self-registration.' },

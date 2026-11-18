@@ -760,7 +760,8 @@ const router = createRouter({
       meta: {
         title: 'Unit dashboard - Vungu RDC',
         requiresAuth: true,
-        roles: ['accounting_officer', 'eo', 'finance_admin', 'engineer', 'hr_social_officer', 'auditor'],
+        roles: ['accounting_officer', 'eo', 'finance_admin', 'engineer', 'hr_social_officer', 'auditor',
+          'civil_technician', 'roads_foreman', 'water_technician'],
       }
     },
     { path: '/gis-officer', redirect: '/gis-officer-portal' },
@@ -968,6 +969,10 @@ const ROLE_HOME: Record<Role, string> = {
   // Migration 216: the heads of Engineering and of HR, Social Services and Administration open their own unit's dashboard.
   engineer:           '/units/engineering',
   hr_social_officer:  '/units/social_admin',
+  // Migration 250: the engineering staff under the Engineer open the unit's dashboard.
+  civil_technician:   '/units/engineering',
+  roads_foreman:      '/units/engineering',
+  water_technician:   '/units/engineering',
   viewer:             '/citizen',
   registered:         '/citizen',
   public:             '/citizen',
