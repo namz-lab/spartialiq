@@ -87,7 +87,8 @@ const holdings = computed(() => {
   const r = f.registers
   return [
     { key: 'correspondence', label: 'Correspondence', icon: Inbox, n: r.correspondence.length, section: 'correspondence' as const },
-    { key: 'receipts', label: 'Fee receipts', icon: ReceiptIcon, n: r.receipts.length, section: 'fees' as const },
+    // Fees taken at the cash office or online (migration 246), and any written at this desk before.
+    { key: 'receipts', label: 'Fees paid', icon: ReceiptIcon, n: r.receipts.length + (f.cash_office_fees ?? []).filter((x) => x.state !== 'cancelled').length, section: 'fees' as const },
     { key: 'acknowledgements', label: 'Acknowledgement', icon: Mail, n: r.acknowledgements.length, section: 'acknowledgements' as const },
     { key: 'certificates', label: 'Notice certificates', icon: Megaphone, n: r.certificates.length, section: 'notices' as const },
     { key: 'abutters', label: 'Neighbours served', icon: Users, n: r.abutters.length, section: 'notices' as const },
@@ -102,11 +103,12 @@ const holdings = computed(() => {
 const fileTakings = computed(() => {
   const rows = overview.file.value?.registers.receipts ?? []
   const live = rows.filter((r) => !r.voided_at)
+  const office = (overview.file.value?.cash_office_fees ?? []).filter((x) => x.state !== 'cancelled')
   return (['USD', 'ZWG'] as const)
     .map((ccy) => ({
       ccy,
-      total: live.filter((r) => r.currency === ccy)
-        .reduce((sum, r) => sum + Number(r.amount || 0), 0),
+      total: live.filter((r) => r.currency === ccy).reduce((sum, r) => sum + Number(r.amount || 0), 0)
+        + office.filter((x) => x.currency === ccy).reduce((sum, x) => sum + Number(x.amount || 0), 0),
     }))
     .filter((t) => t.total > 0)
 })

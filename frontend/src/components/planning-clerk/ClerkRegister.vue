@@ -57,6 +57,11 @@ const props = withDefaults(defineProps<{
   baseQuery?: RegisterQuery
   /** Placeholder for the search box — name the columns actually searched. */
   searchHint?: string
+  /**
+   * A register kept as history only (the server refuses new entries): no add button. The fee
+   * receipt register is one since migration 246 — fees are receipted at the cash office.
+   */
+  readOnly?: boolean
 }>(), {
   addLabel: 'Add entry',
   requiresFile: false,
@@ -174,7 +179,7 @@ function openForm() {
   formOpen.value = true
 }
 
-const canOpenForm = computed(() => !props.requiresFile || !!nav.permit.value)
+const canOpenForm = computed(() => !props.readOnly && (!props.requiresFile || !!nav.permit.value))
 
 async function save() {
   saving.value = true
@@ -294,7 +299,7 @@ defineExpose({ reload: load })
           <template #icon><Download :size="14" /></template>
           CSV
         </UiButton>
-        <UiButton size="sm" variant="primary" :disabled="!canOpenForm" @click="openForm">
+        <UiButton v-if="!readOnly" size="sm" variant="primary" :disabled="!canOpenForm" @click="openForm">
           <template #icon><Plus :size="14" /></template>
           {{ addLabel }}
         </UiButton>

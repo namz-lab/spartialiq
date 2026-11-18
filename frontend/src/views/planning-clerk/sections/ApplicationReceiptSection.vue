@@ -12,16 +12,20 @@
 // about the application it reads; what it asks for is what only the counter
 // knows: what was actually in the envelope, and what was paid.
 //
-// THREE WRITES, NOT ONE TRANSACTION — AND IT SAYS SO
-// Receipting a TPD makes three entries in three registers: the fee receipt,
-// the incoming correspondence, and the acknowledgement letter that starts
-// both statutory clocks. They are three endpoints and there is no cross-
-// register transaction, so a duplicate letter number can leave the money
-// receipted and the acknowledgement not drafted. Rather than pretend
-// otherwise, each step reports its own outcome and the ones that succeeded
-// are named. A clerk who is told "something went wrong" after taking cash
-// has to go and find out what landed; a clerk who is told which of the three
-// landed does not.
+// THE FEE IS TAKEN AT THE CASH OFFICE (migration 246)
+// The clerk no longer takes money or writes a receipt. The applicant pays at
+// the cash office, where the cashier names this application: the fee reaches
+// the council's books, and an application fee marks the application paid.
+// This desk reads that payment from the file and shows it; if there is none
+// yet, it says to send the applicant to the cash office.
+//
+// TWO WRITES, NOT ONE TRANSACTION — AND IT SAYS SO
+// Receipting a TPD makes two entries in two registers: the incoming
+// correspondence, and the acknowledgement letter that starts both statutory
+// clocks. They are two endpoints and there is no cross-register transaction,
+// so a duplicate letter number can leave the correspondence logged and the
+// acknowledgement not drafted. Each step reports its own outcome and the ones
+// that succeeded are named.
 //
 // THE CHECKLIST IS EVIDENCE, NOT A GATE
 // Unticked items do not block the receipt — an incomplete application is
@@ -31,26 +35,22 @@
 // it was given.
 
 import { computed, ref, watch } from 'vue'
-import jsPDF from 'jspdf'
-import { useClerkNav, useClerkPreferences } from '@/planning-clerk/useClerkConsole'
+import { useClerkNav } from '@/planning-clerk/useClerkConsole'
 import { useClerkOverview } from '@/planning-clerk/useClerkOverview'
 import {
-  asLabel, formatDate, formatMoney, formatWhen,
+  asLabel, formatDate, formatMoney,
   plusWorkingDays, plusMonths, toDateTimeInput,
 } from '@/planning-clerk/console'
-import { createEntry, errorMessage, type Currency, type FeeKind } from '@/services/planningClerk'
+import { createEntry, errorMessage } from '@/services/planningClerk'
 import { determinationDeadline } from '@/statutory/periods'
-import { drawLetterhead } from '@/documents/letterheadPdf'
-import { COUNCIL } from '@/documents/council'
 import UiButton from '@/components/ui/UiButton.vue'
 import PermitDocumentsPanel from '@/components/workflow/PermitDocumentsPanel.vue'
 import {
   FileInput, Stamp, CheckCircle2, AlertTriangle, FolderOpen,
-  Search, Receipt as ReceiptIcon, Mail, Inbox, FileDown, XCircle,
+  Search, Receipt as ReceiptIcon, Mail, Inbox, XCircle, RefreshCw,
 } from 'lucide-vue-next'
 
 const nav = useClerkNav()
-const { prefs } = useClerkPreferences()
 const overview = useClerkOverview()
 
 /**
@@ -77,27 +77,28 @@ const CHECKLIST = [
 const checks = ref<Record<string, boolean>>(
   Object.fromEntries(CHECKLIST.map((c) => [c.key, false])))
 
-const FEE_KINDS: { value: FeeKind; label: string }[] = [
-  { value: 'application', label: 'Application fee' },
-  { value: 'plan_scrutiny', label: 'Plan scrutiny' },
-  { value: 'public_notice', label: 'Public notice / advertising' },
-  { value: 'other', label: 'Other' },
-]
-
 // ── The counter's own inputs ────────────────────────────────────────────
 
 const receivedAt = ref(toDateTimeInput(new Date().toISOString()))
-const receiptNo = ref('')
-const feeKind = ref<FeeKind>('application')
-const feeAmount = ref<number | ''>('')
-const feeCurrency = ref<Currency>(prefs.value.counterCurrency)
-const feeMethod = ref<'cash' | 'ecocash' | 'eft' | 'cheque' | 'card'>('cash')
-const feeReference = ref('')
 const letterNo = ref('')
 const recipient = ref('')
 const lodgedBy = ref('')
 
 const permit = computed(() => overview.file.value?.permit ?? null)
+
+// ── The fee: what the cash office (or an online payment) took ───────────
+// Read from the open file (migration 246). A cancelled receipt does not pay.
+const fees = computed(() => (overview.file.value?.cash_office_fees ?? []).filter((f) => f.state !== 'cancelled'))
+const applicationFee = computed(() => fees.value.find((f) => f.fee_kind === 'application') ?? null)
+const feeRef = (f: { receipt_no: string | null; reference: string | null }) => f.receipt_no || f.reference || '—'
+const checkingFee = ref(false)
+async function checkFee() {
+  if (!permit.value || checkingFee.value) return
+  checkingFee.value = true
+  try { await overview.loadFile(permit.value.id, true) } finally { checkingFee.value = false }
+}
+// The checklist's "Application fee paid" follows the record rather than a tick.
+watch(applicationFee, (f) => { checks.value.fee_paid = !!f }, { immediate: true })
 
 // Seed the addressee and the letter number from the file once it opens. The
 // clerk can change both; this only saves retyping what is already known.
@@ -121,10 +122,12 @@ const determinationDue = computed(() =>
 const missing = computed(() => CHECKLIST.filter((c) => !checks.value[c.key]))
 const missingAlways = computed(() => missing.value.filter((c) => 'always' in c && c.always))
 
+// The application fee must have been paid at the cash office (or online)
+// before the application is acknowledged, as it had to be receipted here
+// before. Nothing else on this desk is a gate.
 const canStamp = computed(() =>
   !!permit.value
-  && receiptNo.value.trim().length > 0
-  && Number(feeAmount.value) > 0
+  && !!applicationFee.value
   && letterNo.value.trim().length > 0
   && recipient.value.trim().length > 0
   && !stamping.value)
@@ -145,15 +148,17 @@ function checklistNote(): string {
 }
 
 async function stamp() {
-  if (!canStamp.value || !permit.value) return
+  if (!canStamp.value || !permit.value || !applicationFee.value) return
   stamping.value = true
   finished.value = false
 
   const permitId = permit.value.id
   const receivedIso = new Date(receivedAt.value).toISOString()
+  const fee = applicationFee.value
 
   steps.value = [
-    { key: 'receipt', label: 'Fee receipt', icon: ReceiptIcon, state: 'pending', detail: '' },
+    { key: 'fee', label: 'Application fee', icon: ReceiptIcon, state: 'done',
+      detail: `${feeRef(fee)} · ${formatMoney(Number(fee.amount), fee.currency)} · ${fee.source === 'counter' ? 'cash office' : 'paid online'}` },
     { key: 'post', label: 'Correspondence entry', icon: Inbox, state: 'pending', detail: '' },
     { key: 'ack', label: 'Acknowledgement letter', icon: Mail, state: 'pending', detail: '' },
   ]
@@ -162,37 +167,16 @@ async function stamp() {
     if (s) { s.state = state; s.detail = detail }
   }
 
-  // The money first, deliberately. If only one of the three lands it should
-  // be the one the applicant has a paper receipt for.
-  let receiptWritten = false
-  try {
-    await createEntry('receipts', {
-      receipt_no: receiptNo.value.trim(),
-      fee_kind: feeKind.value,
-      permit_application_id: permitId,
-      payer_name: lodgedBy.value.trim() || permit.value.applicant_name,
-      amount: Number(feeAmount.value),
-      currency: feeCurrency.value,
-      paid_at: receivedIso,
-      payment_method: feeMethod.value,
-      ...(feeReference.value.trim() ? { reference: feeReference.value.trim() } : {}),
-    })
-    receiptWritten = true
-    mark('receipt', 'done', `${receiptNo.value.trim()} · ${formatMoney(Number(feeAmount.value), feeCurrency.value)}`)
-  } catch (err) {
-    mark('receipt', 'failed', errorMessage(err, 'The receipt was not written.'))
-  }
-
   try {
     await createEntry('correspondence', {
       direction: 'in',
       logged_at: receivedIso,
       permit_application_id: permitId,
-      ref_no: permit.value.dev_register_no || permit.value.tpd_reference || receiptNo.value.trim(),
+      ref_no: permit.value.dev_register_no || permit.value.tpd_reference || feeRef(fee),
       party: lodgedBy.value.trim() || permit.value.applicant_name,
       subject: `TPD application lodged — stand ${permit.value.stand_number || '—'}, ${permit.value.suburb_ward || '—'}`,
       channel: 'in_person',
-      ...(receiptWritten ? { attached_doc_ref: `Receipt ${receiptNo.value.trim()}` } : {}),
+      attached_doc_ref: `Receipt ${feeRef(fee)}`,
       notes: checklistNote(),
     })
     mark('post', 'done', 'Logged as received in person')
@@ -219,71 +203,11 @@ async function stamp() {
   overview.invalidate()
   stamping.value = false
   finished.value = true
-
-  // The applicant's paper receipt, printed only if the money actually landed
-  // in the register. A receipt for a payment the council has no record of is
-  // the one document this screen must never produce.
-  if (receiptWritten) printReceipt(receivedIso)
-}
-
-function printReceipt(receivedIso: string) {
-  if (!permit.value) return
-  const doc = new jsPDF()
-  let y = drawLetterhead(doc, { department: 'Department of Physical Planning' })
-
-  y += 6
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.text('OFFICIAL RECEIPT', 105, y, { align: 'center' })
-  y += 10
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  const lines: [string, string][] = [
-    ['Receipt number', receiptNo.value.trim()],
-    ['Date', formatWhen(receivedIso)],
-    ['Received from', lodgedBy.value.trim() || permit.value.applicant_name],
-    ['Application', permit.value.tpd_reference || permit.value.dev_register_no || '—'],
-    ['Stand', `${permit.value.stand_number || '—'}, ${permit.value.suburb_ward || '—'}`],
-    ['For', asLabel(feeKind.value)],
-    ['Amount', formatMoney(Number(feeAmount.value), feeCurrency.value)],
-    ['Method', asLabel(feeMethod.value)],
-    ...(feeReference.value.trim()
-      ? [['Reference', feeReference.value.trim()] as [string, string]] : []),
-  ]
-  for (const [label, value] of lines) {
-    doc.setFont('helvetica', 'bold')
-    doc.text(`${label}:`, 20, y)
-    doc.setFont('helvetica', 'normal')
-    doc.text(String(value), 70, y)
-    y += 6
-  }
-
-  y += 6
-  doc.setFontSize(8)
-  // The applicant's own copy of the deadline. A receipt that does not say
-  // when the council must reply is a receipt they have to ring up about.
-  const wrapped = doc.splitTextToSize(
-    `The council will acknowledge this application in writing by ${formatDate(dueBy.value)}. `
-    + `It must then be determined within three months of that acknowledgement (by ${formatDate(determinationDue.value)} if acknowledged today); `
-    + `if it is not, it is deemed refused and you may appeal to the Administrative Court within one month. `
-    + `Quote the receipt number in any enquiry.`, 170)
-  doc.text(wrapped, 20, y)
-  y += wrapped.length * 4 + 10
-
-  doc.setFontSize(8)
-  doc.text('Received by ____________________________', 20, y)
-  doc.text(`for ${COUNCIL.name}`, 120, y)
-
-  doc.save(`${receiptNo.value.trim().replace(/[^\w.-]+/g, '-')}.pdf`)
 }
 
 function startAnother() {
   finished.value = false
   steps.value = []
-  receiptNo.value = ''
-  feeAmount.value = ''
-  feeReference.value = ''
   letterNo.value = ''
   recipient.value = ''
   lodgedBy.value = ''
@@ -291,6 +215,7 @@ function startAnother() {
   checks.value = Object.fromEntries(CHECKLIST.map((c) => [c.key, false]))
   nav.openFile(null)
 }
+
 
 const allDone = computed(() => steps.value.length > 0 && steps.value.every((s) => s.state === 'done'))
 const anyFailed = computed(() => steps.value.some((s) => s.state === 'failed'))
@@ -304,8 +229,8 @@ const anyFailed = computed(() => steps.value.some((s) => s.state === 'failed'))
         <h2 class="ins-title">Application receipt</h2>
         <p class="ins-lede">
           Take a TPD over the counter in one pass: what was in the envelope,
-          what was paid, and the acknowledgement that starts both statutory
-          clocks. Printed receipt at the end.
+          whether the fee is paid at the cash office, and the acknowledgement
+          that starts both statutory clocks.
         </p>
       </div>
     </header>
@@ -447,52 +372,39 @@ const anyFailed = computed(() => steps.value.some((s) => s.state === 'failed'))
 
       <section class="ins-card">
         <header class="ins-card-head">
-          <h3><ReceiptIcon :size="15" aria-hidden="true" /> Fee taken</h3>
+          <h3><ReceiptIcon :size="15" aria-hidden="true" /> Fee</h3>
+          <UiButton size="sm" variant="ghost" :loading="checkingFee" @click="checkFee">
+            <template #icon><RefreshCw :size="14" /></template>
+            Check again
+          </UiButton>
         </header>
-        <div class="ins-card-body">
+        <div class="ins-card-body" data-testid="clk-rec-fee">
+          <p v-if="applicationFee" class="ins-banner t-positive clk-rec-fee">
+            <CheckCircle2 :size="15" aria-hidden="true" />
+            <span>
+              <strong>Application fee paid</strong>
+              {{ formatMoney(Number(applicationFee.amount), applicationFee.currency) }}
+              {{ applicationFee.source === 'counter' ? 'at the cash office' : 'online' }},
+              receipt <span class="ins-mono">{{ feeRef(applicationFee) }}</span>, {{ formatDate(applicationFee.received_on) }}.
+            </span>
+          </p>
+          <p v-else class="ins-banner t-warning clk-rec-fee">
+            <AlertTriangle :size="15" aria-hidden="true" />
+            <span>
+              <strong>The application fee has not been paid.</strong>
+              Send the applicant to the cash office with the reference
+              <span class="ins-mono">{{ permit.tpd_reference || permit.dev_register_no || permit.stand_number || '—' }}</span>.
+              The cashier names this application on the receipt, and it shows here at once:
+              press <em>Check again</em> when they are back.
+            </span>
+          </p>
+          <ul v-if="fees.length > (applicationFee ? 1 : 0)" class="clk-rec-otherfees">
+            <li v-for="f in fees.filter((x) => x !== applicationFee)" :key="f.id">
+              {{ asLabel(f.fee_kind) }}: {{ formatMoney(Number(f.amount), f.currency) }}, receipt
+              <span class="ins-mono">{{ feeRef(f) }}</span>
+            </li>
+          </ul>
           <div class="ins-form">
-            <div class="ins-field">
-              <label class="ins-label" for="clk-rec-no">Receipt number *</label>
-              <input id="clk-rec-no" v-model="receiptNo" class="ins-input" required
-                     placeholder="From the receipt book" />
-            </div>
-            <div class="ins-field">
-              <label class="ins-label" for="clk-rec-kind">Fee</label>
-              <select id="clk-rec-kind" v-model="feeKind" class="ins-input">
-                <option v-for="k in FEE_KINDS" :key="k.value" :value="k.value">{{ k.label }}</option>
-              </select>
-            </div>
-            <div class="ins-field">
-              <label class="ins-label" for="clk-rec-amt">Amount *</label>
-              <input id="clk-rec-amt" v-model="feeAmount" class="ins-input" type="number"
-                     step="0.01" min="0" required />
-            </div>
-            <div class="ins-field">
-              <label class="ins-label" for="clk-rec-ccy">Currency</label>
-              <select id="clk-rec-ccy" v-model="feeCurrency" class="ins-input">
-                <option value="USD">USD</option>
-                <option value="ZWG">ZWG</option>
-              </select>
-            </div>
-            <div class="ins-field">
-              <label class="ins-label" for="clk-rec-method">Method</label>
-              <select id="clk-rec-method" v-model="feeMethod" class="ins-input">
-                <option value="cash">Cash</option>
-                <option value="ecocash">EcoCash</option>
-                <option value="eft">Bank transfer (EFT)</option>
-                <option value="cheque">Cheque</option>
-                <option value="card">Card</option>
-              </select>
-            </div>
-            <div class="ins-field">
-              <label class="ins-label" for="clk-rec-ref">Transaction reference</label>
-              <input id="clk-rec-ref" v-model="feeReference" class="ins-input"
-                     :required="['eft', 'card'].includes(feeMethod)" />
-              <p class="ins-hint">
-                Required for a bank transfer or a card — it is what the bank
-                statement is reconciled against.
-              </p>
-            </div>
             <div class="ins-field">
               <label class="ins-label" for="clk-rec-lodged">Lodged by</label>
               <input id="clk-rec-lodged" v-model="lodgedBy" class="ins-input" />
@@ -546,23 +458,21 @@ const anyFailed = computed(() => steps.value.some((s) => s.state === 'failed'))
 
       <div class="clk-rec-commit">
         <p v-if="!canStamp" class="ins-hint">
-          A receipt number, an amount, a letter number and an addressee are
-          needed before this can be stamped.
+          {{ applicationFee ? 'A letter number and an addressee are needed before this can be stamped.'
+            : 'The application fee must be paid at the cash office before the application is acknowledged.' }}
         </p>
         <UiButton variant="primary" :disabled="!canStamp" :loading="stamping" @click="stamp">
           <template #icon><Stamp :size="15" /></template>
           Stamp receipt &amp; draft acknowledgement
         </UiButton>
-        <p class="ins-hint">
-          <FileDown :size="12" aria-hidden="true" />
-          Prints the applicant’s receipt once the payment is in the register.
-        </p>
       </div>
     </template>
   </div>
 </template>
 
 <style scoped>
+.clk-rec-fee { margin: 0 0 var(--ent-s3); }
+.clk-rec-otherfees { margin: 0 0 var(--ent-s3); padding-left: var(--ent-s4); color: var(--ent-text-2); font-size: var(--ent-fs-sm); }
 .clk-rec-none, .clk-rec-done { display:flex; flex-direction:column;
   align-items:center; gap:var(--ent-s4); padding:var(--ent-s6) var(--ent-s4);
   text-align:center; }

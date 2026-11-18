@@ -451,8 +451,43 @@ export interface ClerkFile {
     updated_at: string
   }
   registers: { [K in RegisterKey]: RegisterRowMap[K][] }
+  /** The fees the cash office (or an online payment) took for this application (migration 246). */
+  cash_office_fees?: CashOfficeFee[]
 }
 
 export async function getFile(permitId: string): Promise<ClerkFile> {
   return data<ClerkFile>(await api.get(`/planning-clerk/file/${permitId}`))
+}
+
+/**
+ * A planning fee as the clerk reads it (migration 246): taken by the cashier at the cash office, or
+ * paid online. Read only — the cashier takes the money and Finance posts it.
+ */
+export interface CashOfficeFee {
+  id: string
+  source: 'counter' | 'online'
+  fee_kind: string
+  permit_application_id: string | null
+  tpd_reference: string | null
+  dev_register_no: string | null
+  stand_number: string | null
+  applicant_name: string | null
+  payer_name: string | null
+  currency: string
+  amount: string
+  received_on: string
+  reference: string | null
+  receipt_no: string | null
+  method: string | null
+  driver: string | null
+  voucher_no: string | null
+  state: 'awaiting_voucher' | 'awaiting_posting' | 'posted' | 'cancelled'
+  created_at: string
+}
+
+export async function listCashOfficeFees(query: { q?: string; source?: 'counter' | 'online'; limit?: number; offset?: number } = {}):
+Promise<{ rows: CashOfficeFee[]; total: number }> {
+  const r = await api.get('/planning-clerk/cash-office-fees', { params: query })
+  const { data: rows, meta } = paged<CashOfficeFee[], { total: number }>(r)
+  return { rows, total: meta.total ?? rows.length }
 }

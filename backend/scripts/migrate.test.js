@@ -214,6 +214,9 @@ describe('migration plan', () => {
       '241_statutory_checks_and_objection_steps.sql',
       '242_finance_ledger_reporting.sql',
       '243_finance_payroll_journal.sql',
+      '244_finance_property_gis.sql',
+      '245_ledger_entry_legacy_nullability.sql',
+      '246_planning_fees_in_the_ledger.sql',
     ])
 
     for (const filename of MIGRATIONS) {

@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
       k.section('roll', 'rev-roll', 'rates', 'Valuation Roll', 'The rateable value of each property, as entered and as it stands for billing. A value changes the next bill, never one already issued.', Landmark, { props: { initialTab: 'roll' } }),
       k.section('rates', 'rev-rates', 'rates', 'Rates & Levies', 'The rate in the dollar for each property category, approved by council resolution.', Percent, { props: { initialTab: 'tariffs' } }),
       k.page('service-charges', 'rev-charges', 'Service Charges', () => import('./pages/ServiceCharges.vue')),
+      k.page('planning-fees', 'rev-planning-fees', 'Planning Fees', () => import('./pages/PlanningFees.vue')),
       k.section('reports', 'rev-reports', 'reports', 'Revenue Reports', 'Revenue and arrears reports, ready to export.', ChartColumn),
       k.notBuilt('adjustments', 'rev-adjust', 'Apply Adjustment', 'Credit notes and write-offs on a rates account.', SlidersHorizontal,
         'A rates adjustment is a credit note or a write-off voucher in the ledger. The ledger can hold both, but there is no screen yet that raises one from a rates account; until there is, the accountant raises it as a voucher against the account and posts it.',

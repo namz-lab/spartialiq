@@ -14,8 +14,8 @@ import api from '../../../services/api'
 import type { Currency } from '../models/types'
 import type {
   BankDeposit, CashAssignment, CashDesk, CashDrawer, CashMethod, CashReceipt, CashierDashboard, CashierSession,
-  CashierSessionDetail, PrintableReceipt, QueueTicket, RatesCounterReceiptBody, SessionEvent, SessionStatus,
-  SetupAccounts, StaffOption, SundryReceiptBody,
+  CashierSessionDetail, PaymentChannel, PlanningApplicationHit, PlanningFeeKind, PlanningReceiptBody, PrintableReceipt,
+  QueueTicket, RatesCounterReceiptBody, SessionEvent, SessionStatus, SetupAccounts, StaffOption, SundryReceiptBody,
 } from '../models/cashTypes'
 
 const unwrap = <T>(r: { data?: { data?: T } | T }): T => {
@@ -55,15 +55,29 @@ export const cashApi = {
   async createIncomeCode(body: {
     code: string; name: string; ledger_account_id: string; department_id?: string | null
     pricing: 'fixed' | 'variable'; unit_amount_usd?: string | null; unit_amount_zwg?: string | null
+    planning_fee_kind?: PlanningFeeKind | null
   }): Promise<unknown> {
     return unwrap(await api.post('/finance/cash/income-codes', body))
   },
 
   async updateIncomeCode(id: string, body: {
     name?: string; pricing?: 'fixed' | 'variable'; unit_amount_usd?: string | null
-    unit_amount_zwg?: string | null; status?: 'active' | 'inactive'
+    unit_amount_zwg?: string | null; status?: 'active' | 'inactive'; planning_fee_kind?: PlanningFeeKind | null
   }): Promise<unknown> {
     return unwrap(await api.patch(`/finance/cash/income-codes/${id}`, body))
+  },
+
+  /** Where each online provider settles (migration 246). Seeded empty: decision D22. */
+  async paymentChannels(): Promise<{ channels: PaymentChannel[]; bank_accounts: { id: string; code: string; name: string }[]; drivers: string[] }> {
+    return unwrap(await api.get('/finance/cash/payment-channels'))
+  },
+
+  async createPaymentChannel(body: { driver: string; name: string; bank_account_id: string; notes?: string }): Promise<unknown> {
+    return unwrap(await api.post('/finance/cash/payment-channels', body))
+  },
+
+  async updatePaymentChannel(id: string, body: { name?: string; bank_account_id?: string; status?: 'active' | 'inactive'; notes?: string }): Promise<unknown> {
+    return unwrap(await api.patch(`/finance/cash/payment-channels/${id}`, body))
   },
 
   // ── Sessions ────────────────────────────────────────────────────────────────────────────────
@@ -111,6 +125,15 @@ export const cashApi = {
 
   async issueReceipt(body: SundryReceiptBody): Promise<{ receipt: CashReceipt }> {
     return unwrap(await api.post('/finance/cash/receipts', body))
+  },
+
+  /** A planning fee: the application is named, and an application fee marks it paid (migration 246). */
+  async issuePlanningReceipt(body: PlanningReceiptBody): Promise<{ receipt: CashReceipt; application: PlanningApplicationHit | null }> {
+    return unwrap(await api.post('/finance/cash/receipts/planning', body))
+  },
+
+  async planningApplications(q: string): Promise<{ applications: PlanningApplicationHit[] }> {
+    return unwrap(await api.get('/finance/cash/planning-applications', { params: { q } }))
   },
 
   async issueRatesReceipt(body: RatesCounterReceiptBody): Promise<{ receipt: CashReceipt }> {

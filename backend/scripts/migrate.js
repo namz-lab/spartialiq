@@ -411,6 +411,8 @@ const MIGRATIONS = [
   '244_finance_property_gis.sql',
   // Databases that started as the land-rates ledger keep legacy NOT NULL columns on finance.ledger_entry that no double-entry write populates; drop them so restored dumps can post vouchers. Rollback: migrations/rollback/245_ledger_entry_legacy_nullability.down.sql.
   '245_ledger_entry_legacy_nullability.sql',
+  // Planning fees in the ledger: an income code can be a planning fee; the cashier receipts it naming the application (which marks the fee paid); online fees are noted at once and vouchered by a revenue officer; finance.v_planning_fee. Rollback: migrations/rollback/246_planning_fees_in_the_ledger.down.sql.
+  '246_planning_fees_in_the_ledger.sql',
 ]
 
 function createPool(env = process.env) {

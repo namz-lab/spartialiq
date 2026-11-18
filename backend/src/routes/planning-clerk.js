@@ -144,6 +144,10 @@ const REGISTERS = {
   receipts: {
     table: 'clerk_fee_receipt',
     label: 'Fee receipt register',
+    // Migration 246: planning fees are receipted by the cashier at the cash office, naming the
+    // application, so they reach the ledger and are counted and banked with everything else. This
+    // register is kept as the history of what was receipted here before; it takes no new entries.
+    closed: 'Planning fees are now receipted at the cash office, which names the application and marks the fee paid. This register keeps the receipts written here before, and takes no new ones.',
     dateColumn: 'paid_at',
     actorIdColumn: 'issued_by',
     actorNameColumn: 'issued_by_name',
@@ -325,6 +329,18 @@ const REGISTERS = {
 }
 
 const REGISTER_KEYS = Object.keys(REGISTERS)
+
+/**
+ * The planning fees the council received at the cash office or online (migration 246), as the clerk
+ * reads them: which application, how much, the receipt or payment reference, and whether it has
+ * reached the ledger. Read only: the cashier takes the money, Finance posts it.
+ */
+const CASH_OFFICE_FEE_SELECT = `
+  SELECT f.id, f.source, f.fee_kind, f.permit_application_id, f.tpd_reference, f.dev_register_no,
+         f.stand_number, f.applicant_name, f.payer_name, f.currency, f.amount::text AS amount,
+         f.received_on::text AS received_on, f.reference, f.receipt_no, f.method, f.driver,
+         f.voucher_no, f.state, f.created_at
+    FROM finance.v_planning_fee f`
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -508,6 +524,13 @@ async function planningClerkRoutes(fastify) {
     return register
   }
 
+  /** A register kept as history only (its `closed` says where the work is done now): answer 409 and return true. */
+  function refuseClosed(register, reply) {
+    if (!register.closed) return false
+    reply.code(409).send({ success: false, error: 'register_closed', message: register.closed })
+    return true
+  }
+
   /**
    * The WHERE clause every list and export shares.
    *
@@ -595,6 +618,15 @@ async function planningClerkRoutes(fastify) {
             count(*) FILTER (WHERE returned_at IS NULL AND due_back_on < current_date) AS files_overdue
           FROM spatial_planning.clerk_file_movement WHERE voided_at IS NULL
         ),
+        -- Planning fees taken over a counter: the cash office's receipts (migration 246), and the
+        -- receipts written in this register before it closed. Per currency, never summed across.
+        counter_fees AS (
+          SELECT amount, currency::text AS currency, received_on::timestamptz AS paid_at
+            FROM finance.v_planning_fee WHERE source = 'counter' AND state <> 'cancelled'
+          UNION ALL
+          SELECT amount, currency, paid_at
+            FROM spatial_planning.clerk_fee_receipt WHERE voided_at IS NULL
+        ),
         fees AS (
           SELECT
             COALESCE(sum(amount) FILTER (WHERE currency = 'USD'
@@ -606,7 +638,7 @@ async function planningClerkRoutes(fastify) {
             COALESCE(sum(amount) FILTER (WHERE currency = 'ZWG'
               AND paid_at >= date_trunc('month', now())), 0)                   AS month_zwg,
             count(*) FILTER (WHERE paid_at >= date_trunc('day', now()))        AS today_count
-          FROM spatial_planning.clerk_fee_receipt WHERE voided_at IS NULL
+          FROM counter_fees
         ),
         corr AS (
           SELECT
@@ -795,22 +827,64 @@ async function planningClerkRoutes(fastify) {
         return reply.code(404).send({ success: false, error: 'not_found' })
       }
 
-      const entries = await Promise.all(REGISTER_KEYS.map(async (key) => {
-        const reg = REGISTERS[key]
-        const { rows } = await fastify.pg.query(
-          `SELECT r.* FROM spatial_planning.${reg.table} r
-           WHERE r.permit_application_id = $1
-           ORDER BY r.${reg.dateColumn} DESC LIMIT 200`, [permitId])
-        return [key, rows]
-      }))
+      const [entries, cashOffice] = await Promise.all([
+        Promise.all(REGISTER_KEYS.map(async (key) => {
+          const reg = REGISTERS[key]
+          const { rows } = await fastify.pg.query(
+            `SELECT r.* FROM spatial_planning.${reg.table} r
+             WHERE r.permit_application_id = $1
+             ORDER BY r.${reg.dateColumn} DESC LIMIT 200`, [permitId])
+          return [key, rows]
+        })),
+        // The fees the cash office (or an online payment) took for this application (migration 246).
+        fastify.pg.query(`${CASH_OFFICE_FEE_SELECT} WHERE f.permit_application_id = $1
+                          ORDER BY f.received_on DESC, f.created_at DESC LIMIT 200`, [permitId]),
+      ])
 
       return reply.send({
         success: true,
-        data: { permit: permit.rows[0], registers: Object.fromEntries(entries) },
+        data: {
+          permit: permit.rows[0],
+          registers: Object.fromEntries(entries),
+          cash_office_fees: cashOffice.rows,
+        },
       })
     } catch (err) {
       request.log.error({ err }, 'planning clerk file read failed')
       return reply.code(500).send({ success: false, error: 'file_failed' })
+    }
+  })
+
+  // ═════════════════════════════════════════════════════════════════════
+  // FEES RECEIVED BY THE CASH OFFICE AND ONLINE (migration 246) — read only
+  // ═════════════════════════════════════════════════════════════════════
+  fastify.get('/planning-clerk/cash-office-fees', canRead, async (request, reply) => {
+    const { limit, offset } = pageArgs(request.query)
+    const params = []
+    const where = []
+    const q = typeof request.query.q === 'string' ? request.query.q.trim().slice(0, 80) : ''
+    if (q) {
+      params.push(`%${q.replace(/[%_\\]/g, '\\$&')}%`)
+      const n = `$${params.length}`
+      where.push(`(f.tpd_reference ILIKE ${n} OR f.dev_register_no ILIKE ${n} OR f.stand_number ILIKE ${n}
+                   OR f.payer_name ILIKE ${n} OR f.applicant_name ILIKE ${n} OR f.reference ILIKE ${n})`)
+    }
+    if (['counter', 'online'].includes(request.query.source)) {
+      params.push(request.query.source)
+      where.push(`f.source = $${params.length}`)
+    }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    try {
+      const [{ rows }, { rows: total }] = await Promise.all([
+        fastify.pg.query(
+          `${CASH_OFFICE_FEE_SELECT} ${clause} ORDER BY f.received_on DESC, f.created_at DESC
+           LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, limit, offset]),
+        fastify.pg.query(`SELECT count(*)::int AS n FROM finance.v_planning_fee f ${clause}`, params),
+      ])
+      return reply.send({ success: true, data: rows, meta: { total: total[0].n, limit, offset } })
+    } catch (err) {
+      request.log.error({ err }, 'planning clerk cash office fees failed')
+      return reply.code(500).send({ success: false, error: 'list_failed' })
     }
   })
 
@@ -826,6 +900,7 @@ async function planningClerkRoutes(fastify) {
       label: REGISTERS[key].label,
       date_column: REGISTERS[key].dateColumn,
       searchable: REGISTERS[key].search,
+      closed: REGISTERS[key].closed || null,
       fields: Object.fromEntries(Object.entries(REGISTERS[key].fields).map(([n, s]) => [
         n, { required: !!s.req, fixed: !!s.fixed, nullable: !!s.nullable },
       ])),
@@ -890,6 +965,7 @@ async function planningClerkRoutes(fastify) {
   fastify.post('/planning-clerk/registers/:register', canWrite, async (request, reply) => {
     const register = pick(request, reply)
     if (!register) return undefined
+    if (refuseClosed(register, reply)) return undefined
 
     const bound = bind(register, request.body, 'create')
     if (bound.errors) {
@@ -916,6 +992,7 @@ async function planningClerkRoutes(fastify) {
   fastify.patch('/planning-clerk/registers/:register/:id', canWrite, async (request, reply) => {
     const register = pick(request, reply)
     if (!register) return undefined
+    if (refuseClosed(register, reply)) return undefined
     const { id } = request.params
     if (!isUuid(id)) return reply.code(400).send({ success: false, error: 'bad_id' })
 

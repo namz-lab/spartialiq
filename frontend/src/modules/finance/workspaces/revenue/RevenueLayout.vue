@@ -3,7 +3,7 @@
 import { computed } from 'vue'
 import {
   House, FileText, HandCoins, Users, Clock, Percent, Wrench, ChartColumn, Bell, FileStack, ListChecks, ScrollText,
-  Landmark, SlidersHorizontal, TrendingUp, BadgeCheck, MapPinned } from 'lucide-vue-next'
+  Landmark, SlidersHorizontal, TrendingUp, BadgeCheck, MapPinned, Building2 } from 'lucide-vue-next'
 import PortalLayout from '../shared/PortalLayout.vue'
 import type { PortalNavItem } from '../shared/PortalShell.vue'
 import { usePortalInbox } from '../shared/usePortal'
@@ -19,6 +19,7 @@ const nav = computed<PortalNavItem[]>(() => [
   { group: 'Billing', name: 'rev-roll', label: 'Valuation Roll', icon: Landmark },
   { group: 'Billing', name: 'rev-rates', label: 'Rates & Levies', icon: Percent },
   { group: 'Billing', name: 'rev-charges', label: 'Service Charges', icon: Wrench },
+  { group: 'Billing', name: 'rev-planning-fees', label: 'Planning Fees', icon: Building2 },
   { group: 'Ratepayers', name: 'rev-accounts', label: 'Customer Accounts', icon: Users },
   { group: 'Ratepayers', name: 'rev-statement', label: 'Statements', icon: ScrollText },
   { group: 'Ratepayers', name: 'rev-collections', label: 'Collections', icon: HandCoins },
