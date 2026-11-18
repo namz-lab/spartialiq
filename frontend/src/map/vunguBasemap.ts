@@ -787,8 +787,14 @@ const EXACT_SOURCE = 'exact-parcel'
 const EXACT_FILL = 'exact-parcel-fill'
 const EXACT_LINE = 'exact-parcel-line'
 
-/** Draw the full polygon returned by the database, not the tile-clipped outline. */
-export function highlightExactPolygon(map: any, feature: { type?: string; geometry?: { type?: string } } | null): void {
+/**
+ * Draw the full polygon returned by the database, not the tile-clipped outline. `feature` is a GeoJSON Feature: only its
+ * geometry type is read here, and the whole feature (properties included, as GeoJSON requires) goes to the map.
+ */
+export function highlightExactPolygon(
+  map: any,
+  feature: { type?: string; geometry?: { type?: string }; properties?: Record<string, unknown> | null } | null,
+): void {
   if (!map?.getSource || !map?.addSource) return
   if (!map.getSource(EXACT_SOURCE)) {
     map.addSource(EXACT_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
