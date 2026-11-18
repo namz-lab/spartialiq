@@ -35,6 +35,10 @@ const VALID_PURPOSES = new Set([
   'application_fee', 'inspection_fee', 'permit_fee',
   'occupation_certificate', 'other',
 ])
+/** The purposes that are planning fees, noted for the ledger when paid (migration 246). */
+const PLANNING_FEE_PURPOSES = new Set([
+  'application_fee', 'inspection_fee', 'permit_fee', 'occupation_certificate', 'property_search',
+])
 const VALID_RELATED_KINDS = new Set([
   'inspection_booking', 'development_application', 'permit',
 ])
@@ -556,6 +560,21 @@ async function applyPaid(fastify, row, actorUserId) {
           },
           payload: { permitId: permit.id, paymentId: updated.id },
         })
+      }
+    }
+
+    // A planning fee paid online is noted for the ledger in the same transaction (migration 246): it
+    // waits as "awaiting a voucher" until a revenue officer prepares it. Behind a savepoint, because
+    // the provider's confirmation must never fail on the books' account: a fee not noted here is
+    // swept up the next time vouchers are prepared.
+    if (PLANNING_FEE_PURPOSES.has(updated.purpose)) {
+      await client.query('SAVEPOINT planning_fee')
+      try {
+        await client.query('SELECT finance.note_online_planning_fee($1)', [updated.id])
+        await client.query('RELEASE SAVEPOINT planning_fee')
+      } catch (err) {
+        await client.query('ROLLBACK TO SAVEPOINT planning_fee')
+        fastify.log.warn({ err, paymentId: updated.id }, '[payments] planning fee not noted for the ledger; it will be swept up when vouchers are prepared')
       }
     }
 

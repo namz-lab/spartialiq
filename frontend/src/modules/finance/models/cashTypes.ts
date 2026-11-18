@@ -53,6 +53,53 @@ export interface IncomeCode {
   unit_amount_usd: string | null
   unit_amount_zwg: string | null
   status: 'active' | 'inactive'
+  /** Migration 246: set when this income is a planning fee, so its receipt names the application. */
+  planning_fee_kind?: PlanningFeeKind | null
+}
+
+/** The kinds of planning fee (migration 246), the planning clerk register's own. */
+export type PlanningFeeKind =
+  | 'application' | 'plan_scrutiny' | 'public_notice' | 'inspection' | 'occupation'
+  | 'appeal' | 'search' | 'copies' | 'other'
+
+export const PLANNING_FEE_KINDS: { value: PlanningFeeKind; label: string }[] = [
+  { value: 'application', label: 'Application fee' },
+  { value: 'plan_scrutiny', label: 'Plan scrutiny' },
+  { value: 'public_notice', label: 'Public notice / advertising' },
+  { value: 'inspection', label: 'Inspection' },
+  { value: 'occupation', label: 'Occupation certificate' },
+  { value: 'appeal', label: 'Appeal' },
+  { value: 'search', label: 'Planning search' },
+  { value: 'copies', label: 'Certified copies' },
+  { value: 'other', label: 'Other planning fee' },
+]
+
+export const planningFeeLabel = (kind: string | null | undefined): string =>
+  PLANNING_FEE_KINDS.find((k) => k.value === kind)?.label ?? (kind ? kind.replace(/_/g, ' ') : '')
+
+/** A planning application as the cashier picks it (GET /finance/cash/planning-applications). */
+export interface PlanningApplicationHit {
+  id: string
+  tpd_reference: string | null
+  dev_register_no: string | null
+  stand_number: string | null
+  applicant_name: string | null
+  development_type: string | null
+  status: string
+  fee_paid: boolean
+  fees_received: number
+}
+
+/** An online provider and the bank account it settles into (migration 246, decision D22). */
+export interface PaymentChannel {
+  id: string
+  driver: string
+  name: string
+  status: 'active' | 'inactive'
+  notes: string | null
+  bank_account_id: string
+  bank_account_code: string
+  bank_account_name: string
 }
 
 export interface CashAccountOption { id: string; code: string; name: string }
@@ -376,6 +423,11 @@ export interface SundryReceiptBody {
   deposit_account_id?: string
   narration?: string
   lines: ReceiptLineBody[]
+}
+
+/** A planning fee at the counter: the same receipt, every line a planning fee, naming the application. */
+export interface PlanningReceiptBody extends SundryReceiptBody {
+  permit_application_id: string
 }
 
 export interface RatesCounterReceiptBody {

@@ -42,6 +42,11 @@ const isoDate = { type: 'string', format: 'date' }
 const currency = { type: 'string', enum: ['USD', 'ZWG'] }
 const money = { anyOf: [{ type: 'string', maxLength: 32 }, { type: 'number' }] }
 const METHODS = ['cash', 'cheque', 'mobile_money', 'card', 'bank_transfer']
+/** The kinds of planning fee (migration 246), the clerk register's own (128). */
+const PLANNING_FEE_KINDS = ['application', 'plan_scrutiny', 'public_notice', 'inspection', 'occupation',
+  'appeal', 'search', 'copies', 'other']
+/** public.payments.driver (064): the online providers a payment channel names. */
+const PAYMENT_DRIVERS = ['manual', 'paynow', 'stripe', 'ecocash', 'onemoney']
 const SESSION_STATUSES = ['open', 'suspended', 'abandoned', 'closed', 'verified']
 /** The states that still hold a drawer (migration 208): it is freed by a count, never by a status. */
 const HOLDING = "('open', 'suspended', 'abandoned')"
@@ -126,6 +131,8 @@ const DUPLICATES = {
   uq_cashier_session_open_cashier: 'You already have a session open. Cash it up before opening another.',
   uq_cashier_session_open_point: 'That cash point already has a session open. One drawer has one cashier at a time.',
   uq_cash_point_assignment_live: 'That cashier is already assigned to this cash point.',
+  uq_income_code_planning_fee_kind: 'Another income code in use is already that planning fee. Take that one out of use first: an online fee must know which account it credits.',
+  uq_payment_channel_driver: 'A bank account is already set for that provider. Change that one instead.',
 }
 
 /**
@@ -205,6 +212,13 @@ function cashRefusal(err) {
   }
   if (/is not inside financial year/.test(message)) {
     return { status: 400, error: 'period_invalid', message }
+  }
+  // Migration 246: a planning fee receipt names a real application and carries planning fees only.
+  if (/planning application is not in this council's records/.test(message)) {
+    return { status: 404, error: 'application_not_found', message: 'That planning application is not in this council\'s records.' }
+  }
+  if (/a planning fee receipt carries planning fees only/.test(message)) {
+    return { status: 400, error: 'not_a_planning_fee', message }
   }
   const fromRates = ratesRefusal(err)
   if (fromRates && fromRates.error !== 'unknown_reference' && fromRates.error !== 'refused') return fromRates
@@ -389,7 +403,7 @@ async function financeCashRoutes(fastify) {
             WHERE cp.deleted_at IS NULL ORDER BY cp.code`, [request.user.id]),
         pg.query(
           `SELECT i.id, i.code, i.name, i.pricing, i.unit_amount_usd::text AS unit_amount_usd,
-                  i.unit_amount_zwg::text AS unit_amount_zwg, i.status
+                  i.unit_amount_zwg::text AS unit_amount_zwg, i.status, i.planning_fee_kind
              FROM finance.income_code i WHERE i.deleted_at IS NULL ORDER BY i.name`),
         pg.query(
           `SELECT id, code, name FROM finance.ledger_account
@@ -569,6 +583,8 @@ async function financeCashRoutes(fastify) {
     unit_amount_zwg: { anyOf: [money, { type: 'null' }] },
     status: { type: 'string', enum: ['active', 'inactive'] },
     notes: { type: 'string', maxLength: 500 },
+    // Migration 246: this income is a planning fee of this kind, so its receipt names the application.
+    planning_fee_kind: { anyOf: [{ type: 'string', enum: PLANNING_FEE_KINDS }, { type: 'null' }] },
   }
 
   /** A charge as text for SQL, `null` for "not chargeable in this currency", or an error. */
@@ -594,13 +610,15 @@ async function financeCashRoutes(fastify) {
     try {
       const { rows } = await pg.query(
         `INSERT INTO finance.income_code
-           (code, name, ledger_account_id, department_id, pricing, unit_amount_usd, unit_amount_zwg, notes, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6::numeric,$7::numeric,$8,$9) RETURNING id, code, name`,
+           (code, name, ledger_account_id, department_id, pricing, unit_amount_usd, unit_amount_zwg, notes,
+            planning_fee_kind, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6::numeric,$7::numeric,$8,$9,$10) RETURNING id, code, name, planning_fee_kind`,
         [normaliseCode(b.code), b.name.trim(), b.ledger_account_id, b.department_id || null,
-          b.pricing || 'variable', usd.value, zwg.value, b.notes || null, request.user.id])
+          b.pricing || 'variable', usd.value, zwg.value, b.notes || null, b.planning_fee_kind || null, request.user.id])
       request.auditDetails = {
         action: 'income_code_created', income_code_id: rows[0].id, code: rows[0].code,
         pricing: b.pricing || 'variable', unit_amount_usd: usd.value, unit_amount_zwg: zwg.value,
+        planning_fee_kind: rows[0].planning_fee_kind,
       }
       return ok(reply, { income_code: rows[0] }, 201)
     } catch (err) {
@@ -622,7 +640,8 @@ async function financeCashRoutes(fastify) {
     if (!usd.ok || !zwg.ok) return fail(reply, 400, 'amount_unreadable', 'A charge is an amount greater than nil.')
     try {
       const { rows: before } = await pg.query(
-        `SELECT pricing, unit_amount_usd::text AS unit_amount_usd, unit_amount_zwg::text AS unit_amount_zwg
+        `SELECT pricing, unit_amount_usd::text AS unit_amount_usd, unit_amount_zwg::text AS unit_amount_zwg,
+                planning_fee_kind
            FROM finance.income_code WHERE id = $1 AND deleted_at IS NULL`, [request.params.id])
       if (!before[0]) return fail(reply, 404, 'not_found', 'No such income code.')
       const { rows } = await pg.query(
@@ -632,22 +651,105 @@ async function financeCashRoutes(fastify) {
             pricing = COALESCE($6, pricing),
             unit_amount_usd = CASE WHEN $7 THEN $8::numeric ELSE unit_amount_usd END,
             unit_amount_zwg = CASE WHEN $9 THEN $10::numeric ELSE unit_amount_zwg END,
-            status = COALESCE($11, status), notes = COALESCE($12, notes)
-          WHERE id = $1 RETURNING id, code, name, pricing, status,
+            status = COALESCE($11, status), notes = COALESCE($12, notes),
+            planning_fee_kind = CASE WHEN $13 THEN $14 ELSE planning_fee_kind END
+          WHERE id = $1 RETURNING id, code, name, pricing, status, planning_fee_kind,
                 unit_amount_usd::text AS unit_amount_usd, unit_amount_zwg::text AS unit_amount_zwg`,
         [request.params.id, b.name ? b.name.trim() : null, b.ledger_account_id || null,
           has('department_id'), b.department_id || null, b.pricing || null,
           has('unit_amount_usd'), usd.value, has('unit_amount_zwg'), zwg.value,
-          b.status || null, has('notes') ? b.notes : null])
+          b.status || null, has('notes') ? b.notes : null,
+          has('planning_fee_kind'), b.planning_fee_kind || null])
       // A charge is what every payer is asked for, so the trail keeps what it was and what it became.
       request.auditDetails = {
         action: 'income_code_changed', income_code_id: rows[0].id, code: rows[0].code,
         before: before[0],
-        after: { pricing: rows[0].pricing, unit_amount_usd: rows[0].unit_amount_usd, unit_amount_zwg: rows[0].unit_amount_zwg },
+        after: {
+          pricing: rows[0].pricing, unit_amount_usd: rows[0].unit_amount_usd, unit_amount_zwg: rows[0].unit_amount_zwg,
+          planning_fee_kind: rows[0].planning_fee_kind,
+        },
       }
       return ok(reply, { income_code: rows[0] })
     } catch (err) {
       return refuse(reply, err, 'The income code could not be changed.')
+    }
+  })
+
+  // ═══ Setup: where each online provider pays in (migration 246, decision D22) ════════════════
+
+  fastify.get('/finance/cash/payment-channels', { ...canSetUp }, async (request, reply) => {
+    try {
+      const { rows } = await pg.query(
+        `SELECT c.id, c.driver, c.name, c.status, c.notes, c.bank_account_id, la.code AS bank_account_code,
+                la.name AS bank_account_name
+           FROM finance.payment_channel c JOIN finance.ledger_account la ON la.id = c.bank_account_id
+          WHERE c.deleted_at IS NULL ORDER BY c.driver`)
+      const { rows: banks } = await pg.query(
+        `SELECT id, code, name FROM finance.ledger_account
+          WHERE deleted_at IS NULL AND account_type = 'bank' AND is_postable AND status = 'active' ORDER BY code`)
+      return ok(reply, { channels: rows, bank_accounts: banks, drivers: PAYMENT_DRIVERS })
+    } catch (err) {
+      return refuse(reply, err, 'The payment channels could not be read.')
+    }
+  })
+
+  fastify.post('/finance/cash/payment-channels', {
+    ...canSetUp,
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false, required: ['driver', 'name', 'bank_account_id'],
+        properties: {
+          driver: { type: 'string', enum: PAYMENT_DRIVERS },
+          name: { type: 'string', minLength: 2, maxLength: 120 },
+          bank_account_id: uuid,
+          notes: { type: 'string', maxLength: 500 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const b = request.body
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO finance.payment_channel (driver, name, bank_account_id, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5) RETURNING id, driver, name, status`,
+        [b.driver, b.name.trim(), b.bank_account_id, b.notes || null, request.user.id])
+      request.auditDetails = { action: 'payment_channel_created', payment_channel_id: rows[0].id, driver: b.driver, bank_account_id: b.bank_account_id }
+      return ok(reply, { channel: rows[0] }, 201)
+    } catch (err) {
+      return refuse(reply, err, 'The payment channel could not be created.')
+    }
+  })
+
+  fastify.patch('/finance/cash/payment-channels/:id', {
+    ...canSetUp,
+    schema: {
+      params: idParams,
+      body: {
+        type: 'object', additionalProperties: false, minProperties: 1,
+        properties: {
+          name: { type: 'string', minLength: 2, maxLength: 120 },
+          bank_account_id: uuid,
+          status: { type: 'string', enum: ['active', 'inactive'] },
+          notes: { type: 'string', maxLength: 500 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const b = request.body
+    const has = (key) => Object.prototype.hasOwnProperty.call(b, key)
+    try {
+      const { rows } = await pg.query(
+        `UPDATE finance.payment_channel SET
+            name = COALESCE($2, name), bank_account_id = COALESCE($3, bank_account_id),
+            status = COALESCE($4, status), notes = CASE WHEN $5 THEN $6 ELSE notes END
+          WHERE id = $1 AND deleted_at IS NULL RETURNING id, driver, name, status, bank_account_id`,
+        [request.params.id, b.name ? b.name.trim() : null, b.bank_account_id || null, b.status || null,
+          has('notes'), b.notes || null])
+      if (!rows[0]) return fail(reply, 404, 'not_found', 'No such payment channel.')
+      request.auditDetails = { action: 'payment_channel_changed', payment_channel_id: rows[0].id, changed: Object.keys(b) }
+      return ok(reply, { channel: rows[0] })
+    } catch (err) {
+      return refuse(reply, err, 'The payment channel could not be changed.')
     }
   })
 
@@ -1275,6 +1377,100 @@ async function financeCashRoutes(fastify) {
       return ok(reply, { receipt: rows[0] }, 201)
     } catch (err) {
       return refuse(reply, err, 'The receipt could not be issued.')
+    }
+  })
+
+  /**
+   * A planning fee at the counter (migration 246). The same receipt as a sundry one, with every
+   * cash-office control, but each line must be a planning fee code and the application is named: the
+   * fee is linked to it, and an application fee marks the application paid.
+   */
+  fastify.post('/finance/cash/receipts/planning', {
+    ...canReceipt,
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false,
+        required: ['session_id', 'permit_application_id', 'payer_name', 'currency', 'method', 'lines'],
+        properties: {
+          ...receiptCommon,
+          permit_application_id: uuid,
+          payer_name: { type: 'string', minLength: 2, maxLength: 160 },
+          party_id: uuid,
+          lines: {
+            type: 'array', minItems: 1, maxItems: 20,
+            items: {
+              type: 'object', additionalProperties: false, required: ['income_code_id'],
+              properties: {
+                income_code_id: uuid,
+                quantity: { anyOf: [{ type: 'string', maxLength: 16 }, { type: 'number' }] },
+                unit_amount: money,
+                narration: { type: 'string', maxLength: 300 },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const b = request.body
+    const checked = normaliseLines(b.lines)
+    if (!checked.ok) return fail(reply, 400, 'lines_invalid', checked.message)
+    try {
+      const id = await transact(async (client) => {
+        const { rows } = await client.query(
+          'SELECT finance.record_planning_fee_receipt($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11) AS id',
+          [b.session_id, request.user.id, b.permit_application_id, b.payer_name, b.currency, b.method,
+            JSON.stringify(checked.lines), b.deposit_account_id || null, b.party_id || null,
+            b.method_reference || null, b.narration || null])
+        return rows[0].id
+      })
+      const [{ rows }, { rows: app }] = await Promise.all([
+        pg.query(`${RECEIPT_SELECT} WHERE r.receipt_id = $1`, [id]),
+        pg.query(
+          `SELECT id, tpd_reference, dev_register_no, stand_number, applicant_name, status,
+                  (fee_paid_at IS NOT NULL) AS fee_paid
+             FROM spatial_planning.permit_application WHERE id = $1`, [b.permit_application_id]),
+      ])
+      request.auditDetails = {
+        action: 'planning_fee_receipt_issued', receipt_id: id, receipt_no: rows[0].receipt_no,
+        permit_application_id: b.permit_application_id, amount: rows[0].amount, currency: rows[0].currency,
+        method: rows[0].method, lines: checked.lines.length,
+      }
+      return ok(reply, { receipt: rows[0], application: app[0] || null }, 201)
+    } catch (err) {
+      return refuse(reply, err, 'The receipt could not be issued.')
+    }
+  })
+
+  /**
+   * The planning applications a cashier can receipt a fee against: found by reference, register
+   * number, stand or applicant. Only what the counter needs to pick the right one, and whether its
+   * application fee is already paid (a second one is the thing to stop at the counter).
+   */
+  fastify.get('/finance/cash/planning-applications', {
+    ...canReceipt,
+    schema: {
+      querystring: {
+        type: 'object', additionalProperties: false, required: ['q'],
+        properties: { q: { type: 'string', minLength: 2, maxLength: 80 } },
+      },
+    },
+  }, async (request, reply) => {
+    const like = `%${request.query.q.trim().replace(/[%_\\]/g, '\\$&')}%`
+    try {
+      const { rows } = await pg.query(
+        `SELECT pa.id, pa.tpd_reference, pa.dev_register_no, pa.stand_number, pa.applicant_name,
+                pa.development_type, pa.status, (pa.fee_paid_at IS NOT NULL) AS fee_paid,
+                (SELECT count(*)::int FROM finance.v_planning_fee f
+                  WHERE f.permit_application_id = pa.id AND f.state <> 'cancelled') AS fees_received
+           FROM spatial_planning.permit_application pa
+          WHERE pa.tpd_reference ILIKE $1 OR pa.dev_register_no ILIKE $1 OR pa.stand_number ILIKE $1
+             OR pa.applicant_name ILIKE $1
+          ORDER BY pa.received_at DESC NULLS LAST, pa.created_at DESC
+          LIMIT 15`, [like])
+      return ok(reply, { applications: rows })
+    } catch (err) {
+      return refuse(reply, err, 'The applications could not be searched.')
     }
   })
 

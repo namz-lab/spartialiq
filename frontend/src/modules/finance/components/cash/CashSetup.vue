@@ -12,7 +12,7 @@ import { messageOf } from '../../stores/finance'
 import { cashApi } from '../../api/cashApi'
 import { formatMoney } from '../../composables/useMoney'
 import { toCents } from '../../composables/cashMath'
-import type { CashDesk, CashPoint, IncomeCode, SetupAccounts } from '../../models/cashTypes'
+import { PLANNING_FEE_KINDS, planningFeeLabel, type CashDesk, type CashPoint, type IncomeCode, type PaymentChannel, type PlanningFeeKind, type SetupAccounts } from '../../models/cashTypes'
 
 defineProps<{ desk: CashDesk }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
@@ -23,7 +23,37 @@ const notice = ref<string | null>(null)
 const busy = ref(false)
 
 const point = reactive({ code: '', name: '', location: '', till_account_id: '', difference_account_id: '' })
-const code = reactive({ code: '', name: '', ledger_account_id: '', department_id: '', pricing: 'variable' as 'fixed' | 'variable', unit_amount_usd: '', unit_amount_zwg: '' })
+const code = reactive({ code: '', name: '', ledger_account_id: '', department_id: '', pricing: 'variable' as 'fixed' | 'variable', unit_amount_usd: '', unit_amount_zwg: '', planning_fee_kind: '' as PlanningFeeKind | '' })
+
+// ── Online payment channels (migration 246): where each provider settles, so online planning fees can be vouchered.
+const channels = ref<PaymentChannel[]>([])
+const channelBanks = ref<{ id: string; code: string; name: string }[]>([])
+const drivers = ref<string[]>([])
+const channel = reactive({ driver: '', name: '', bank_account_id: '' })
+const DRIVER_LABEL: Record<string, string> = { manual: 'Manual (test)', paynow: 'Paynow', stripe: 'Stripe', ecocash: 'EcoCash', onemoney: 'OneMoney' }
+const freeDrivers = computed(() => drivers.value.filter((d) => !channels.value.some((c) => c.driver === d)))
+async function loadChannels(): Promise<void> {
+  try {
+    const r = await cashApi.paymentChannels()
+    channels.value = r.channels
+    channelBanks.value = r.bank_accounts
+    drivers.value = r.drivers
+  } catch (err) {
+    error.value = messageOf(err, 'The payment channels could not be read.')
+  }
+}
+async function addChannel(): Promise<void> {
+  const ok = await run(() => cashApi.createPaymentChannel({ driver: channel.driver, name: channel.name.trim(), bank_account_id: channel.bank_account_id }),
+    `Online payments through ${DRIVER_LABEL[channel.driver] ?? channel.driver} will be vouchered to the account chosen.`, 'The payment channel could not be set.')
+  if (ok) { Object.assign(channel, { driver: '', name: '', bank_account_id: '' }); await loadChannels() }
+}
+const setChannelBank = async (c: PaymentChannel, bankId: string) => {
+  if (await run(() => cashApi.updatePaymentChannel(c.id, { bank_account_id: bankId }), `${c.name}: account changed.`, 'The payment channel could not be changed.')) await loadChannels()
+}
+const setPlanningKind = (c: IncomeCode, kind: string) => run(
+  () => cashApi.updateIncomeCode(c.id, { planning_fee_kind: (kind || null) as PlanningFeeKind | null }),
+  kind ? `${c.name} is now the planning fee "${planningFeeLabel(kind)}": its receipt names the application.` : `${c.name} is no longer a planning fee.`,
+  'The income code could not be changed.')
 
 const chargeOk = (text: string) => text.trim() === '' || (toCents(text.trim()) ?? 0n) > 0n
 const codeProblem = computed<string | null>(() => {
@@ -66,8 +96,9 @@ async function addCode(): Promise<void> {
     ...(code.department_id ? { department_id: code.department_id } : {}),
     ...(code.unit_amount_usd.trim() ? { unit_amount_usd: code.unit_amount_usd.trim() } : {}),
     ...(code.unit_amount_zwg.trim() ? { unit_amount_zwg: code.unit_amount_zwg.trim() } : {}),
+    ...(code.planning_fee_kind ? { planning_fee_kind: code.planning_fee_kind } : {}),
   }), `Income code ${code.name.trim()} created.`, 'The income code could not be created.')
-  if (ok) Object.assign(code, { code: '', name: '', ledger_account_id: '', department_id: '', pricing: 'variable', unit_amount_usd: '', unit_amount_zwg: '' })
+  if (ok) Object.assign(code, { code: '', name: '', ledger_account_id: '', department_id: '', pricing: 'variable', unit_amount_usd: '', unit_amount_zwg: '', planning_fee_kind: '' })
 }
 
 const setDifference = (p: CashPoint, accountId: string) => run(
@@ -82,6 +113,7 @@ const toggleCode = (c: IncomeCode) => run(
 
 onMounted(async () => {
   try { accounts.value = await cashApi.setupAccounts() } catch (err) { error.value = messageOf(err, 'The ledger accounts could not be read.') }
+  await loadChannels()
 })
 </script>
 
@@ -162,13 +194,20 @@ onMounted(async () => {
           <div v-if="desk.income_codes.length" class="fin-table-wrap">
             <table class="fin-table">
               <caption>What a cashier may receipt other than rates. A fixed charge cannot be varied at the counter; a charge in one currency says nothing about the other.</caption>
-              <thead><tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Charge</th><th scope="col" class="num">US$</th><th scope="col" class="num">ZWG</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Charge</th><th scope="col" class="num">US$</th><th scope="col" class="num">ZWG</th><th scope="col">Planning fee</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 <tr v-for="c in desk.income_codes" :key="c.id">
                   <td class="cash-mono">{{ c.code }}</td><td>{{ c.name }}</td>
                   <td>{{ c.pricing === 'fixed' ? 'Fixed by Council' : 'Assessed per case' }}</td>
                   <td class="num">{{ formatMoney(c.unit_amount_usd, 'USD', { bare: true }) }}</td>
                   <td class="num">{{ formatMoney(c.unit_amount_zwg, 'ZWG', { bare: true }) }}</td>
+                  <td>
+                    <select class="ins-input cash-inline" :value="c.planning_fee_kind || ''" :disabled="busy"
+                            :aria-label="`Planning fee kind for ${c.name}`" @change="setPlanningKind(c, ($event.target as HTMLSelectElement).value)">
+                      <option value="">Not a planning fee</option>
+                      <option v-for="k in PLANNING_FEE_KINDS" :key="k.value" :value="k.value">{{ k.label }}</option>
+                    </select>
+                  </td>
                   <td><span class="fin-pill" :class="c.status === 'active' ? 'tone-positive' : ''">{{ c.status === 'active' ? 'On the counter' : 'Off the counter' }}</span></td>
                   <td><button type="button" class="fin-btn small" :disabled="busy" @click="toggleCode(c)">{{ c.status === 'active' ? 'Take off' : 'Put back' }}</button></td>
                 </tr>
@@ -207,8 +246,72 @@ onMounted(async () => {
             </label>
             <label class="ins-field"><span class="ins-label">US$ charge</span><input v-model="code.unit_amount_usd" class="ins-input cash-num" inputmode="decimal" placeholder="Not charged in US$" autocomplete="off" /></label>
             <label class="ins-field"><span class="ins-label">ZWG charge</span><input v-model="code.unit_amount_zwg" class="ins-input cash-num" inputmode="decimal" placeholder="Not charged in ZWG" autocomplete="off" /></label>
+            <label class="ins-field">
+              <span class="ins-label">Planning fee</span>
+              <select v-model="code.planning_fee_kind" class="ins-input">
+                <option value="">Not a planning fee</option>
+                <option v-for="k in PLANNING_FEE_KINDS" :key="k.value" :value="k.value">{{ k.label }}</option>
+              </select>
+            </label>
           </div>
+          <p class="ins-hint">A planning fee's receipt names the planning application, and an application fee marks it paid. One code in use per kind, so an online fee knows which account it credits.</p>
           <button type="submit" class="fin-btn primary" :disabled="busy || !code.ledger_account_id">Add income code</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Migration 246, decision D22: where each online provider settles. Seeded empty. -->
+    <section class="ins-card" aria-labelledby="cash-channels" data-testid="cash-channels">
+      <div class="ins-card-head">
+        <h3 id="cash-channels">Online payment channels <span class="ins-count">{{ channels.length }}</span></h3>
+        <span class="ins-hint">The bank account each provider pays into. An online planning fee is vouchered to it.</span>
+      </div>
+      <div class="cash-setup-body">
+        <div class="cash-setup-list">
+          <div v-if="channels.length" class="fin-table-wrap">
+            <table class="fin-table">
+              <caption>Online providers and the bank or wallet account each settles into.</caption>
+              <thead><tr><th scope="col">Provider</th><th scope="col">Name</th><th scope="col">Settles into</th><th scope="col">Status</th></tr></thead>
+              <tbody>
+                <tr v-for="c in channels" :key="c.id">
+                  <td>{{ DRIVER_LABEL[c.driver] ?? c.driver }}</td>
+                  <td>{{ c.name }}</td>
+                  <td>
+                    <select class="ins-input cash-inline" :value="c.bank_account_id" :disabled="busy" :aria-label="`Bank account for ${c.name}`"
+                            @change="setChannelBank(c, ($event.target as HTMLSelectElement).value)">
+                      <option v-for="b in channelBanks" :key="b.id" :value="b.id">{{ b.code }} — {{ b.name }}</option>
+                    </select>
+                  </td>
+                  <td><span class="fin-pill" :class="c.status === 'active' ? 'tone-positive' : ''">{{ c.status === 'active' ? 'In use' : 'Out of use' }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="cash-setup-empty"><p class="ins-hint">No provider has an account set. Online planning fees wait for a voucher until one is.</p></div>
+        </div>
+
+        <form class="cash-setup-add" @submit.prevent="addChannel">
+          <h4>Set a provider's account</h4>
+          <p class="ins-hint">Which bank or wallet account the provider pays the council into.</p>
+          <p v-if="!channelBanks.length" class="ins-hint">The ledger has no bank account yet. Create one in General ledger → Chart of accounts first.</p>
+          <div class="cash-grid">
+            <label class="ins-field">
+              <span class="ins-label">Provider</span>
+              <select v-model="channel.driver" class="ins-input" required>
+                <option value="" disabled>Choose the provider</option>
+                <option v-for="d in freeDrivers" :key="d" :value="d">{{ DRIVER_LABEL[d] ?? d }}</option>
+              </select>
+            </label>
+            <label class="ins-field"><span class="ins-label">Name</span><input v-model="channel.name" class="ins-input" required minlength="2" autocomplete="off" placeholder="As the statement shows it" /></label>
+            <label class="ins-field">
+              <span class="ins-label">Settles into</span>
+              <select v-model="channel.bank_account_id" class="ins-input" required>
+                <option value="" disabled>The bank or wallet account</option>
+                <option v-for="b in channelBanks" :key="b.id" :value="b.id">{{ b.code }} — {{ b.name }}</option>
+              </select>
+            </label>
+          </div>
+          <button type="submit" class="fin-btn primary" :disabled="busy || !channel.driver || !channel.bank_account_id || channel.name.trim().length < 2">Set the account</button>
         </form>
       </div>
     </section>

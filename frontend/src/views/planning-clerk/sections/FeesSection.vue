@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// Fees and cashbook — the counter's own receipt register.
+// Fees — what the council received for planning applications.
 //
-// This is what came over the desk in cash, EcoCash, a cheque or a card, which
-// is a different record from public.payments (what a citizen paid online).
-// Both exist and both are real; reconciling them at the end of the day is the
-// clerk's job, and it cannot be done if one of them lives in a browser.
+// SINCE MIGRATION 246 THE CASHIER TAKES THE MONEY. A planning fee is paid at
+// the cash office (or online), where the cashier names the application: the
+// fee reaches the ledger with every other receipt, is counted and banked, and
+// an application fee marks the application paid. The clerk reads those fees
+// here. The clerk's own receipt register is kept below as the history of what
+// was receipted at this desk before; it takes no new entries.
 //
 // TWO CURRENCIES, ALWAYS NAMED
 // The council keeps books in USD and ZWG at the same time. Every total on
@@ -12,14 +14,14 @@
 // applied by a screen is a number nobody can reconcile against a bank
 // statement, and the rate that matters is the one on the day of the deposit.
 
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import ClerkRegister from '@/components/planning-clerk/ClerkRegister.vue'
 import type { ClerkColumn, ClerkField } from '@/planning-clerk/registerSpec'
 import { asLabel, formatMoney, formatWhen, toDateTimeInput } from '@/planning-clerk/console'
 import { useClerkPreferences } from '@/planning-clerk/useClerkConsole'
 import { useClerkOverview } from '@/planning-clerk/useClerkOverview'
-import { num } from '@/services/planningClerk'
-import { Banknote, Wallet } from 'lucide-vue-next'
+import { listCashOfficeFees, num, type CashOfficeFee } from '@/services/planningClerk'
+import { Banknote, Wallet, Landmark, Search } from 'lucide-vue-next'
 
 const { prefs } = useClerkPreferences()
 const overview = useClerkOverview()
@@ -123,6 +125,39 @@ const takings = computed(() => {
 })
 
 const showMonth = ref(false)
+
+// ── The fees the cash office and online payments took (migration 246) ─────
+const fees = ref<CashOfficeFee[]>([])
+const feesTotal = ref(0)
+const feesQuery = ref('')
+const feesLoading = ref(false)
+const feesError = ref<string | null>(null)
+async function loadFees() {
+  feesLoading.value = true
+  feesError.value = null
+  try {
+    const r = await listCashOfficeFees({ ...(feesQuery.value.trim() ? { q: feesQuery.value.trim() } : {}), limit: 50 })
+    fees.value = r.rows
+    feesTotal.value = r.total
+  } catch {
+    feesError.value = 'The fees could not be read. Try again in a moment.'
+  } finally {
+    feesLoading.value = false
+  }
+}
+let feesTimer: ReturnType<typeof setTimeout> | undefined
+watch(feesQuery, () => { clearTimeout(feesTimer); feesTimer = setTimeout(loadFees, 300) })
+onMounted(loadFees)
+
+const KIND_LABEL = Object.fromEntries(FEE_KINDS.map((k) => [k.value, k.label])) as Record<string, string>
+const STATE_LABEL: Record<CashOfficeFee['state'], string> = {
+  awaiting_voucher: 'Paid online, not yet in the books',
+  awaiting_posting: 'Paid, waiting for Finance to post',
+  posted: 'In the books',
+  cancelled: 'Receipt cancelled',
+}
+const feeFile = (f: CashOfficeFee) => f.tpd_reference || f.dev_register_no || (f.stand_number ? `Stand ${f.stand_number}` : 'No file')
+const feeHow = (f: CashOfficeFee) => (f.source === 'counter' ? `Cash office${f.method ? ` · ${asLabel(f.method)}` : ''}` : 'Online')
 </script>
 
 <template>
@@ -130,11 +165,11 @@ const showMonth = ref(false)
     <header class="ins-head">
       <div class="ins-head-text">
         <span class="ins-eyebrow">Registers</span>
-        <h2 class="ins-title">Fees &amp; cashbook</h2>
+        <h2 class="ins-title">Fees</h2>
         <p class="ins-lede">
-          Receipts issued at the counter, in both currencies. Online payments
-          are the payments gateway’s record, not this one; reconciling the two
-          at the end of the day is what this register is for.
+          Planning fees are paid at the cash office, where the cashier names the
+          application, or online. Both reach the council's books, and an
+          application fee marks its application paid. This page shows what came in.
         </p>
       </div>
       <div class="ins-actions">
@@ -172,13 +207,59 @@ const showMonth = ref(false)
       </div>
     </section>
 
+    <section class="ins-card" aria-labelledby="clk-fees-h" data-testid="clk-cash-office-fees">
+      <header class="ins-card-head">
+        <h3 id="clk-fees-h" class="clk-fees-title">
+          <Landmark :size="16" aria-hidden="true" /> Fees received
+          <span class="ins-count">{{ feesTotal }}</span>
+        </h3>
+        <label class="clk-fees-search">
+          <Search :size="14" aria-hidden="true" />
+          <input v-model="feesQuery" type="search" class="ins-input" placeholder="File, stand, payer or receipt"
+                 aria-label="Search fees received" />
+        </label>
+      </header>
+      <div class="ins-card-body">
+        <p class="clk-fees-note">
+          To take a fee, send the applicant to the cash office with the file reference.
+          The cashier finds the application, issues the council's receipt, and the fee
+          shows here at once.
+        </p>
+        <p v-if="feesError" class="clk-fees-error" role="alert">{{ feesError }}</p>
+        <p v-else-if="feesLoading && !fees.length" class="clk-fees-note">Reading the fees…</p>
+        <p v-else-if="!fees.length" class="clk-fees-note">
+          {{ feesQuery ? 'No fee matches.' : 'No fee has been received at the cash office or online yet.' }}
+        </p>
+        <div v-else class="clk-fees-wrap">
+          <table class="clk-fees-table">
+            <thead>
+              <tr><th>Received</th><th>File</th><th>For</th><th>Paid by</th><th>How</th><th class="num">Amount</th><th>Receipt</th><th>Books</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="f in fees" :key="f.id">
+                <td class="ins-mono">{{ f.received_on }}</td>
+                <td class="ins-mono">{{ feeFile(f) }}</td>
+                <td>{{ KIND_LABEL[f.fee_kind] ?? asLabel(f.fee_kind) }}</td>
+                <td>{{ f.payer_name || '—' }}</td>
+                <td>{{ feeHow(f) }}</td>
+                <td class="num ins-mono">{{ formatMoney(f.amount, f.currency) }}</td>
+                <td class="ins-mono">{{ f.receipt_no || f.reference || '—' }}</td>
+                <td><span class="clk-fee-state" :class="`is-${f.state}`">{{ STATE_LABEL[f.state] }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <ClerkRegister
       register="receipts"
-      title="Counter receipts"
-      add-label="Receipt a payment"
+      title="Receipts written at this desk before (history)"
+      lede="Kept as it was. Planning fees are now receipted at the cash office, so this register takes no new entries."
       search-hint="Receipt number, payer or transaction reference"
       :columns="columns"
       :fields="fields"
+      read-only
     />
   </div>
 </template>
@@ -195,7 +276,25 @@ const showMonth = ref(false)
   line-height:var(--ent-lh-tight); color:var(--ent-text);
   font-variant-numeric:tabular-nums; }
 
+.clk-fees-title { display:inline-flex; align-items:center; gap:var(--ent-s2); margin:0; }
+.clk-fees-search { position:relative; display:inline-flex; align-items:center; margin-left:auto; }
+.clk-fees-search svg { position:absolute; left:var(--ent-s2); color:var(--ent-text-3); }
+.clk-fees-search input { padding-left:calc(var(--ent-s2) + 18px); min-width:16rem; }
+.clk-fees-note { margin:0 0 var(--ent-s3); color:var(--ent-text-2); }
+.clk-fees-error { margin:0; color:var(--ent-danger); }
+.clk-fees-wrap { overflow-x:auto; }
+.clk-fees-table { width:100%; border-collapse:collapse; font-size:var(--ent-fs-sm); }
+.clk-fees-table th, .clk-fees-table td { padding:var(--ent-s2) var(--ent-s3); border-bottom:1px solid var(--ent-line); text-align:left; vertical-align:top; }
+.clk-fees-table th { font-size:var(--ent-fs-micro); text-transform:uppercase; letter-spacing:0.05em; color:var(--ent-text-3); }
+.clk-fees-table .num { text-align:right; white-space:nowrap; }
+.clk-fee-state { display:inline-block; padding:1px var(--ent-s2); border-radius:999px; font-size:var(--ent-fs-micro); font-weight:var(--ent-fw-semibold); background:var(--ent-surface-2); color:var(--ent-text-2); }
+.clk-fee-state.is-posted { background:var(--ent-success-soft); color:var(--ent-success); }
+.clk-fee-state.is-awaiting_voucher { background:var(--ent-warning-soft); color:var(--ent-warning); }
+.clk-fee-state.is-cancelled { text-decoration:line-through; }
+
 @media (max-width: 767px) {
   .clk-take-value { font-size:var(--ent-fs-xl); }
+  .clk-fees-search { margin-left:0; width:100%; }
+  .clk-fees-search input { min-width:0; width:100%; }
 }
 </style>

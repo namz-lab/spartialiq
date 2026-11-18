@@ -3,15 +3,20 @@
  * Receipt a service that has no bill: one or more items from the council's income list (a dog
  * licence, a day's hall hire, a market stall fee). A fixed charge is the council's and cannot be
  * changed here; a variable one is entered. Issued by `POST /finance/cash/receipts`.
+ *
+ * A PLANNING FEE NAMES ITS APPLICATION (migration 246). When a service is a planning fee (its income
+ * code carries a planning fee kind), the cashier finds the planning application it pays for and the
+ * receipt goes to `POST /finance/cash/receipts/planning`: the fee is linked to the application, and an
+ * application fee marks it paid. Planning fees go on a receipt of their own, so the link is exact.
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { FileText, Plus, Trash2, User, CreditCard, ReceiptText, Printer, Download, X, Check, AlertTriangle, CircleCheck } from 'lucide-vue-next'
+import { FileText, Plus, Trash2, User, CreditCard, ReceiptText, Printer, Download, X, Check, AlertTriangle, CircleCheck, Landmark, Search } from 'lucide-vue-next'
 import { cashApi } from '../../../api/cashApi'
 import { messageOf, useFinanceStore } from '../../../stores/finance'
 import { formatMoney, type Currency } from '../../../composables/useMoney'
 import { centsToText, lineCents, toCents } from '../../../composables/cashMath'
-import { chargeIn, receiptableIn, type CashMethod, type CashReceipt } from '../../../models/cashTypes'
+import { chargeIn, planningFeeLabel, receiptableIn, type CashMethod, type CashReceipt, type PlanningApplicationHit } from '../../../models/cashTypes'
 import { useCashier } from '../useCashier'
 import { tenderNarration, viewOfPrintable, type ReceiptView } from '../receipt'
 import MethodTiles from '../components/MethodTiles.vue'
@@ -71,6 +76,42 @@ const totalCents = computed<bigint | null>(() => {
   }
   return t
 })
+// ── A planning fee names its application (migration 246) ─────────────────────────────────────
+const kindOf = (l: Line) => codeById.value.get(l.income_code_id)?.planning_fee_kind ?? null
+const isPlanning = computed(() => lines.value.some((l) => kindOf(l)))
+const mixed = computed(() => isPlanning.value && lines.value.some((l) => l.income_code_id && !kindOf(l)))
+const paysApplicationFee = computed(() => lines.value.some((l) => kindOf(l) === 'application'))
+const application = ref<PlanningApplicationHit | null>(null)
+const appQuery = ref('')
+const appHits = ref<PlanningApplicationHit[]>([])
+const appSearching = ref(false)
+const appSearched = ref(false)
+let appTimer: ReturnType<typeof setTimeout> | undefined
+watch(appQuery, (q) => {
+  clearTimeout(appTimer)
+  appSearched.value = false
+  if (q.trim().length < 2) { appHits.value = []; return }
+  appTimer = setTimeout(async () => {
+    appSearching.value = true
+    try {
+      appHits.value = (await cashApi.planningApplications(q.trim())).applications
+    } catch (err) {
+      error.value = messageOf(err, 'The applications could not be searched.')
+    } finally {
+      appSearching.value = false
+      appSearched.value = true
+    }
+  }, 250)
+})
+function chooseApplication(a: PlanningApplicationHit): void {
+  application.value = a
+  appQuery.value = ''
+  appHits.value = []
+  if (payer.value.trim().length < 2 && a.applicant_name) payer.value = a.applicant_name
+}
+const appLabel = (a: PlanningApplicationHit) => a.tpd_reference || a.dev_register_no || (a.stand_number ? `Stand ${a.stand_number}` : 'Application')
+const issuedApplication = ref<PlanningApplicationHit | null>(null)
+
 const tenderedCents = computed(() => (isCash.value ? toCents(tendered.value.replace(/,/g, '')) : totalCents.value))
 const changeCents = computed(() => (isCash.value && tenderedCents.value !== null && totalCents.value !== null ? tenderedCents.value - totalCents.value : null))
 watch(totalCents, (t) => { if (t !== null && (!tendered.value || attempted.value === false)) tendered.value = centsToText(t) })
@@ -79,6 +120,8 @@ const problem = computed<string | null>(() => {
   if (payer.value.trim().length < 2) return 'Enter who is paying.'
   if (lines.value.some((l) => !l.income_code_id)) return 'Choose what each line is for.'
   if (!totalCents.value) return 'Enter an amount for each line.'
+  if (mixed.value) return 'A planning fee goes on a receipt of its own. Take the other services on a separate receipt.'
+  if (isPlanning.value && !application.value) return 'Find the planning application this fee is for.'
   if (!isCash.value) {
     if (!depositAccount.value) return 'Choose the bank or wallet account this payment was made into.'
     if (reference.value.trim().length < 3) return 'Enter the transaction reference.'
@@ -102,7 +145,7 @@ async function issue(): Promise<void> {
   const tenderedText = isCash.value && tenderedCents.value !== null ? centsToText(tenderedCents.value) : null
   const changeText = changeCents.value !== null && changeCents.value >= 0n ? centsToText(changeCents.value) : null
   try {
-    const result = await cashApi.issueReceipt({
+    const body = {
       session_id: session.value.id,
       payer_name: payer.value.trim(),
       currency: currency.value,
@@ -114,7 +157,17 @@ async function issue(): Promise<void> {
       })),
       ...(isCash.value ? {} : { deposit_account_id: depositAccount.value, method_reference: reference.value.trim() }),
       ...(tenderedText && changeText ? { narration: tenderNarration(tenderedText, changeText) } : {}),
-    })
+    }
+    let receipt: CashReceipt
+    if (isPlanning.value && application.value) {
+      const planned = await cashApi.issuePlanningReceipt({ ...body, permit_application_id: application.value.id })
+      receipt = planned.receipt
+      issuedApplication.value = planned.application
+    } else {
+      receipt = (await cashApi.issueReceipt(body)).receipt
+      issuedApplication.value = null
+    }
+    const result = { receipt }
     issued.value = result.receipt
     const printable = (await cashApi.receipt(result.receipt.id)).receipt
     issuedView.value = viewOfPrintable(printable, { customer_type: 'Walk-in' })
@@ -143,6 +196,8 @@ async function savePdf(): Promise<void> {
 function next(): void {
   issued.value = null
   issuedView.value = null
+  issuedApplication.value = null
+  application.value = null
   payer.value = ''
   lines.value = [newLine()]
   reference.value = ''
@@ -171,6 +226,10 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
 
   <div v-if="issued && issuedView" class="ir-done">
     <p class="cw-banner-msg cw-banner-msg--pos" role="status"><CircleCheck :size="20" aria-hidden="true" />Receipt {{ issued.receipt_no }} issued.</p>
+    <p v-if="issuedApplication" class="cw-banner-msg cw-banner-msg--pos" role="status" data-testid="ir-app-paid">
+      <Landmark :size="20" aria-hidden="true" />
+      Recorded against planning application {{ appLabel(issuedApplication) }}{{ issuedApplication.fee_paid ? ': its application fee is now paid.' : '.' }}
+    </p>
     <div ref="docEl" class="cw-card" style="overflow: hidden"><ReceiptDocument :view="issuedView" /></div>
     <div class="ir-buttons">
       <RouterLink :to="{ name: 'cashier-dashboard' }" class="cw-btn">Dashboard</RouterLink>
@@ -214,7 +273,7 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
                 <td style="min-width: 220px">
                   <select v-model="l.income_code_id" class="cw-select" :aria-label="'Service'" :class="{ 'is-invalid': attempted && !l.income_code_id }">
                     <option value="" disabled>Choose a service</option>
-                    <option v-for="c in codes" :key="c.id" :value="c.id">{{ c.name }}</option>
+                    <option v-for="c in codes" :key="c.id" :value="c.id">{{ c.name }}{{ c.planning_fee_kind ? ' · planning fee' : '' }}</option>
                   </select>
                 </td>
                 <td class="r" style="width: 96px"><input v-model="l.quantity" class="cw-input num" inputmode="decimal" aria-label="Quantity" style="text-align: right" /></td>
@@ -228,6 +287,54 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
             </tbody>
             <tfoot><tr><th colspan="3">Total</th><td colspan="2">{{ money(totalCents) }}</td></tr></tfoot>
           </table>
+          <p v-if="mixed" class="cw-banner-msg cw-banner-msg--neg" role="alert" style="margin-top: 12px">
+            <AlertTriangle :size="18" aria-hidden="true" />A planning fee goes on a receipt of its own. Take the other services on a separate receipt.
+          </p>
+        </div>
+      </section>
+
+      <!-- Migration 246: a planning fee is linked to the application it pays for. -->
+      <section v-if="isPlanning" class="cw-card" aria-labelledby="ir-a" data-testid="ir-application">
+        <div class="cw-card-head"><h3 id="ir-a"><Landmark :size="26" class="cw-head-icon" aria-hidden="true" /> Planning application</h3></div>
+        <div class="cw-card-body ir-stack">
+          <div v-if="application" class="ir-app">
+            <div>
+              <strong>{{ appLabel(application) }}</strong>
+              <span class="ir-app-sub">
+                {{ application.applicant_name || 'Applicant not named' }}<template v-if="application.stand_number"> · Stand {{ application.stand_number }}</template>
+                · {{ application.status.replace(/_/g, ' ') }}
+              </span>
+              <span v-if="paysApplicationFee && application.fee_paid" class="ir-app-warn" role="alert">
+                <AlertTriangle :size="16" aria-hidden="true" /> Its application fee is already paid. Check before taking it again.
+              </span>
+            </div>
+            <button type="button" class="cw-btn cw-btn--small" @click="application = null">Change</button>
+          </div>
+          <template v-else>
+            <label class="cw-field">
+              <span class="cw-label">Find the application <span class="req">*</span></span>
+              <span class="ir-search">
+                <Search :size="16" aria-hidden="true" />
+                <input v-model="appQuery" class="cw-input" autocomplete="off" maxlength="80"
+                       placeholder="Reference, register number, stand or applicant"
+                       :class="{ 'is-invalid': attempted && !application }" />
+              </span>
+            </label>
+            <p v-if="appSearching" class="cw-muted">Searching…</p>
+            <ul v-else-if="appHits.length" class="ir-hits" aria-label="Matching applications">
+              <li v-for="a in appHits" :key="a.id">
+                <button type="button" class="ir-hit" @click="chooseApplication(a)">
+                  <strong>{{ appLabel(a) }}</strong>
+                  <span>{{ a.applicant_name || 'Applicant not named' }}<template v-if="a.stand_number"> · Stand {{ a.stand_number }}</template></span>
+                  <span class="ir-hit-tag" :class="{ 'is-paid': a.fee_paid }">{{ a.fee_paid ? 'Application fee paid' : 'Application fee not paid' }}</span>
+                </button>
+              </li>
+            </ul>
+            <p v-else-if="appSearched" class="cw-muted">No application matches. Check the reference with the planning clerk.</p>
+          </template>
+          <p class="cw-muted ir-kinds">
+            Paying for: {{ [...new Set(lines.map(kindOf).filter(Boolean))].map(planningFeeLabel).join(', ') }}
+          </p>
         </div>
       </section>
     </div>
@@ -295,5 +402,21 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
 .ir-change.is-neg { background: var(--cw-neg-soft); color: var(--cw-neg); }
 .ir-buttons { display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
 .ir-done { display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+.ir-app { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.ir-app > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ir-app-sub { color: var(--cw-text-2, inherit); font-size: 14px; }
+.ir-app-warn { display: inline-flex; align-items: center; gap: 6px; color: var(--cw-neg); font-size: 14px; font-weight: 600; }
+.ir-search { position: relative; display: flex; align-items: center; }
+.ir-search svg { position: absolute; left: 10px; opacity: 0.6; }
+.ir-search input { padding-left: 32px; width: 100%; }
+.ir-hits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ir-hit { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'ref tag' 'who tag'; gap: 2px 12px; text-align: left; padding: 10px 12px; border: 1px solid var(--cw-line, #d0d5dd); border-radius: 8px; background: var(--cw-surface, #fff); cursor: pointer; font: inherit; color: inherit; }
+.ir-hit:hover, .ir-hit:focus-visible { border-color: var(--cw-accent, #1a73e8); }
+.ir-hit strong { grid-area: ref; }
+.ir-hit > span:not(.ir-hit-tag) { grid-area: who; font-size: 14px; opacity: 0.8; }
+.ir-hit-tag { grid-area: tag; align-self: center; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--cw-neg-soft); color: var(--cw-neg); white-space: nowrap; }
+.ir-hit-tag.is-paid { background: var(--cw-pos-soft); color: var(--cw-pos); }
+.ir-kinds { margin: 0; font-size: 14px; }
+.cw-muted { margin: 0; color: var(--cw-text-2, #5b6472); font-size: 14px; }
 @media (max-width: 1023px) { .ir-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
