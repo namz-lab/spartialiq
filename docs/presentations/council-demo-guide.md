@@ -35,7 +35,6 @@ Open **http://localhost:5175** in the browser. The sign-in page there shows the 
 | 5 | Set up a **committee sitting** for the meeting date with its members, so the clerk only has to record attendance and the outcome. | The sitting appears under Committee |
 | 6 | **Rehearse** both cases end to end once, then reset or choose two fresh applications for the meeting itself. | Every step below works |
 | 7 | Open one browser window per role, or sign out and in between roles. | You can switch role in under 15 seconds |
-| 8 | **Known gap: move each case to *Under review* once its acknowledgement is sent.** Sending the letter starts the clock but leaves the case *Registered*, and no screen moves it on; the EO's **Approve** is then refused (*"A case in 'registered' cannot move to 'approved'"*). Until the system does it, the dev team moves the case through the status route (as `docs/manuals/tools/capture-demo-steps.js` does) straight after step 4, before the planner's steps. | The case bar reads *Under review* before Case 1, step 5 |
 
 **Fallback:** if the network or the laptop fails, present slides 7 to 15 instead. They show the same screens.
 
@@ -55,8 +54,6 @@ Open **http://localhost:5175** in the browser. The sign-in page there shows the 
 | 8 | **EO Planning** | **Determination** | Press *I have checked: none applies* (directions); write the decision notes; **Approve**. | *Decided*; *Approved* | "The decision rested on the committee's resolution, and the record says so." |
 | 9 | EO | **Permits** | Show the issued permit, locked; record the **notification** date. | *Issued: this permit is a fixed record* | "The appeal month runs from the day the applicant is told." |
 | 10 | **Revenue officer** | Revenue → **Planning Fees** | Show the receipt from step 1. | The fee, *Awaiting posting*: it reaches the ledger when the cash-up is verified | "Every planning fee is visible to Finance, by application." |
-
-**Between steps 4 and 5:** the case must read *Under review* (see "The day before", item 8). Check the case bar before handing over to the planner.
 
 **Show the team at a glance:** when you first sign in as the EO (before step 8), the console opens on **At a glance**: one tile per desk under the EO. Point at the figures in amber and red, open the **Planners** tile to show the desk in full, then go to **Determination**. Say: "This is the first thing the EO sees each morning: where the team's work is waiting, read from the registers." (This needs the demonstration copy to be running the latest version of the system; if the tiles say they could not be read, show slide 22 instead.)
 

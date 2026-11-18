@@ -19,6 +19,7 @@
 const { requireRole } = require('../middleware/jwtAuth')
 const { tenantPool } = require('../lib/tenancy')
 const eoWorkflow = require('../services/eoWorkflow')
+const caseProgress = require('../services/caseProgress')
 
 const STAFF = ['admin', 'planner', 'planning_clerk', 'building_inspector', 'eo', 'env_officer', 'surveyor', 'gis_officer', 'accounting_officer']
 const isUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(v)
@@ -172,7 +173,10 @@ async function eoWorkflowRoutes(fastify) {
         WHERE id = $1 RETURNING id, statutory_checks`, [request.params.id, JSON.stringify(clean), request.user.id])
     if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     await logEvent(request.params.id, 'statutory_checks_recorded', request, { answers: clean })
-    return reply.send({ success: true, data: rows[0] })
+    // Answering the Act's questions is the assessment under way: an acknowledged or circulated case is now under review.
+    const progress = await caseProgress.advance(db(request), request.params.id, 'under_review', ['acknowledged', 'circulation'],
+      { request, reason: "The Act's questions were answered: the case is being assessed." })
+    return reply.send({ success: true, data: { ...rows[0], ...(progress.moved ? { status: progress.to } : {}) } })
   })
 
   // ── the objection steps: put to the applicant, and the applicant's comment ───────────────

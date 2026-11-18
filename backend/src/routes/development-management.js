@@ -61,6 +61,7 @@ const { validateFileSignature } = require('../utils/fileSignature')
 const { parseParcelRef, parseUseCode } = require('../utils/ruleSnapshot')
 const planGates = require('../services/planGates')
 const eoWorkflow = require('../services/eoWorkflow')
+const caseProgress = require('../services/caseProgress')
 
 /**
  * Statutory transition gate, shared by every status write. Returns null when
@@ -1032,6 +1033,9 @@ async function developmentManagementRoutes(fastify) {
         body_name: bodyName,
         assigned_to: isUuid(b.assigned_to) ? b.assigned_to : null,
       })
+      // The first department it is sent to puts an acknowledged case into circulation (services/caseProgress.js).
+      await caseProgress.advance(db(request), request.params.id, 'circulation', ['acknowledged'],
+        { request, reason: `Circulated to ${bodyName}.` })
       return reply.code(201).send({ success: true, data: rows[0] })
     } catch (err) {
       if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })

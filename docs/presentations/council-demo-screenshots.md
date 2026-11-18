@@ -10,8 +10,6 @@ Use it to rehearse, and to check on the day that each screen looks the way it sh
 
 **Run it on the demonstration copy only**: the backend on port 3011 over the local database, the frontend on 5175, as section 1 of the demonstration guide says.
 
-**One step is not in the system yet.** When the clerk records the acknowledgement as sent, the case gets its acknowledgement date and its three-month clock, but its status stays *Registered*, and no screen moves it on. The EO's approval in Case 1, step 8 is then refused: *"A case in 'registered' cannot move to 'approved'."* Until that is fixed, move each case to *Under review* after step 4 (the capture script does it through the status route, as the planner). Do this before the meeting, or the approval will fail in front of the councillors.
-
 **To take the screenshots again** (after a change to the screens, or for a fresh rehearsal):
 
 ```bash
@@ -58,11 +56,9 @@ Tick the envelope checklist, check the letter number and addressee, **Stamp rece
 
 ![Mark the letter as sent](demo-steps/c1-04-clerk-ack-sent-form.png)
 
-**Record as sent.** The letter shows *Sent*, and the three-month clock starts.
+**Record as sent.** The letter shows *Sent*, and the three-month clock starts. The case moves to *Acknowledged* by itself; circulating it (step 5) and answering the Act's questions (step 6) take it on to *Under review*.
 
 ![The letter sent; the clock running](demo-steps/c1-04-clerk-ack-sent.png)
-
-*Then move the case to Under review (see "One step is not in the system yet" above).*
 
 ### Step 5. Planner: circulation to the departments
 
