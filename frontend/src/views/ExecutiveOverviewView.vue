@@ -21,6 +21,8 @@ import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
 import WardTable from '@/components/executive/WardTable.vue'
 import ExportMenu from '@/components/shared/ExportMenu.vue'
+import GlanceGrid from '@/components/shared/GlanceGrid.vue'
+import { headline, unbroken } from '@/components/shared/glance'
 import type { ExportTable } from '@/utils/tableExport'
 import { useAuthStore } from '@/stores/auth'
 import type { UnitKey } from '@/services/units'
@@ -186,18 +188,7 @@ async function go(v: string) {
 }
 const wardTableOnly = computed(() => (view.value === 'wards-measures' ? 'measures' : 'counts'))
 
-/** A tile's headline: up to three figures, the flagged ones first, in the card's own order. */
-function headline(c: Card) {
-  const stats = c.groups.filter((g) => g.loaded).flatMap((g) => g.stats)
-  const flagged = stats.filter((s) => s.tone === 'bad' || s.tone === 'warn')
-  const picked = new Set([...flagged, ...stats.filter((s) => !flagged.includes(s))].slice(0, 3))
-  const shown = stats.filter((s) => picked.has(s))
-  const gap = c.groups.find((g) => !g.loaded)
-  return { shown, more: stats.length - shown.length, gap, flagged: flagged.length }
-}
-
-/** A figure may wrap between its words but never inside a number ("US$ 1 466 000.00" keeps its digit groups together). */
-const unbroken = (v: string) => v.replace(/(\d) (?=\d)/g, '$1 ')
+// A tile's headline figures and the wrapping rule are shared with the planning overviews (components/shared/glance.ts).
 </script>
 
 <template>
@@ -253,29 +244,7 @@ const unbroken = (v: string) => v.replace(/(\d) (?=\d)/g, '$1 ')
             <h2 id="xo-summary-h" class="xo-panel-title">At a glance</h2>
             <p class="xo-lede">The six areas of the Executive Arm, read from the council's own registers. Figures to look at come first. Nothing here can be changed from this page.</p>
           </div>
-          <div class="xo-tiles">
-            <article v-for="c in cards" :key="c.key" class="xo-tile" :class="{ 'has-flag': headline(c).flagged }" :data-testid="`xo-tile-${c.key}`">
-              <header class="xo-card-head">
-                <component :is="c.icon" :size="20" class="xo-card-icon" aria-hidden="true" />
-                <h3 class="xo-tile-title">
-                  <button type="button" class="xo-tile-open" @click="go(c.key)">{{ c.title }}</button>
-                </h3>
-              </header>
-              <dl v-if="headline(c).shown.length" class="xo-stats">
-                <div v-for="s in headline(c).shown" :key="s.label" class="xo-stat">
-                  <dt>{{ s.label }}</dt>
-                  <dd :class="s.tone ? `is-${s.tone}` : undefined">{{ unbroken(s.value) }}</dd>
-                </div>
-              </dl>
-              <p v-if="headline(c).gap && (!headline(c).shown.length || headline(c).gap?.unavailable)" class="xo-missing" :class="{ 'is-error': headline(c).gap?.unavailable }">
-                <component :is="headline(c).gap?.unavailable ? TriangleAlert : Info" :size="16" aria-hidden="true" />
-                <span>{{ headline(c).gap?.note }}</span>
-              </p>
-              <p class="xo-tile-more" aria-hidden="true">
-                {{ headline(c).more ? `${headline(c).more} more figure${headline(c).more === 1 ? '' : 's'}` : 'Open' }} <ArrowRight :size="14" />
-              </p>
-            </article>
-          </div>
+          <GlanceGrid :cards="cards" @open="go" />
         </section>
 
         <!-- Each unit in full -->
@@ -352,19 +321,7 @@ const unbroken = (v: string) => v.replace(/(\d) (?=\d)/g, '$1 ')
 .xo-alert { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; padding: 0.625rem 0.875rem; background: var(--ent-danger-soft); color: var(--ent-danger); border-radius: 6px; }
 .xo-retry { margin-left: auto; padding: 0.25rem 0.625rem; border: 1px solid var(--ent-danger); background: var(--ent-surface); color: var(--ent-danger); border-radius: 4px; cursor: pointer; }
 
-/* At a glance */
-.xo-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 1rem; }
-.xo-tile { position: relative; display: flex; flex-direction: column; background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: 8px; padding: 1rem 1.125rem; transition: border-color 150ms ease, box-shadow 150ms ease; }
-.xo-tile:hover { border-color: var(--ent-line-strong); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
-.xo-tile.has-flag { box-shadow: inset 3px 0 0 var(--ent-warning); }
-.xo-tile:focus-within { outline: 2px solid var(--ent-accent); outline-offset: 2px; }
-.xo-tile-title { margin: 0; font-size: 1rem; font-weight: 600; }
-/* The title's button covers the whole tile, so the tile is one control with one name. */
-.xo-tile-open { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-.xo-tile-open::after { content: ''; position: absolute; inset: 0; border-radius: 8px; }
-.xo-tile-open:focus { outline: none; }
-.xo-tile-more { display: flex; align-items: center; gap: 0.25rem; margin: auto 0 0; padding-top: 0.75rem; color: var(--ent-accent); font-size: 0.8125rem; }
-@media (prefers-reduced-motion: reduce) { .xo-tile { transition: none; } }
+/* At a glance: the tiles are components/shared/GlanceGrid.vue */
 
 /* A unit in full */
 .xo-unit { background: var(--ent-surface); border: 1px solid var(--ent-line); border-radius: 8px; padding: 1.25rem 1.5rem; max-width: 64rem; }
@@ -380,10 +337,6 @@ const unbroken = (v: string) => v.replace(/(\d) (?=\d)/g, '$1 ')
 .xo-stat:last-child { border-bottom: 0; }
 .xo-stat dt { color: var(--ent-text-2); font-size: 0.875rem; }
 .xo-stat dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: normal; word-break: normal; }
-/* On a tile the label sits above its figure, so a narrow tile never squeezes either one. */
-.xo-tile .xo-stat { flex-direction: column; gap: 0.0625rem; padding: 0.375rem 0; }
-.xo-tile .xo-stat dt { font-size: 0.8125rem; }
-.xo-tile .xo-stat dd { text-align: left; font-size: 1.0625rem; }
 .xo-stat dd.is-warn { color: var(--ent-warning); }
 .xo-stat dd.is-bad { color: var(--ent-danger); }
 .xo-stat dd.is-good { color: var(--ent-success); }
@@ -412,8 +365,6 @@ const unbroken = (v: string) => v.replace(/(\d) (?=\d)/g, '$1 ')
   .xo-nav-item { white-space: normal; }
   .xo-work { overflow-y: auto; padding: 1.25rem 1.5rem; }
   .xo-summary { display: flex; flex-direction: column; min-height: 100%; }
-  .xo-tiles { flex: 1; grid-template-columns: repeat(auto-fill, minmax(max(14rem, calc((100% - 2rem) / 3)), 1fr)); grid-auto-rows: auto; align-content: start; }
-  .xo-tile { min-height: 11rem; }
   /* The ward map takes the height of the window, its ranked list beside it. */
   .xo-wardmap { height: 100%; }
   .xo-wardmap :deep(.wm) { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }

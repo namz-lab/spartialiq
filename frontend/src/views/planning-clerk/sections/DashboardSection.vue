@@ -22,10 +22,12 @@
 import { computed, onActivated, onMounted } from 'vue'
 import { useClerkNav, useClerkPreferences } from '@/planning-clerk/useClerkConsole'
 import { useClerkOverview } from '@/planning-clerk/useClerkOverview'
-import { asLabel, formatMoney, formatWhen } from '@/planning-clerk/console'
+import { asLabel, formatWhen } from '@/planning-clerk/console'
 import type { SectionKey } from '@/planning-clerk/console'
 import { num } from '@/services/planningClerk'
 import UiButton from '@/components/ui/UiButton.vue'
+import GlanceGrid from '@/components/shared/GlanceGrid.vue'
+import { figure, glanceCard, type GlanceCard } from '@/components/shared/glance'
 import {
   AlertTriangle, CheckCircle2, FileInput, Mail, FileX, FolderInput,
   Receipt as ReceiptIcon, Inbox, Eye, Megaphone, Send, BookOpen,
@@ -110,6 +112,45 @@ const DESKS: { key: SectionKey; label: string; hint: string; icon: typeof Search
 ]
 
 const asOf = computed(() => formatWhen(d.value?.as_of))
+
+// ── At a glance ─────────────────────────────────────────────────────────
+// The Chief Executive's overview, for the counter: one tile per area of the clerk's work, the figures to act
+// on first, and the whole tile opens the screen where that work is done. Read from the same overview as the
+// rest of this screen; nothing is counted twice.
+const glance = computed<GlanceCard[]>(() => {
+  const o = d.value
+  const state = { loading: overview.loading.value, error: overview.error.value }
+  const t = today.value
+  return [
+    glanceCard('acknowledgements', 'Acknowledgements', Mail, o && [
+      figure('Letters past their date', num(o.acknowledgements.overdue), 'bad'),
+      figure('Within a fortnight of the three-month date', determinationSoon.value, 'warn'),
+      figure('Waiting to be sent', num(o.acknowledgements.outstanding)),
+    ], state),
+    glanceCard('receipt', 'The counter', FileInput, o && [
+      figure('Received today', t.received),
+      figure('Received this week', num(o.permits.received_this_week)),
+      figure('Waiting for the applicant to pay', t.unpaid),
+    ], state),
+    glanceCard('notices', 'Public notices', Megaphone, o && [
+      figure('In public notice', t.inNotice),
+      figure('Objection windows open', t.windows),
+    ], state),
+    glanceCard('refusals', 'Refusal letters', FileX, o && [
+      figure('Past their date', num(o.refusals.overdue), 'bad'),
+      figure('Waiting to be sent', num(o.refusals.outstanding), 'warn'),
+    ], state),
+    glanceCard('movements', 'Paper files', FolderInput, o && [
+      figure('Past the date promised back', num(o.movements.files_overdue), 'bad'),
+      figure('Out of the registry', t.filesOut),
+    ], state),
+    glanceCard('correspondence', 'Post and visits', Inbox, o && [
+      figure('Post in today', t.corrIn),
+      figure('Post out today', t.corrOut),
+      figure('Public inspections today', t.inspections),
+    ], state),
+  ]
+})
 </script>
 
 <template>
@@ -133,6 +174,11 @@ const asOf = computed(() => formatWhen(d.value?.as_of))
         </UiButton>
       </div>
     </header>
+
+    <!-- At a glance: one tile per area of the counter's work; a tile opens its screen -->
+    <section aria-label="At a glance" data-testid="clk-glance">
+      <GlanceGrid :cards="glance" testid="clk" @open="(k) => nav.go(k as SectionKey)" />
+    </section>
 
     <p v-if="overview.error.value" class="ins-banner t-negative" role="alert">
       <AlertTriangle :size="15" aria-hidden="true" />
@@ -190,36 +236,6 @@ const asOf = computed(() => formatWhen(d.value?.as_of))
         </span>
       </p>
 
-      <!-- ── 2. Today ─────────────────────────────────────────────────── -->
-      <section class="ins-kpis" aria-label="Today at the counter">
-        <button type="button" class="clk-kpi" @click="nav.go('register')">
-          <span class="clk-kpi-label"><FileInput :size="13" aria-hidden="true" /> Received today</span>
-          <strong class="clk-kpi-value">{{ today.received }}</strong>
-          <span class="clk-kpi-note">{{ today.unpaid }} on the register still unpaid</span>
-        </button>
-
-        <button type="button" class="clk-kpi" @click="nav.go('fees')">
-          <span class="clk-kpi-label"><ReceiptIcon :size="13" aria-hidden="true" /> Taken today</span>
-          <strong class="clk-kpi-value clk-kpi-money">
-            {{ formatMoney(today.usd, 'USD') }}
-          </strong>
-          <span class="clk-kpi-note">
-            {{ formatMoney(today.zwg, 'ZWG') }} · {{ today.receipts }} receipt{{ today.receipts === 1 ? '' : 's' }}
-          </span>
-        </button>
-
-        <button type="button" class="clk-kpi" @click="nav.go('correspondence')">
-          <span class="clk-kpi-label"><Inbox :size="13" aria-hidden="true" /> Post today</span>
-          <strong class="clk-kpi-value">{{ today.corrIn + today.corrOut }}</strong>
-          <span class="clk-kpi-note">{{ today.corrIn }} in · {{ today.corrOut }} out</span>
-        </button>
-
-        <button type="button" class="clk-kpi" @click="nav.go('public_inspection')">
-          <span class="clk-kpi-label"><Eye :size="13" aria-hidden="true" /> Public inspections</span>
-          <strong class="clk-kpi-value">{{ today.inspections }}</strong>
-          <span class="clk-kpi-note">Register inspections, copies and searches</span>
-        </button>
-      </section>
 
       <div class="clk-dash-split">
         <!-- Next deadlines, as a preview of the board rather than a copy. -->
@@ -335,24 +351,6 @@ const asOf = computed(() => formatWhen(d.value?.as_of))
 .clk-dash-link:focus-visible { outline:none; box-shadow:var(--ent-focus-ring);
   border-radius:var(--ent-r-sm); }
 
-/* KPI tiles are buttons: every number on this screen is a way into the
-   section that explains it, and a figure a clerk cannot open is a figure
-   they have to go and find by hand. */
-.clk-kpi { display:flex; flex-direction:column; gap:var(--ent-s1); text-align:left;
-  padding:var(--ent-s3) var(--ent-s4); font-family:var(--ent-font);
-  background:var(--ent-surface); border:1px solid var(--ent-line);
-  border-radius:var(--ent-r-md); box-shadow:var(--ent-e1); cursor:pointer;
-  transition:border-color var(--ent-dur) var(--ent-ease), box-shadow var(--ent-dur) var(--ent-ease); }
-.clk-kpi:hover { border-color:var(--ent-accent-line); box-shadow:var(--ent-e2); }
-.clk-kpi:focus-visible { outline:none; box-shadow:var(--ent-focus-ring); }
-.clk-kpi-label { display:inline-flex; align-items:center; gap:var(--ent-s2);
-  font-size:var(--ent-fs-micro); font-weight:var(--ent-fw-semibold);
-  letter-spacing:0.05em; text-transform:uppercase; color:var(--ent-text-3); }
-.clk-kpi-value { font-size:var(--ent-fs-num); font-weight:var(--ent-fw-bold);
-  line-height:var(--ent-lh-tight); color:var(--ent-text);
-  font-variant-numeric:tabular-nums; }
-.clk-kpi-money { font-family:var(--ent-font-mono); font-size:var(--ent-fs-xl); }
-.clk-kpi-note { font-size:var(--ent-fs-xs); color:var(--ent-text-3); }
 
 .clk-dash-split { display:grid; grid-template-columns:repeat(auto-fit, minmax(21rem, 1fr));
   gap:var(--ent-s4); align-items:start; }
@@ -385,8 +383,4 @@ const asOf = computed(() => formatWhen(d.value?.as_of))
 .clk-desk-text small { display:block; margin-top:2px; font-size:var(--ent-fs-xs);
   color:var(--ent-text-3); line-height:var(--ent-lh); }
 
-@media (max-width: 767px) {
-  .clk-kpi-value { font-size:var(--ent-fs-xl); }
-  .clk-kpi-money { font-size:var(--ent-fs-lg); }
-}
 </style>

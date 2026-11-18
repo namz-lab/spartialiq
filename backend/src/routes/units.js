@@ -6,6 +6,7 @@
  *   GET /api/units/:key/maps            the unit's own ward measures
  *   GET /api/units/:key/ward-table      the unit's wards as a table, with totals
  *   GET /api/units/:key/maps/:measure   one of them as GeoJSON over the council's wards
+ *   GET /api/units/planning/team        the EO Planning's desks at a glance (src/services/planningTeam.js); other units 404
  *
  * ACCESS (src/config/units.js `canSeeUnit`): the Chief Executive sees every unit; a unit's head sees only
  * that unit; any other staff role is refused. The server decides; the browser's route guard is a courtesy.
@@ -22,12 +23,14 @@ const { requireRole } = require('../middleware/jwtAuth')
 const { systemOf } = require('../lib/dbContext')
 const { createUnitSections } = require('../services/unitSections')
 const { createWardMaps } = require('../lib/wardMaps')
+const { createPlanningTeam } = require('../services/planningTeam')
 const { UNIT_ROLES_ALL, unitByKey, canSeeUnit, visibleUnits } = require('../config/units')
 
 async function unitRoutes(fastify) {
   const pg = fastify.pg
   const sections = createUnitSections(pg, fastify.log)
   const maps = createWardMaps(pg)
+  const team = createPlanningTeam(pg, fastify.log)
   const guard = requireRole(fastify, UNIT_ROLES_ALL)
 
   /** The unit's posts. The org chart is not tenant-scoped, so a holder from another council is shown as a vacancy. */
@@ -91,6 +94,17 @@ async function unitRoutes(fastify) {
         maps: { ...index, has_measures: index.measures.length > 0 },
       },
     })
+  })
+
+  // The EO Planning's team at a glance (src/services/planningTeam.js): one summary per desk under the EO.
+  // Only the planning unit has one; the same access rule as the unit itself (the EO, and the Chief Executive).
+  fastify.get('/units/:key/team', { preHandler: guard }, async (request, reply) => {
+    const unit = authorise(request, reply)
+    if (!unit) return
+    if (unit.key !== 'planning') {
+      return reply.code(404).send({ success: false, error: 'not_found', message: 'This unit has no team view.' })
+    }
+    return reply.send({ success: true, data: { as_of: new Date().toISOString(), warning_days: team.WARNING_DAYS, desks: await team.read() } })
   })
 
   fastify.get('/units/:key/maps', { preHandler: guard }, async (request, reply) => {

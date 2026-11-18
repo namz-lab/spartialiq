@@ -13,7 +13,7 @@ describe('readSection', () => {
   it('falls back to the landing preference, not to an error', () => {
     expect(readSection({ section: 'not_a_section' }, 'register')).toBe('register')
     expect(readSection({}, 'register')).toBe('register')
-    expect(readSection(undefined)).toBe('dashboard')
+    expect(readSection(undefined)).toBe('team')
   })
   it('ignores a repeated query parameter beyond the first', () => {
     expect(readSection({ section: ['committee', 'decision'] })).toBe('committee')
@@ -40,7 +40,7 @@ describe('sectionQuery', () => {
       .toEqual({ case: CASE, section: 'committee' })
   })
   it('omits ?section= when the bare URL already lands there', () => {
-    expect(sectionQuery({}, 'dashboard')).toEqual({})
+    expect(sectionQuery({}, 'team')).toEqual({})
     // …and against the SAME landing preference the reader is given, or a bare
     // link and the screen it writes would disagree.
     expect(sectionQuery({}, 'register', 'register')).toEqual({})

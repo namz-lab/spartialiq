@@ -274,3 +274,36 @@ describe('the ward table', () => {
     expect((await get('/api/executive/ward-table')).statusCode).toBe(401)
   })
 })
+
+describe('GET /api/units/planning/team', () => {
+  const DESKS = ['clerk', 'environmental_health', 'gis_survey', 'inspectors', 'planners']
+
+  test('the EO Planning and the Chief Executive open it; nobody else does', async () => {
+    expect((await get('/api/units/planning/team', 'eo')).statusCode).toBe(200)
+    expect((await get('/api/units/planning/team', 'accounting_officer')).statusCode).toBe(200)
+    for (const role of ['planner', 'admin', 'engineer', 'finance_admin']) {
+      expect((await get('/api/units/planning/team', role)).statusCode).toBe(403)
+    }
+    expect((await get('/api/units/planning/team')).statusCode).toBe(401)
+  })
+
+  test('only the planning unit has a team view', async () => {
+    expect((await get('/api/units/finance/team', 'accounting_officer')).statusCode).toBe(404)
+  })
+
+  test('has one summary per desk, and a desk not loaded says why', async () => {
+    const { data } = (await get('/api/units/planning/team', 'eo')).json()
+    expect(Object.keys(data.desks).sort()).toEqual(DESKS)
+    expect(data.warning_days).toBeGreaterThan(0)
+    for (const desk of Object.values(data.desks)) {
+      expect(typeof desk.loaded).toBe('boolean')
+      if (!desk.loaded) expect(desk.note).toEqual(expect.any(String))
+      // A count is never negative, and a figure inside a total never exceeds it.
+      for (const [k, v] of Object.entries(desk)) if (typeof v === 'number') expect(v).toBeGreaterThanOrEqual(0)
+    }
+    const { planners, inspectors, gis_survey: gis } = data.desks
+    if (planners.loaded) expect(planners.unassigned).toBeLessThanOrEqual(planners.in_hand)
+    if (inspectors.loaded) expect(inspectors.without_inspector).toBeLessThanOrEqual(inspectors.booked)
+    if (gis.loaded) expect(gis.tasks_overdue).toBeLessThanOrEqual(gis.tasks_open)
+  })
+})

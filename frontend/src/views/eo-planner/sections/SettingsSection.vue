@@ -22,6 +22,7 @@ import '@/views/inspector/inspector.css'
 const { prefs, set, reset } = useEoPreferences()
 
 const LANDING_LABELS: Record<LandingSection, string> = {
+  team: 'At a glance — the desks under you',
   dashboard: 'Dashboard — the clock and the queues',
   register: 'Applications — the development register',
   appeals: 'Appeals — the s.38 register',
