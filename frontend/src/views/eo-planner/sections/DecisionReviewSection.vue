@@ -30,8 +30,9 @@ import {
   Gavel, Inbox, RefreshCw, Clock, CheckCircle2, XCircle, CornerUpLeft,
   MessageSquare, Users, FileText, MapPin, AlertTriangle, Send, Plus,
   Trash2, Scale, Building2, ClipboardList, Loader2, Eye, FileCheck2,
-  Map as MapIcon, Camera,
+  Map as MapIcon, Camera, HardHat,
 } from 'lucide-vue-next'
+import { roadsWorksApi, type EngineeringAssessment } from '@/services/roadsWorks'
 
 // ─── Inbox state ──────────────────────────────────────────────────────
 type Bucket = 'all' | 'awaiting' | 'returned' | 'urgent'
@@ -82,6 +83,8 @@ const planBasisLine = computed(() => {
     : `The plan has not decided ${use} in the ${b.zone?.name ?? 'zone'} zone.`
 })
 const conditions = ref<{ text: string }[]>([])
+// Roads and Works' assessment (migration 253): the s.26(5) cost test, a subdivision's roads (s.41), access onto a council road.
+const engineering = ref<EngineeringAssessment | null>(null)
 const newCondition = ref('')
 const returnRole = ref<ReturnRole>('planner')
 const newMessage = ref('')
@@ -156,6 +159,8 @@ async function loadPackage(id: string) {
   rulesAck.value = false
   planNote.value = ''
   try {
+    engineering.value = null
+    void roadsWorksApi.assessment(id).then((a) => { if (selectedId.value === id) engineering.value = a }).catch(() => { engineering.value = null })
     const [p, m, ev, gate] = await Promise.all([
       dmApi.getDecisionPackage(id),
       dmApi.listMessages(id).catch(() => [] as CaseMessage[]),
@@ -192,6 +197,15 @@ function normalizeConditions(raw: unknown): { text: string }[] {
       : { text: String((c as Record<string, unknown>)?.text ?? '') })
     .filter(c => c.text.trim().length > 0)
 }
+/** A condition Roads and Works proposed, added to the permit's conditions once. */
+function addEngineeringCondition(t: string | null) {
+  const text = (t ?? '').trim()
+  if (text && !conditions.value.some((c) => c.text === text)) conditions.value.push({ text })
+}
+const hasCondition = (t: string | null) => !!t && conditions.value.some((c) => c.text === t.trim())
+const COST_HEADS: [keyof EngineeringAssessment, string][] = [['cost_roads', 'roads'], ['cost_parking', 'parking'], ['cost_drainage', 'drainage'], ['cost_sewerage', 'sewerage'], ['cost_water', 'water']]
+const engineeringCosts = computed(() => engineering.value ? COST_HEADS.filter(([k]) => engineering.value![k] === true).map(([, l]) => l) : [])
+
 function addCondition() {
   const t = newCondition.value.trim()
   if (!t) return
@@ -688,6 +702,31 @@ const deemed = computed(() =>
               </div>
             </section>
 
+            <!-- Roads and Works' assessment (migration 253) -->
+            <section v-if="engineering" class="eodr-card" data-testid="engineering-assessment">
+              <header><HardHat :size="13" /> Roads and Works assessment
+                <span class="eodr-statuschip" :class="outcomeClass(engineering.response_status)">{{ statusLabel(engineering.response_status) }}</span></header>
+              <div class="eodr-card-body eodr-eng">
+                <p v-if="engineering.response_notes" class="eodr-finding-sum">{{ engineering.response_notes }}</p>
+                <p><strong>Cost to the council (s.26(5)):</strong>&nbsp;
+                  <template v-if="engineeringCosts.length">{{ engineeringCosts.join(', ') }}<template v-if="engineering.estimated_cost">, about {{ engineering.cost_currency }} {{ Number(engineering.estimated_cost).toLocaleString('en-GB') }}</template>.</template>
+                  <template v-else>none found.</template></p>
+                <div v-if="engineering.cost_condition" class="eodr-eng-cond">
+                  <span>{{ engineering.cost_condition }}</span>
+                  <button type="button" class="eodr-btn ghost sm" :disabled="hasCondition(engineering.cost_condition)" @click="addEngineeringCondition(engineering.cost_condition)">{{ hasCondition(engineering.cost_condition) ? 'Added' : 'Add as a condition' }}</button>
+                </div>
+                <p v-if="engineering.road_reserves_adequate !== null"><strong>Subdivision roads (s.41):</strong>
+                  reserves {{ engineering.road_reserves_adequate ? 'adequate' : 'not adequate' }}<template v-if="engineering.widest_road_reserve_m">; widest {{ Number(engineering.widest_road_reserve_m) }} m<template v-if="Number(engineering.widest_road_reserve_m) > 24"> (over 24 m: s.41(3) applies to the excess)</template></template><template v-if="engineering.new_road_length_m">; {{ Number(engineering.new_road_length_m).toLocaleString('en-GB') }} m of new road</template>.</p>
+                <template v-if="engineering.access_approved !== null">
+                  <p><strong>Access onto {{ engineering.access_road_name || engineering.access_road_code || 'a council road' }}:</strong> {{ engineering.access_approved ? 'allowed' : 'not allowed' }}.</p>
+                  <div v-if="engineering.access_conditions" class="eodr-eng-cond">
+                    <span>{{ engineering.access_conditions }}</span>
+                    <button type="button" class="eodr-btn ghost sm" :disabled="hasCondition(engineering.access_conditions)" @click="addEngineeringCondition(engineering.access_conditions)">{{ hasCondition(engineering.access_conditions) ? 'Added' : 'Add as a condition' }}</button>
+                  </div>
+                </template>
+              </div>
+            </section>
+
             <!-- Objections -->
             <section class="eodr-card">
               <header><AlertTriangle :size="13" /> Objections
@@ -1045,6 +1084,8 @@ const deemed = computed(() =>
 .eodr-finding-top { display:flex; align-items:center; justify-content:space-between; gap:var(--ent-s2); }
 .eodr-finding-label { font-weight:var(--ent-fw-semibold); color:var(--ent-text); font-size:var(--ent-fs-xs); }
 .eodr-finding-sum { margin:var(--ent-s1) 0; line-height:var(--ent-lh); }
+.eodr-eng p { margin:var(--ent-s1) 0; font-size:var(--ent-fs-sm); line-height:var(--ent-lh); }
+.eodr-eng-cond { display:flex; gap:var(--ent-s2); align-items:flex-start; justify-content:space-between; padding:var(--ent-s2); margin:var(--ent-s1) 0; border-radius:var(--ent-r-sm); background:var(--ent-surface-2); font-size:var(--ent-fs-sm); }
 .eodr-finding-meta { font-size:var(--ent-fs-micro); color:var(--ent-text-3); }
 
 .eodr-objsum { display:flex; gap:var(--ent-s4); margin-bottom:var(--ent-s2);
