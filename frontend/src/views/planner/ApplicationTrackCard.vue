@@ -1,9 +1,13 @@
 <script setup lang="ts">
 // CityView-style auto-generated approval track for the chosen development type:
-// required submittals (completeness), departments to circulate to, public-
+// required submittals (completeness), the departments the case will be circulated to, public-
 // hearing requirement, and the legislated decision timeline. Read-only; it
 // reacts live to the development type the officer selects at intake.
-import { computed } from 'vue'
+//
+// The departments come from the server's circulation rules (backend migration 255): circulation is automatic when the
+// case is acknowledged, so the list shown here is the one the case will actually go to.
+import { computed, ref, watch } from 'vue'
+import { eoPlannerService, departmentLabel, type CirculationRule } from '@/services/eoPlannerService'
 import type { DevType } from '@/composables/usePlannerCase'
 import { trackFor } from './developmentTracks'
 import UiPanel from '@/components/ui/UiPanel.vue'
@@ -16,6 +20,13 @@ const props = withDefaults(defineProps<{
 }>(), { satisfied: () => ({}) })
 
 const track = computed(() => trackFor(props.devType))
+
+const rules = ref<CirculationRule[]>([])
+const rulesError = ref(false)
+watch(() => props.devType, async (t) => {
+  rulesError.value = false
+  try { rules.value = await eoPlannerService.circulationRules(String(t)) } catch { rules.value = []; rulesError.value = true }
+}, { immediate: true })
 const outstanding = computed(() =>
   track.value.submittals.filter(s => !props.satisfied[s.key]).length)
 const received = computed(() => track.value.submittals.length - outstanding.value)
@@ -72,18 +83,19 @@ const pct = computed(() =>
       <!-- ── Technical referrals ─────────────────────────────────────────── -->
       <section class="req-col">
         <h5 class="req-eyebrow">
-          <Users :size="12" aria-hidden="true" /> Technical referrals
-          <span class="req-count neutral"><span class="req-num">{{ track.referrals.length }}</span> bodies</span>
+          <Users :size="12" aria-hidden="true" /> Technical circulation
+          <span class="req-count neutral"><span class="req-num">{{ rules.length }}</span> departments</span>
         </h5>
 
         <ul class="req-list">
-          <li v-for="r in track.referrals" :key="r" class="req-ref">
+          <li v-for="r in rules" :key="r.id" class="req-ref">
             <ChevronRight :size="13" class="req-ico" aria-hidden="true" />
-            <span class="req-doc">{{ r }}</span>
+            <span class="req-doc">{{ departmentLabel(r.body_name) }}</span>
+            <span class="req-state">{{ r.blocking ? 'Decision waits' : `${r.reply_days} days` }}</span>
           </li>
         </ul>
 
-        <p class="req-hint">Technical circulation requirements for this application type.</p>
+        <p class="req-hint">{{ rulesError ? 'The circulation rules could not be read.' : 'Sent automatically when the case is acknowledged.' }}</p>
       </section>
     </div>
   </UiPanel>

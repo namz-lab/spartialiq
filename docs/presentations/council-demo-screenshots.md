@@ -56,13 +56,13 @@ Tick the envelope checklist, check the letter number and addressee, **Stamp rece
 
 ![Mark the letter as sent](demo-steps/c1-04-clerk-ack-sent-form.png)
 
-**Record as sent.** The letter shows *Sent*, and the three-month clock starts. The case moves to *Acknowledged* by itself; circulating it (step 5) and answering the Act's questions (step 6) take it on to *Under review*.
+**Record as sent.** The letter shows *Sent*, and the three-month clock starts. The case moves on by itself: the acknowledgement circulates it to the departments its kind of development needs (step 5), and answering the Act's questions (step 6) takes it on to *Under review*.
 
 ![The letter sent; the clock running](demo-steps/c1-04-clerk-ack-sent.png)
 
-### Step 5. Planner: circulation to the departments
+### Step 5. Planner: the circulation the acknowledgement made
 
-**EO console → Circulation.** Roads and Works, marked **blocking**, and Environmental health, each with a date to reply by. Roads and Works covers roads, traffic, stormwater, and water and sewer, and replies on its own desk.
+**EO console → Circulation.** Circulation is automatic: the acknowledgement sent the case to Roads and Works (**blocking**) and Environmental health, the departments the council's rules name for an extension, each with its reply date and the reason it was asked. Nobody presses anything. Roads and Works covers roads, traffic, stormwater, and water and sewer, and replies on its own desk.
 
 ![Circulation](demo-steps/c1-05-planner-circulation.png)
 
@@ -126,11 +126,11 @@ The **Roads and Works assessment** on the determination: *No objection*, and *Co
 
 ![The referral recorded](demo-steps/c2-02-planner-referral-sent.png)
 
-### Step 2b. Planner: circulation to Roads and Works
+### Step 2b. Planner: the circulation the acknowledgement made
 
-**EO console → Circulation.** Roads and Works, marked **blocking**: a shop brings customers and their cars.
+**EO console → Circulation.** A change of use goes to Roads and Works and Environmental health (both **blocking**: a shop brings customers and their cars, and may sell food) and to Fire. Environmental health and Fire reply *no objection* before the objection is heard (the capture script records their replies).
 
-![Circulated to Roads and Works](demo-steps/c2-02b-planner-circulates-roads-works.png)
+![The circulation for a change of use](demo-steps/c2-02b-circulation.png)
 
 ### Step 2c. Civil Engineering Technician: Roads and Works objects
 

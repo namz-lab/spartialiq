@@ -1,19 +1,19 @@
 <script setup lang="ts">
 // Technical circulation — the departmental referrals under s.26.
 //
-// The application goes to health, survey, Roads and Works (roads, traffic, stormwater, water and sewer), fire,
-// housing, electricity and environment. Roads and Works answers on its own referral desk. Each referral is a task with
-// a priority and a due date, can be marked blocking (its finding must be
-// resolved before determination), can be escalated when it runs late, and
-// comes back with a stance and, sometimes, an attachment.
+// Circulation is automatic (backend migration 255): when a case is acknowledged it goes to the departments its kind of
+// development needs (the circulation rules), each blocking or not and with its reply date, and the screen follows the
+// replies. Nobody picks the departments by hand. Roads and Works (roads, traffic, stormwater, water and sewer) answers on
+// its own referral desk. A referral can still be re-prioritised, given more time, or escalated when it runs late.
 //
-// It works on the console's open case. The queue below is only the way in when
-// nothing is open — the officer who came here from the register already has
-// the file, and asking them to pick it again was the old design.
+// A case acknowledged before circulation was automatic can have the rules applied (only what it lacks is sent).
+//
+// It works on the console's open case. The queue below is only the way in when nothing is open.
 
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
-  eoPlannerService, ALL_TECH_DEPARTMENTS, departmentLabel, answeredByRoadsAndWorks, type CirculationStatus,
+  eoPlannerService, ALL_TECH_DEPARTMENTS, departmentLabel, answeredByRoadsAndWorks,
+  type CirculationStatus, type CirculationRule,
 } from '@/services/eoPlannerService'
 import { dmApi, type Consultation } from '@/services/developmentManagementService'
 import { statusLabel } from '@/composables/useApplicationPipeline'
@@ -25,7 +25,7 @@ import { fmtDate, humanise } from '@/utils/dates'
 import UiFeedback from '@/components/UiFeedback.vue'
 import CaseRequired from './CaseRequired.vue'
 import {
-  Send, RefreshCw, CheckCircle2, AlertTriangle, Clock, Paperclip, Bell, Loader2,
+  Send, RefreshCw, CheckCircle2, AlertTriangle, Clock, Paperclip, Bell, Loader2, Workflow,
 } from 'lucide-vue-next'
 import '@/views/inspector/inspector.css'
 
@@ -35,63 +35,72 @@ const workload = useEoWorkload()
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 const TASK_STATUSES = ['open', 'in_progress', 'responded', 'accepted', 'returned', 'cancelled'] as const
+const NOT_YET = ['pending_payment', 'registered']
+const OPEN = ['acknowledged', 'circulation', 'objection_period', 'under_review', 'awaiting_eo_decision', 'deferred']
 
-// Cases at a stage where circulation is the work: in circulation already, or
-// under assessment and not yet sent out.
+// Cases at a stage where circulation is the work: in circulation already, or under assessment.
 const queue = computed(() => [...workload.circulation.value, ...workload.review.value])
 
 const { refreshNow } = useStaleRefresh(() => workload.refresh())
 
 // ── The open case's circulation ───────────────────────────────────────
 const status = ref<CirculationStatus | null>(null)
+const rules = ref<CirculationRule[]>([])
 const loading = ref(false)
-const sending = ref<string | null>(null)
+const applying = ref(false)
 const busy = ref<string | null>(null)
+
+const caseStatus = computed(() => eoCase.permit.value?.status ?? '')
+const devType = computed(() => (eoCase.permit.value as { development_type?: string | null } | null)?.development_type ?? null)
 
 async function loadStatus(id: string | null) {
   status.value = null
   if (!id) return
   loading.value = true
   try {
-    status.value = await eoPlannerService.circulationFor(id)
-    for (const d of status.value.departments) {
-      if (!d.consultation && priDraft[d.name] == null) priDraft[d.name] = 'normal'
-    }
+    const [s, r] = await Promise.all([
+      eoPlannerService.circulationFor(id),
+      eoPlannerService.circulationRules(devType.value).catch(() => [] as CirculationRule[]),
+    ])
+    status.value = s
+    rules.value = r
   } catch (err: unknown) {
     fb.showToast(fb.parseApiError(err, 'Could not read the circulation status.'), 'error')
   } finally {
     loading.value = false
   }
 }
-watch(() => eoCase.caseId.value, id => { void loadStatus(id) }, { immediate: true })
+watch([() => eoCase.caseId.value, devType], ([id]) => { void loadStatus(id) }, { immediate: true })
 
-// ── Drafts for departments not yet circulated ─────────────────────────
-const noteDraft = reactive<Record<string, string>>({})
-const priDraft = reactive<Record<string, string>>({})
-const dueDraft = reactive<Record<string, string>>({})
-const blockDraft = reactive<Record<string, boolean>>({})
+/** Why the rules sent the case to this department. */
+function ruleFor(name: string): CirculationRule | undefined {
+  return rules.value.find(r => r.body_name === name || (r.body_name === 'engineering' && answeredByRoadsAndWorks(name)))
+}
 
-async function circulateOne(dept: string) {
+/** What the rules require that the case does not have (a case acknowledged before circulation was automatic). */
+const missing = computed(() => {
+  const have = status.value?.departments ?? []
+  return rules.value.filter(r => !have.some(d => d.name === r.body_name || (r.body_name === 'engineering' && answeredByRoadsAndWorks(d.name))))
+})
+
+/** The departments this kind of development is not circulated to. */
+const notAsked = computed(() => {
+  const have = new Set((status.value?.departments ?? []).map(d => d.name))
+  return ALL_TECH_DEPARTMENTS.filter(n => !have.has(n) && !rules.value.some(r => r.body_name === n))
+})
+
+async function applyRules() {
   const id = eoCase.caseId.value
   if (!id) return
-  sending.value = dept
+  applying.value = true
   try {
-    await eoPlannerService.circulate(id, dept, {
-      notes: noteDraft[dept] || undefined,
-      priority: (priDraft[dept] as Consultation['priority']) || 'normal',
-      response_due_at: dueDraft[dept] || undefined,
-      blocking: !!blockDraft[dept],
-    })
-    fb.showToast(`Circulated to ${departmentLabel(dept)}.`, 'success')
-    noteDraft[dept] = ''
-    dueDraft[dept] = ''
-    blockDraft[dept] = false
-    priDraft[dept] = 'normal'
+    const { made } = await eoPlannerService.applyCirculationRules(id)
+    fb.showToast(made ? `Circulated to ${made} department(s) by the rules.` : 'Nothing to send: the case has every referral the rules require.', 'success')
     await loadStatus(id)
   } catch (err: unknown) {
-    fb.showToast(fb.parseApiError(err, 'Could not circulate.'), 'error')
+    fb.showToast(fb.parseApiError(err, 'The rules could not be applied.'), 'error')
   } finally {
-    sending.value = null
+    applying.value = false
   }
 }
 
@@ -142,8 +151,8 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
         <span class="ins-eyebrow">Section 26 consultation</span>
         <h2 class="ins-title"><Send :size="18" aria-hidden="true" /> Technical circulation</h2>
         <p class="ins-lede">
-          Referrals to the departments whose findings the determination rests on. A blocking
-          referral is one the case cannot be determined without.
+          Circulation is automatic: when a case is acknowledged it goes to the departments its kind of development
+          needs, each with a date to reply by. A blocking referral is one the case cannot be determined without.
         </p>
       </div>
       <div class="ins-actions">
@@ -190,6 +199,25 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
       <p v-if="loading" class="tc-msg">Reading the referrals…</p>
 
       <template v-else-if="status">
+        <p v-if="NOT_YET.includes(caseStatus)" class="ins-banner t-neutral" data-testid="tc-not-yet">
+          <Clock :size="16" aria-hidden="true" />
+          <span>The case is circulated automatically when its acknowledgement is sent: the Act's clock and the
+            departments' reply dates start together.</span>
+        </p>
+
+        <p v-else-if="missing.length && OPEN.includes(caseStatus)" class="ins-banner t-warning" data-testid="tc-missing">
+          <Workflow :size="16" aria-hidden="true" />
+          <span>
+            <strong>Not yet sent to {{ missing.map(r => departmentLabel(r.body_name)).join(', ') }}.</strong>
+            The rules for {{ devType ? humanise(devType).toLowerCase() : 'this kind of development' }} require
+            {{ missing.length === 1 ? 'it' : 'them' }}; the case was acknowledged before circulation was automatic.
+          </span>
+          <button type="button" class="tc-btn primary" :disabled="applying" data-testid="tc-apply-rules" @click="applyRules">
+            <component :is="applying ? Loader2 : Workflow" :size="14" aria-hidden="true" :class="{ 'ins-spin': applying }" />
+            {{ applying ? 'Sending…' : 'Apply the circulation rules' }}
+          </button>
+        </p>
+
         <p v-if="blockingOutstanding.length" class="ins-banner t-warning">
           <AlertTriangle :size="16" aria-hidden="true" />
           <span>
@@ -201,7 +229,7 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
 
         <div class="ins-kpis tc-kpis">
           <div class="tc-kpi">
-            <span class="tc-kpi-n">{{ status.departments.filter(d => d.consultation).length }}</span>
+            <span class="tc-kpi-n">{{ status.departments.length }}</span>
             <span class="tc-kpi-l">Circulated</span>
           </div>
           <div class="tc-kpi">
@@ -220,12 +248,11 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
           </div>
         </div>
 
-        <ul class="tc-depts">
+        <ul v-if="status.departments.length" class="tc-depts">
           <li v-for="d in status.departments" :key="d.name" class="tc-dept"
               :class="[`t-${outcomeTone(d.outcome)}`, { overdue: isOverdue(d) }]">
             <header class="tc-dept-head">
               <strong>{{ departmentLabel(d.name) }}</strong>
-              <span v-if="answeredByRoadsAndWorks(d.name)" class="tc-when">roads, traffic, stormwater, water and sewer · replies on its own desk with the s.26(5) cost test</span>
               <span class="tc-outcome" :class="`t-${outcomeTone(d.outcome)}`">
                 <component :is="d.outcome === 'no_objection' ? CheckCircle2
                                 : d.outcome === 'pending' ? Clock : AlertTriangle"
@@ -236,8 +263,9 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
                 {{ d.respondedAt ? `replied ${fmtDate(d.respondedAt)}` : 'no reply yet' }}
               </span>
             </header>
+            <p v-if="ruleFor(d.name)" class="tc-why">{{ ruleFor(d.name)!.ask }}</p>
+            <p v-if="answeredByRoadsAndWorks(d.name)" class="tc-why">Replies on its own referral desk, with the s.26(5) cost test.</p>
 
-            <!-- Circulated: the task -->
             <div v-if="d.consultation" class="tc-task">
               <div class="ins-form tc-task-form">
                 <label class="ins-field">
@@ -266,12 +294,10 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
               </div>
 
               <div class="tc-chips">
-                <button type="button" class="tc-chip" :class="{ on: d.consultation.blocking }"
-                        :aria-pressed="!!d.consultation.blocking"
-                        :disabled="busy === d.consultation.id"
-                        @click="updateTask(d.consultation!, { blocking: !d.consultation.blocking })">
+                <span class="tc-chip" :class="{ on: d.consultation.blocking }"
+                      :title="d.consultation.blocking ? 'Set by the circulation rules: the case waits for this reply' : 'Set by the circulation rules'">
                   {{ d.consultation.blocking ? 'Blocking' : 'Non-blocking' }}
-                </button>
+                </span>
                 <span v-if="isOverdue(d)" class="tc-flag t-negative">
                   <Clock :size="11" aria-hidden="true" /> Overdue
                 </span>
@@ -291,50 +317,18 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
                 </a>
               </div>
 
-              <p v-if="d.consultation.response_notes" class="tc-response">
+              <p v-if="d.consultation.response_notes && d.outcome !== 'pending'" class="tc-response">
                 {{ d.consultation.response_notes }}
               </p>
             </div>
-
-            <!-- Not circulated yet -->
-            <div v-else class="tc-send">
-              <div class="ins-form tc-task-form">
-                <label class="ins-field full">
-                  <span class="ins-label">Cover note</span>
-                  <input v-model="noteDraft[d.name]" class="ins-input"
-                         placeholder="What this department is being asked to consider" />
-                </label>
-                <label class="ins-field">
-                  <span class="ins-label">Priority</span>
-                  <select v-model="priDraft[d.name]" class="ins-input">
-                    <option v-for="p in PRIORITIES" :key="p" :value="p">{{ humanise(p) }}</option>
-                  </select>
-                </label>
-                <label class="ins-field">
-                  <span class="ins-label">Response due</span>
-                  <input v-model="dueDraft[d.name]" type="date" class="ins-input" />
-                </label>
-              </div>
-              <div class="tc-send-actions">
-                <label class="tc-blocking">
-                  <input v-model="blockDraft[d.name]" type="checkbox" />
-                  <span>Blocking — the case cannot be determined without this finding</span>
-                </label>
-                <button type="button" class="tc-btn primary" :disabled="sending === d.name"
-                        @click="circulateOne(d.name)">
-                  <component :is="sending === d.name ? Loader2 : Send" :size="14" aria-hidden="true"
-                             :class="{ 'ins-spin': sending === d.name }" />
-                  {{ sending === d.name ? 'Sending…' : 'Circulate' }}
-                </button>
-              </div>
-            </div>
           </li>
         </ul>
+        <p v-else-if="!NOT_YET.includes(caseStatus) && !missing.length" class="tc-msg">No department has been asked about this case.</p>
 
-        <p class="ins-hint tc-foot">
-          {{ ALL_TECH_DEPARTMENTS.length }} departments are on the standing circulation list.
-          A department that has nothing to say still answers — a silent referral is an
-          outstanding one.
+        <p v-if="notAsked.length" class="ins-hint tc-foot">
+          Not asked<template v-if="devType"> for {{ humanise(devType).toLowerCase() }}</template>:
+          {{ notAsked.map(departmentLabel).join(', ') }}. A department that has nothing to say still answers —
+          a silent referral is an outstanding one.
         </p>
       </template>
     </template>
@@ -367,7 +361,7 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
 .tc-dept.overdue { background:var(--ent-tone-warning-bg); }
 
 .tc-dept-head { display:flex; align-items:baseline; gap:var(--ent-s2); flex-wrap:wrap;
-  margin-bottom:var(--ent-s3); }
+  margin-bottom:var(--ent-s2); }
 .tc-dept-head strong { font-size:var(--ent-fs-base); font-weight:var(--ent-fw-semibold);
   color:var(--ent-text); }
 .tc-outcome { display:inline-flex; align-items:center; gap:4px; padding:1px 8px;
@@ -377,15 +371,14 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
 .tc-outcome.t-negative { background:var(--ent-tone-negative-bg); color:var(--ent-tone-negative-fg); }
 .tc-outcome.t-warning  { background:var(--ent-tone-warning-bg); color:var(--ent-tone-warning-fg); }
 .tc-when { margin-left:auto; font-size:var(--ent-fs-micro); color:var(--ent-text-3); }
+.tc-why { margin:0 0 var(--ent-s2); font-size:var(--ent-fs-xs); color:var(--ent-text-2); line-height:var(--ent-lh); }
 
-.tc-task, .tc-send { display:flex; flex-direction:column; gap:var(--ent-s3); }
+.tc-task { display:flex; flex-direction:column; gap:var(--ent-s3); }
 .tc-task-form { gap:var(--ent-s2) var(--ent-s3); }
 .tc-chips { display:flex; align-items:center; gap:var(--ent-s2); flex-wrap:wrap; }
 .tc-chip { padding:3px var(--ent-s3); border:1px solid var(--ent-line); background:var(--ent-surface);
-  border-radius:var(--ent-r-pill); font-family:var(--ent-font); font-size:var(--ent-fs-micro);
-  font-weight:var(--ent-fw-semibold); color:var(--ent-text-2); cursor:pointer; }
-.tc-chip:hover:not(:disabled) { border-color:var(--ent-line-strong); color:var(--ent-text); }
-.tc-chip:focus-visible { outline:none; box-shadow:var(--ent-focus-ring); }
+  border-radius:var(--ent-r-pill); font-size:var(--ent-fs-micro);
+  font-weight:var(--ent-fw-semibold); color:var(--ent-text-2); }
 .tc-chip.on { background:var(--ent-tone-negative-bg); border-color:var(--ent-tone-negative-line);
   color:var(--ent-tone-negative-fg); }
 .tc-flag { display:inline-flex; align-items:center; gap:4px; padding:1px 8px;
@@ -398,25 +391,19 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
   background:var(--ent-surface-2); font-size:var(--ent-fs-sm); color:var(--ent-text-2);
   line-height:var(--ent-lh); }
 
-.tc-send-actions { display:flex; align-items:center; justify-content:space-between;
-  gap:var(--ent-s3); flex-wrap:wrap; }
-.tc-blocking { display:inline-flex; align-items:center; gap:var(--ent-s2);
-  font-size:var(--ent-fs-xs); color:var(--ent-text-2); }
-.tc-blocking input { width:16px; height:16px; accent-color:var(--ent-accent); flex-shrink:0; }
-
 .tc-btn { display:inline-flex; align-items:center; gap:var(--ent-s2);
   min-height:var(--ent-control-h-sm); padding:0 var(--ent-s3);
   font-family:var(--ent-font); font-size:var(--ent-fs-xs); font-weight:var(--ent-fw-medium);
   color:var(--ent-text); background:var(--ent-surface); border:1px solid var(--ent-line);
-  border-radius:var(--ent-r); cursor:pointer; }
+  border-radius:var(--ent-r); cursor:pointer; white-space:nowrap; }
 .tc-btn:hover:not(:disabled) { background:var(--ent-surface-2); }
 .tc-btn:focus-visible { outline:none; box-shadow:var(--ent-focus-ring); }
 .tc-btn:disabled { opacity:0.55; cursor:not-allowed; }
-.tc-btn.primary { min-height:var(--ent-control-h); font-size:var(--ent-fs-sm);
+.tc-btn.primary { min-height:var(--ent-control-h); font-size:var(--ent-fs-sm); margin-left:auto;
   background:var(--ent-accent); border-color:var(--ent-accent); color:var(--ent-text-on-accent); }
 .tc-btn.primary:hover:not(:disabled) { background:var(--ent-accent-hover); }
 
 .tc-msg { margin:0; padding:var(--ent-s6) var(--ent-s4); text-align:center;
   font-size:var(--ent-fs-sm); color:var(--ent-text-3); line-height:var(--ent-lh); }
-.tc-foot { max-width:60ch; }
+.tc-foot { max-width:70ch; }
 </style>
