@@ -1,10 +1,13 @@
 <script setup lang="ts">
 // GIS Officer Dashboard — pending map requests, layers that are stale,
-// data-quality score, and quick-action shortcuts.
+// data-quality score, and quick-action shortcuts. The "At a glance" row on top is the Chief Executive's
+// overview applied to the GIS desk (components/shared/GlanceGrid.vue): a tile per area, what is owed flagged.
 
 import { ref, computed, onMounted } from 'vue'
 import { useGISOfficerWorkspace } from '@/composables/useGISOfficerWorkspace'
 import { gisOfficerService } from '@/services/gisOfficerService'
+import GlanceGrid from '@/components/shared/GlanceGrid.vue'
+import { figure, glanceCard, type GlanceCard } from '@/components/shared/glance'
 import {
   Globe, Database, MapPin, Users, ShieldAlert, Eye, BarChart3,
   AlertTriangle, Clock, Trees, Send,
@@ -33,6 +36,32 @@ const stale   = computed(() => gis.staleLayers.value.slice(0, 6))
 const openQuality = computed(() =>
   gis.qualityLog.value.filter(q => !q.resolved_at).slice(0, 5))
 
+type GisSection = 'spatial_db'|'app_mapping'|'referrals'|'abutting_owners'|'zoning'|'environmental'|'enforcement'|'forward_planning'|'public_portal'|'data_quality'
+
+// ── At a glance ───────────────────────────────────────────────────────
+const glance = computed<GlanceCard[]>(() => {
+  const state = { loading: loading.value, error: null }
+  const ready = !loading.value
+  const unresolved = gis.qualityLog.value.filter(q => !q.resolved_at).length
+  return [
+    glanceCard('app_mapping', 'Map requests', MapPin, ready ? [
+      figure('Waiting to be mapped', gis.pendingRequests.value.length, 'warn'),
+      figure('Applications on the map', dmCounts.value.permits),
+    ] : null, state),
+    glanceCard('spatial_db', 'Layers', Database, ready ? [
+      figure('Stale', gis.staleLayers.value.length, 'warn'),
+      figure('On the register', gis.layers.value.length),
+    ] : null, state),
+    glanceCard('data_quality', 'Data quality', BarChart3, ready ? [
+      figure('Issues not resolved', unresolved, 'warn'),
+      figure('Quality score', null, undefined, String(gis.dataQualityScore.value)),
+    ] : null, state),
+    glanceCard('enforcement', 'Enforcement on the map', ShieldAlert, ready ? [
+      figure('Enforcement pins', dmCounts.value.enforcement),
+    ] : null, state),
+  ]
+})
+
 function fmtDate(iso: string|null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
@@ -49,6 +78,10 @@ function daysSince(iso: string): number {
       <h2>GIS workload</h2>
       <span class="gisd-sub" v-if="loading">Refreshing…</span>
     </header>
+
+    <section class="gisd-glance" aria-label="At a glance" data-testid="gisd-glance">
+      <GlanceGrid :cards="glance" testid="gisd" @open="(k) => emit('open-section', k as GisSection)" />
+    </section>
 
     <p class="gisd-summary">
       {{ gis.layers.value.length }} layers on the register

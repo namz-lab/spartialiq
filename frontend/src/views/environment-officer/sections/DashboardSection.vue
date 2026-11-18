@@ -7,6 +7,11 @@
 // ranks by public-health consequence: disease first, then unsafe water, then
 // owed return visits, then the register's backlog, then paperwork.
 //
+// The "At a glance" row on top is the Chief Executive's overview applied to the EHO's registers
+// (components/shared/GlanceGrid.vue): one tile per register, a missed date in red and anything owed in amber,
+// so the grid does not weigh a cholera cluster like a certificate either. The ranked queue below it stays the
+// order of work.
+//
 // Counters come from GET /eho/summary (one round trip, computed where the rows
 // are). The lists beneath come from the offline-first registers, so the
 // dashboard still shows the district's open outbreaks with no connection.
@@ -19,6 +24,8 @@ import { useEhoNav } from '@/environment-officer/useEhoNav'
 import { useEhoPreferences } from '@/environment-officer/useEhoPreferences'
 import { isOverdue, fmtDate, daysSince, humanise, isoDay, type SectionKey, wardLabel } from '@/environment-officer/console'
 import UiStatusBadge from '@/components/ui/UiStatusBadge.vue'
+import GlanceGrid from '@/components/shared/GlanceGrid.vue'
+import { figure, glanceCard, type GlanceCard } from '@/components/shared/glance'
 import {
   AlertTriangle, Droplet, CalendarClock, Building, Stamp, BadgeCheck, Truck, MessageSquareWarning,
   ChevronRight, CheckCircle2, Plus, Activity, ClipboardCheck, ShieldAlert,
@@ -81,6 +88,38 @@ const queue = computed<Item[]>(() => {
       section: 'certificates', scoped: { tab: 'handlers' } },
   ]
   return items.filter(i => i.count > 0)
+})
+
+// ── At a glance ─────────────────────────────────────────────────────
+const glance = computed<GlanceCard[]>(() => {
+  const v = s.value
+  const state = { loading: !v, error: null }
+  return [
+    glanceCard('surveillance', 'Disease and water', AlertTriangle, v && [
+      figure('Open disease outbreaks', v.outbreaksOpen, 'bad'),
+      figure('Water sources failing (90 days)', v.waterFailing90d, 'bad'),
+      figure('Nuisance complaints open', v.complaintsOpen, 'warn'),
+    ], state),
+    glanceCard('inspections', 'Premises inspections', ClipboardCheck, v && [
+      figure('Return visits due', v.followUpsDue, 'warn'),
+      figure(`Overdue on the ${v.overdueDays}-day cycle`, v.premisesOverdue, 'warn'),
+      figure('Premises registered', v.premises),
+    ], state),
+    glanceCard('enforcement', 'Notices', ShieldAlert, v && [
+      figure('Past their compliance date', v.noticesOverdue, 'bad'),
+      figure('Open', v.noticesOpen),
+    ], state),
+    glanceCard('certificates', 'Food-handler certificates', BadgeCheck, v && [
+      figure('Expired', v.handlerCertsExpired, 'bad'),
+      figure('Expiring within 30 days', v.handlerCertsExpiring30d, 'warn'),
+    ], state),
+    glanceCard('licensing', 'Licence clearances', Stamp, v && [
+      figure('Awaiting your decision', v.clearancesPending, 'warn'),
+    ], state),
+    glanceCard('programmes', 'Programme rounds', Truck, v && [
+      figure('Due on or before today', v.programmesDue, 'warn'),
+    ], state),
+  ]
 })
 
 const allClear = computed(() => s.value !== null && queue.value.length === 0)
@@ -159,6 +198,11 @@ function outbreakTone(status: string) {
         </button>
       </div>
     </header>
+
+    <!-- At a glance: one tile per register; a tile opens its screen -->
+    <section aria-label="At a glance" data-testid="eds-glance">
+      <GlanceGrid :cards="glance" testid="eds" @open="(k) => nav.go(k as SectionKey)" />
+    </section>
 
     <!-- Needs attention -->
     <section class="ins-card" aria-labelledby="eds-attn">

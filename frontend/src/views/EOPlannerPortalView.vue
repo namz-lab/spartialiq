@@ -2,7 +2,8 @@
 // Executive Officer (Planning) console — every duty of the planning office in
 // one workspace, with one case open across all of them.
 //
-// SECTIONS (fifteen, in three groups)
+// SECTIONS (in five groups)
+//   overview  At a glance: the desks under the EO, read from GET /api/units/planning/team (eo-planner/teamDesks.ts)
 //   casework  Dashboard · Register · Intake · Due diligence · Public notice ·
 //             Circulation · Committee · Determination
 //   records   Permits · Enforcement · Appeals · Building plans
@@ -56,6 +57,7 @@ import UiBottomNav, { type BottomNavItem } from '@/components/ui/UiBottomNav.vue
 import UiSheet from '@/components/ui/UiSheet.vue'
 import './inspector/inspector.css'
 
+import TeamSection          from './eo-planner/sections/TeamSection.vue'
 import DashboardSection     from './eo-planner/sections/DashboardSection.vue'
 import RegisterSection      from './eo-planner/sections/RegisterSection.vue'
 import IntakeReviewSection  from './eo-planner/sections/IntakeReviewSection.vue'
@@ -75,7 +77,7 @@ import WorkflowRegistersSection from './eo-planner/sections/WorkflowRegistersSec
 import DevelopmentMatrixManager from '@/components/admin/land-use/DevelopmentMatrixManager.vue'
 
 import {
-  Briefcase, LayoutDashboard, Library, Inbox, FileSearch, Megaphone, Send,
+  Briefcase, LayoutDashboard, LayoutGrid, Library, Inbox, FileSearch, Megaphone, Send,
   Users, Gavel, FileCheck2, ShieldAlert, Scale, Building, BarChart3, BookOpen,
   Settings, Menu, X, Search, CornerDownLeft, RefreshCw, FolderOpen, Clock,
   AlertTriangle, Table2, GitBranch,
@@ -101,6 +103,8 @@ const eoCase = useEoCase()
 type Section = BottomNavItem & { key: SectionKey; desc: string }
 
 const SECTIONS: readonly Omit<Section, 'badge'>[] = [
+  { key: 'team',         label: 'At a glance',      short: 'Team',     icon: LayoutGrid,
+    desc: 'The desks under you: clerk, planners, inspectors, health, GIS and survey' },
   { key: 'dashboard',    label: 'Dashboard',        short: 'Today',    icon: LayoutDashboard,
     desc: 'The clock, the queues and what needs you today' },
   { key: 'register',     label: 'Applications',     short: 'Register', icon: Library,
@@ -138,7 +142,7 @@ const SECTIONS: readonly Omit<Section, 'badge'>[] = [
 ]
 
 const GROUP_LABEL: Record<string, string> = {
-  casework: 'Your cases', prepared: 'Prepared for you', records: 'Registers', office: 'Office',
+  overview: 'Your team', casework: 'Your cases', prepared: 'Prepared for you', records: 'Registers', office: 'Office',
 }
 
 // What the planner and the clerk prepare is folded away until it is wanted: it is not the EO's step, and seventeen entries in one list hide the ones that are.
@@ -149,7 +153,7 @@ const railSections = computed(() => sections.value.filter(s =>
 // Bottom bar order: the four that move a case day to day, then the rest
 // behind More. A fifteen-slot bar would give each item 25px.
 const MOBILE_ORDER: SectionKey[] = [
-  'dashboard', 'register', 'committee', 'decision',
+  'team', 'dashboard', 'register', 'decision',
   'diligence', 'notification', 'circulation', 'committee', 'permits',
   'enforcement', 'appeals', 'plans', 'workflow', 'reports', 'matrix', 'reference', 'settings',
 ]
@@ -166,7 +170,7 @@ const activeMeta = computed(() =>
   sections.value.find(s => s.key === activeSection.value) ?? sections.value[0])
 
 const SECTION_COMPONENTS: Record<SectionKey, Component> = {
-  dashboard: DashboardSection, register: RegisterSection, intake: IntakeReviewSection,
+  team: TeamSection, dashboard: DashboardSection, register: RegisterSection, intake: IntakeReviewSection,
   diligence: DueDiligenceSection, notification: PublicNotificationSection,
   circulation: TechnicalCirculationSection, committee: CommitteeSection,
   decision: DecisionReviewSection, permits: PermitsSection, enforcement: EnforcementSection,

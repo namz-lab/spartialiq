@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // My Work — the planner's first question: what do I need to do today?
-// Clickable queues only. No hero KPI tiles.
+// Clickable queues only. No hero KPI tiles: the "At a glance" row on top is the Chief Executive's overview
+// applied to the planner's own work (components/shared/GlanceGrid.vue), each tile a count of a queue below
+// with the ones to act on flagged, and the whole tile opens where that work is done.
 import { computed, onMounted, ref } from 'vue'
 import { dmApi, isConflictError } from '@/services/developmentManagementService'
 import { useAuthStore } from '@/stores/auth'
@@ -12,8 +14,10 @@ import SlaSummaryCard from '@/views/planner/SlaSummaryCard.vue'
 import UiPanel from '@/components/ui/UiPanel.vue'
 import UiEmptyState from '@/components/ui/UiEmptyState.vue'
 import UiButton from '@/components/ui/UiButton.vue'
+import GlanceGrid from '@/components/shared/GlanceGrid.vue'
+import { figure, glanceCard, type GlanceCard } from '@/components/shared/glance'
 import {
-  AlertTriangle, ClipboardList, ShieldAlert, Bell, RefreshCw, UserPlus,
+  AlertTriangle, ClipboardList, ShieldAlert, Bell, RefreshCw, UserPlus, Send, Scale,
 } from 'lucide-vue-next'
 
 const emit = defineEmits<{
@@ -40,6 +44,7 @@ async function refresh() {
     permits.value = p
     enforcement.value = e
     appeals.value = a
+    loaded.value = true
   } catch (err: unknown) {
     fb.showToast(fb.parseApiError(err, 'Could not load today\'s work'), 'error')
   } finally {
@@ -132,6 +137,52 @@ const appBuckets: Array<{ key: keyof ReturnType<typeof buildMyWork>['application
 
 /** Only stages with files in them. Seven "nothing waiting" boxes said nothing. */
 const liveBuckets = computed(() => appBuckets.filter(b => queues.value.applications[b.key].length))
+// ── At a glance ─────────────────────────────────────────────────────────
+const loaded = ref(false)
+const glance = computed<GlanceCard[]>(() => {
+  const q = queues.value
+  const ready = loaded.value || !!permits.value.length
+  const state = { loading: loading.value, error: null }
+  const sev = (s: WorkItem['severity']) => q.urgent.filter((i) => i.severity === s).length
+  const a = q.applications
+  return [
+    glanceCard('urgent', 'Against the clock', AlertTriangle, ready ? [
+      figure('Overdue', sev('critical'), 'bad'),
+      figure('Urgent', sev('urgent'), 'warn'),
+      figure('Due soon', sev('caution'), 'warn'),
+    ] : null, state),
+    glanceCard('workflow', APPS_TITLE[scope.value], ClipboardList, ready ? [
+      figure('Ready for recommendation', a.readyForRecommendation.length, 'warn'),
+      figure('New files', a.newlyAssigned.length, 'warn'),
+      figure('In assessment', a.inAssessment.length),
+      figure('Awaiting information', a.awaitingInformation.length),
+      figure('Awaiting decision', a.awaitingDecision.length),
+    ] : null, state),
+    glanceCard('unassigned', 'Files nobody holds', UserPlus, ready ? [
+      figure('Live files with no planner', counts.value.unassigned, 'warn'),
+      figure('Yours', counts.value.mine),
+    ] : null, state),
+    glanceCard('referrals', 'Referrals and objections', Send, ready ? [
+      figure('Waiting on a department', a.awaitingReferrals.length),
+      figure('In the objection period', a.awaitingObjections.length),
+    ] : null, state),
+    glanceCard('enforcement', 'Enforcement', ShieldAlert, ready ? [
+      figure('Orders waiting on you', q.enforcement.length, 'warn'),
+    ] : null, state),
+    glanceCard('appeals', 'Appeals', Scale, ready ? [
+      figure('Open appeals', appeals.value.length, 'warn'),
+      figure('Live files with a fee unpaid', q.alerts.length),
+    ] : null, state),
+  ]
+})
+
+/** A tile opens the section where its work is done; "Files nobody holds" switches the queues to them. */
+function openGlance(key: string) {
+  if (key === 'unassigned') return setScope('unassigned')
+  if (key === 'urgent') return emit('open-section', 'workflow')
+  emit('open-section', key as SectionKey)
+}
+
 const SEVERITY_LABEL: Record<WorkItem['severity'], string> = {
   critical: 'Overdue', urgent: 'Urgent', caution: 'Due soon', info: 'Note',
 }
@@ -155,6 +206,10 @@ const SEVERITY_LABEL: Record<WorkItem['severity'], string> = {
         {{ loading ? 'Loading' : 'Refresh' }}
       </UiButton>
     </header>
+
+    <section class="mw-glance" aria-label="At a glance" data-testid="mw-glance">
+      <GlanceGrid :cards="glance" testid="mw" @open="openGlance" />
+    </section>
 
     <div class="mw-grid">
       <!-- Two independent columns: what must be acted on (left) and the
@@ -270,6 +325,7 @@ const SEVERITY_LABEL: Record<WorkItem['severity'], string> = {
 .mw-item .mw-row { border-top: none; flex: 1; min-width: 0; }
 .mw-take { flex-shrink: 0; margin-right: var(--ent-s2); }
 
+.mw-glance { margin-bottom: var(--ent-s3); }
 .mw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: var(--ent-s3); align-items: start; }
 .mw-stack { display: flex; flex-direction: column; gap: var(--ent-s3); min-width: 0; }
 

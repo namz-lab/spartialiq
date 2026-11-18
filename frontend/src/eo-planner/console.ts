@@ -37,6 +37,8 @@ import { daysUntil, determinationDeadline } from '@/statutory/periods'
 // ── Sections ─────────────────────────────────────────────────────────────
 
 export const SECTION_KEYS = [
+  // Overview — the desks under the EO, at a glance (the Chief Executive's overview, for the planning team).
+  'team',
   // Casework — the statutory path of one application, in order.
   'dashboard', 'register', 'intake', 'diligence', 'notification',
   'circulation', 'committee', 'decision',
@@ -49,9 +51,10 @@ export const SECTION_KEYS = [
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 /** casework: the EO's own steps. prepared: what the planner and the clerk prepare for the EO. records: what the council keeps. office: periodic work and reference. */
-export type SectionGroup = 'casework' | 'prepared' | 'records' | 'office'
+export type SectionGroup = 'overview' | 'casework' | 'prepared' | 'records' | 'office'
 
 export const SECTION_GROUP: Readonly<Record<SectionKey, SectionGroup>> = Object.freeze({
+  team: 'overview',
   dashboard: 'casework', register: 'casework', committee: 'casework', decision: 'casework', permits: 'casework',
   intake: 'prepared', diligence: 'prepared', notification: 'prepared', circulation: 'prepared',
   enforcement: 'records', appeals: 'records', plans: 'records', workflow: 'records',
@@ -67,7 +70,7 @@ export const CASE_SECTIONS: readonly SectionKey[] = [
   'intake', 'diligence', 'notification', 'circulation', 'committee', 'decision', 'permits',
 ]
 
-export const FALLBACK_SECTION: SectionKey = 'dashboard'
+export const FALLBACK_SECTION: SectionKey = 'team'
 
 export function isSectionKey(value: unknown): value is SectionKey {
   return typeof value === 'string' && (SECTION_KEYS as readonly string[]).includes(value)
@@ -173,7 +176,7 @@ export function nextStepFor(status: string | null | undefined):
  * are the seven case sections, which would land on "no case open".
  */
 export const LANDING_SECTIONS = [
-  'dashboard', 'register', 'appeals', 'enforcement', 'reports',
+  'team', 'dashboard', 'register', 'appeals', 'enforcement', 'reports',
 ] as const satisfies readonly SectionKey[]
 export type LandingSection = (typeof LANDING_SECTIONS)[number]
 
@@ -193,7 +196,7 @@ export interface EoPreferences {
 }
 
 export const DEFAULT_EO_PREFERENCES: Readonly<EoPreferences> = Object.freeze({
-  landingSection: 'dashboard',
+  landingSection: 'team',
   railCollapsed: false,
   clockWarningDays: 14,
 })
