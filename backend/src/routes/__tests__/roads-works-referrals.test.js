@@ -142,3 +142,17 @@ describe('the engineering referral desk', () => {
     expect((await call('POST', `/api/roads-works/referrals/${subCid}/reply`, 'engineer', { response_status: 'no_objection', cost: NO_COST, subdivision: { road_reserves_adequate: true } })).statusCode).toBe(409)
   })
 })
+
+describe('what Roads and Works answers', () => {
+  const { isEngineeringBody } = require('../roads-works-referrals')
+  test('roads, traffic, and water and sewer referrals are all the department\'s; others are not', () => {
+    for (const n of ['engineering', 'Roads and Works', 'traffic', 'water_sewer', 'Engineering: roads and stormwater']) expect(isEngineeringBody(n)).toBe(true)
+    for (const n of ['fire', 'environmental_health', 'survey', '', null]) expect(isEngineeringBody(n)).toBe(false)
+  })
+  maybe('a case near a State road (the Act\'s question, road_within_200m) is marked on the desk', async () => {
+    await dbContext.systemOf(app.pg).query(`UPDATE spatial_planning.permit_application SET statutory_checks = '{"road_within_200m": true}'::jsonb WHERE id = $1`, [caseId])
+    const all = (await call('GET', '/api/roads-works/referrals?state=all', 'engineer')).json().data.referrals
+    expect(all.find((r) => r.id === cid).near_state_road).toBe(true)
+    expect(all.find((r) => r.id === subCid).near_state_road).toBeFalsy()
+  })
+})

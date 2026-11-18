@@ -23,7 +23,13 @@ const CASE_READERS = ['eo', 'planner', 'planning_clerk', 'admin', 'accounting_of
 const RESPONSES = ['no_objection', 'conditional_approval', 'objection']
 const FINAL = ['approved', 'approved_with_conditions', 'refused', 'withdrawn']
 const SUBDIVISION = ['subdivision', 'consolidation']
-const ENGINEERING = `lower(c.body_name) IN ('engineering', 'roads and works', 'roads_and_works')`
+// The referrals Roads and Works answers. In a rural district council roads, traffic, stormwater, and water and sewer are
+// all the department's, so a referral to any of them comes to this desk (older cases may carry those names, or
+// "Engineering: …").
+const ENGINEERING_BODIES = ['engineering', 'roads and works', 'roads_and_works', 'traffic', 'water_sewer']
+const ENGINEERING = `(lower(c.body_name) IN (${ENGINEERING_BODIES.map((b) => `'${b}'`).join(', ')}) OR lower(c.body_name) LIKE 'engineering%')`
+/** Is this referral one for Roads and Works to answer? */
+const isEngineeringBody = (name) => typeof name === 'string' && (ENGINEERING_BODIES.includes(name.trim().toLowerCase()) || name.trim().toLowerCase().startsWith('engineering'))
 
 const isUuid = (v) => typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v)
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
@@ -74,7 +80,8 @@ async function roadsWorksReferralRoutes(fastify) {
               (c.response_due_at IS NOT NULL AND c.response_due_at < current_date AND c.response_received_at IS NULL) AS overdue,
               p.tpd_reference, p.dev_register_no, p.applicant_name, p.stand_number, p.suburb_ward, p.development_type,
               p.description, p.status AS case_status, p.statutory_due_date,
-              (p.statutory_checks ->> 'state_road')::boolean AS near_state_road,
+              -- the Act's question "within 200 m of the centre line of a State road" (saved as road_within_200m)
+              COALESCE((p.statutory_checks ->> 'road_within_200m')::boolean, (p.statutory_checks ->> 'state_road')::boolean) AS near_state_road,
               (a.id IS NOT NULL) AS assessed
          FROM spatial_planning.application_consultation c
          JOIN spatial_planning.permit_application p ON p.id = c.permit_app_id
@@ -173,4 +180,4 @@ async function roadsWorksReferralRoutes(fastify) {
   })
 }
 
-module.exports = { roadsWorksReferralRoutes, problems, REPLIERS }
+module.exports = { roadsWorksReferralRoutes, problems, REPLIERS, ENGINEERING_BODIES, isEngineeringBody }

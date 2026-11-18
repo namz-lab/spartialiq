@@ -34,17 +34,32 @@ export interface CirculationStatus {
   outstandingCount: number
 }
 
+// The standing circulation list. In a rural district council roads, traffic, stormwater, and water and sewer are all the
+// Department of Roads and Works', so one referral (key 'engineering') goes to it and is answered on its own referral desk,
+// with the infrastructure-cost test of s.26(5). Older cases may still carry 'traffic' or 'water_sewer' referrals: they
+// are shown, and answered on the same desk.
 export const ALL_TECH_DEPARTMENTS = [
   'environmental_health',
   'survey',
   'engineering',
   'fire',
-  'traffic',
   'housing',
   'electricity',
-  'water_sewer',
   'environment',
 ] as const
+
+const DEPARTMENT_LABEL: Record<string, string> = {
+  engineering: 'Roads and Works',
+  environmental_health: 'Environmental health',
+  traffic: 'Roads and Works: traffic',
+  water_sewer: 'Roads and Works: water and sewer',
+}
+/** The department's name as officers know it. */
+export const departmentLabel = (name: string): string =>
+  DEPARTMENT_LABEL[name] ?? (name.charAt(0).toUpperCase() + name.slice(1)).replace(/_/g, ' ')
+/** Does Roads and Works answer this referral (on its own desk)? */
+export const answeredByRoadsAndWorks = (name: string): boolean =>
+  ['engineering', 'roads and works', 'roads_and_works', 'traffic', 'water_sewer'].includes(name.toLowerCase()) || name.toLowerCase().startsWith('engineering')
 
 export const eoPlannerService = {
   // ── Intake & due-diligence queue ─────────────────────────────────
@@ -91,7 +106,9 @@ export const eoPlannerService = {
       const key = (c.body_name || c.department || '').toString()
       if (key) byDept.set(key, c)
     }
-    const departments = ALL_TECH_DEPARTMENTS.map(name => {
+    // the standing list, then any other referral this case carries
+    const names: string[] = [...ALL_TECH_DEPARTMENTS, ...[...byDept.keys()].filter(k => !(ALL_TECH_DEPARTMENTS as readonly string[]).includes(k))]
+    const departments = names.map(name => {
       const c = byDept.get(name)
       return {
         name,

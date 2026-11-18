@@ -61,6 +61,7 @@ const { validateFileSignature } = require('../utils/fileSignature')
 const { parseParcelRef, parseUseCode } = require('../utils/ruleSnapshot')
 const planGates = require('../services/planGates')
 const eoWorkflow = require('../services/eoWorkflow')
+const { isEngineeringBody } = require('./roads-works-referrals')
 const caseProgress = require('../services/caseProgress')
 
 /**
@@ -1078,6 +1079,16 @@ async function developmentManagementRoutes(fastify) {
       return reply.code(400).send({ success: false, error: 'bad_response_status' })
     }
     try {
+      // A Roads and Works referral is answered by the department on its own desk, where the reply carries the s.26(5)
+      // infrastructure-cost test and the road checks (src/routes/roads-works-referrals.js). Here the planning office may
+      // only record that it has not replied in time ('no_response') or reopen it ('pending').
+      if (!['pending', 'no_response'].includes(b.response_status)) {
+        const { rows: [ref] } = await db(request).query('SELECT body_name FROM spatial_planning.application_consultation WHERE id = $1', [request.params.cid])
+        if (ref && isEngineeringBody(ref.body_name)) {
+          return reply.code(409).send({ success: false, error: 'answered_by_roads_and_works',
+            message: 'Roads and Works answers this referral on its own referral desk, with the infrastructure-cost test (s.26(5)). The planning office can record only that no reply came in time.' })
+        }
+      }
       const { rows } = await db(request).query(
         `UPDATE spatial_planning.application_consultation
             SET response_status       = $2,

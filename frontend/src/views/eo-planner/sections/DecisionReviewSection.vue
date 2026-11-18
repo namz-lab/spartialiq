@@ -33,6 +33,7 @@ import {
   Map as MapIcon, Camera, HardHat,
 } from 'lucide-vue-next'
 import { roadsWorksApi, type EngineeringAssessment } from '@/services/roadsWorks'
+import { departmentLabel, answeredByRoadsAndWorks } from '@/services/eoPlannerService'
 
 // ─── Inbox state ──────────────────────────────────────────────────────
 type Bucket = 'all' | 'awaiting' | 'returned' | 'urgent'
@@ -476,12 +477,16 @@ function outcomeClass(o: string | null): string {
   if (/(conditional|caution|medium|review|amend)/.test(v)) return 'warn'
   return 'neutral'
 }
+/** The findings, without Roads and Works' reply when its assessment card below already shows it. */
+const findingsShown = computed(() => (pkg.value?.findings ?? []).filter((f) =>
+  !(engineering.value && f.source_label && answeredByRoadsAndWorks(f.source_label))))
+
 function findingGroupLabel(f: SpecialistFinding): string {
   switch (f.finding_type) {
     case 'survey':       return 'Surveyor'
     case 'inspection':   return 'Building inspection'
     case 'plan_review':  return 'Plan review'
-    default:             return f.source_label || 'Consultation'
+    default:             return f.source_label ? departmentLabel(f.source_label) : 'Consultation'
   }
 }
 
@@ -682,11 +687,11 @@ const deemed = computed(() =>
             <!-- Specialist findings -->
             <section class="eodr-card">
               <header><Users :size="13" /> Specialist findings
-                <span class="eodr-hcount">{{ pkg.findings.length }}</span></header>
+                <span class="eodr-hcount">{{ findingsShown.length }}</span></header>
               <div class="eodr-card-body">
-                <div v-if="!pkg.findings.length" class="eodr-muted">No specialist findings returned yet.</div>
+                <div v-if="!findingsShown.length" class="eodr-muted">{{ pkg.findings.length ? "Only Roads and Works has replied: its assessment is below." : "No specialist findings returned yet." }}</div>
                 <ul v-else class="eodr-findings">
-                  <li v-for="f in pkg.findings" :key="f.finding_type + f.source_id">
+                  <li v-for="f in findingsShown" :key="f.finding_type + f.source_id">
                     <div class="eodr-finding-top">
                       <span class="eodr-finding-label">{{ findingGroupLabel(f) }}</span>
                       <span class="eodr-statuschip" :class="outcomeClass(f.outcome)">

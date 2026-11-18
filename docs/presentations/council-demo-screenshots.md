@@ -6,7 +6,7 @@ Use it to rehearse, and to check on the day that each screen looks the way it sh
 
 ## Before you start
 
-**No new accounts are needed.** The two applicants, Mr B. Phiri and Mrs L. Hlongwane, never sign in: every step is done by a council officer. The officers' demonstration accounts (cashier, clerk, planner, EO Planning, revenue officer, and the cash supervisor for the cash-up) already exist on the demonstration copy. What each case needs is its **application** in the demonstration database, pending payment and not yet acknowledged. The capture script creates both.
+**No new accounts are needed.** The two applicants, Mr B. Phiri and Mrs L. Hlongwane, never sign in: every step is done by a council officer. The officers' demonstration accounts (cashier, clerk, planner, the Civil Engineering Technician of Roads and Works, EO Planning, revenue officer, and the cash supervisor for the cash-up) already exist on the demonstration copy. What each case needs is its **application** in the demonstration database, pending payment and not yet acknowledged. The capture script creates both.
 
 **Run it on the demonstration copy only**: the backend on port 3011 over the local database, the frontend on 5175, as section 1 of the demonstration guide says.
 
@@ -62,9 +62,15 @@ Tick the envelope checklist, check the letter number and addressee, **Stamp rece
 
 ### Step 5. Planner: circulation to the departments
 
-**EO console → Circulation.** The departmental tasks with their due dates, one marked **blocking**.
+**EO console → Circulation.** Roads and Works, marked **blocking**, and Environmental health, each with a date to reply by. Roads and Works covers roads, traffic, stormwater, and water and sewer, and replies on its own desk.
 
 ![Circulation](demo-steps/c1-05-planner-circulation.png)
+
+### Step 5b. Civil Engineering Technician: Roads and Works replies
+
+**Roads and Works → Engineering referrals → Reply.** The infrastructure-cost test of s.26(5): would the extension cause the council extra or early spending on roads, parking, drainage, sewerage or water? All five *No*. **No objection**, with a note: roof water to a soakaway; the extension keeps clear of the road reserve. **Send the reply.**
+
+![Roads and Works replies](demo-steps/c1-05b-roads-works-reply.png)
 
 ### Step 6. Planner: the Act's questions
 
@@ -87,6 +93,10 @@ Tick the envelope checklist, check the letter number and addressee, **Stamp rece
 **Approve.** The case reads *Approved*; the road moves to *Decided*.
 
 ![Approved](demo-steps/c1-08-eo-approved.png)
+
+The **Roads and Works assessment** on the determination: *No objection*, and *Cost to the council (s.26(5)): none found*.
+
+![The Roads and Works assessment](demo-steps/c1-08b-eo-roads-works-assessment.png)
 
 ### Step 9. EO: the permit and the notification date
 
@@ -116,6 +126,18 @@ Tick the envelope checklist, check the letter number and addressee, **Stamp rece
 
 ![The referral recorded](demo-steps/c2-02-planner-referral-sent.png)
 
+### Step 2b. Planner: circulation to Roads and Works
+
+**EO console → Circulation.** Roads and Works, marked **blocking**: a shop brings customers and their cars.
+
+![Circulated to Roads and Works](demo-steps/c2-02b-planner-circulates-roads-works.png)
+
+### Step 2c. Civil Engineering Technician: Roads and Works objects
+
+**Roads and Works → Engineering referrals → Reply.** The referral is tagged *Near a State road*, and the form says so: access to the Gweru road is the roads minister's, through the referral of step 2. The cost heads all *No*; **Objection**: no room for customer parking, so customers would stop on the shoulder of the Gweru road on a bend. **Send the reply.**
+
+![Roads and Works objects](demo-steps/c2-02c-roads-works-objection.png)
+
 ### Step 3. Clerk: an objection at the counter
 
 **EO console → Public notice.** The neighbour's objection on the case: noise, traffic, no parking.
@@ -124,7 +146,7 @@ Tick the envelope checklist, check the letter number and addressee, **Stamp rece
 
 ### Step 4. EO Planning: the objection considered
 
-**Public notice.** *Sustained: there is no parking, and the stand is on a bend.* Next: put it to the applicant.
+**Public notice.** *Sustained: there is no parking, and the stand is on a bend. Roads and Works objects on the same grounds.* Next: put it to the applicant.
 
 ![The objection considered](demo-steps/c2-04-eo-objection-considered.png)
 
@@ -152,9 +174,13 @@ Tick the envelope checklist, check the letter number and addressee, **Stamp rece
 
 ### Step 8. EO Planning: refused, with reasons
 
-**Determination.** The reasons, including her right of appeal within one month; **Refuse**. The case reads *Refused*.
+**Determination.** The reasons, citing Roads and Works' objection and the sustained objection, with her right of appeal within one month; **Refuse**. The case reads *Refused*.
 
 ![Refused](demo-steps/c2-08-eo-refused.png)
+
+The **Roads and Works assessment** the refusal rests on: *Objection*, with its reasons.
+
+![The Roads and Works objection](demo-steps/c2-08b-eo-roads-works-objection.png)
 
 ### Step 9. Clerk: the refusal letter
 

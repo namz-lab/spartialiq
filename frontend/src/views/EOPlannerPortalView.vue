@@ -122,7 +122,7 @@ const SECTIONS: readonly Omit<Section, 'badge'>[] = [
   { key: 'notification', label: 'Public notice',    short: 'Notice',   icon: Megaphone,
     desc: 'Section 26(3) advert, abutting owners and objections' },
   { key: 'circulation',  label: 'Circulation',      short: 'Circulate', icon: Send,
-    desc: 'Referrals to health, survey, engineering, fire and the rest' },
+    desc: 'Referrals to health, survey, Roads and Works, fire and the rest' },
   { key: 'enforcement',  label: 'Enforcement',      short: 'Enforce',  icon: ShieldAlert,
     desc: 'Stop-work and prohibition orders, and compliance' },
   { key: 'appeals',      label: 'Appeals',          short: 'Appeals',  icon: Scale,

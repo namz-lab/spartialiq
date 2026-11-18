@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Technical circulation — the departmental referrals under s.26.
 //
-// The application goes to health, survey, engineering, fire, traffic, housing,
-// electricity, water and sewer, and environment. Each referral is a task with
+// The application goes to health, survey, Roads and Works (roads, traffic, stormwater, water and sewer), fire,
+// housing, electricity and environment. Roads and Works answers on its own referral desk. Each referral is a task with
 // a priority and a due date, can be marked blocking (its finding must be
 // resolved before determination), can be escalated when it runs late, and
 // comes back with a stance and, sometimes, an attachment.
@@ -13,7 +13,7 @@
 
 import { computed, reactive, ref, watch } from 'vue'
 import {
-  eoPlannerService, ALL_TECH_DEPARTMENTS, type CirculationStatus,
+  eoPlannerService, ALL_TECH_DEPARTMENTS, departmentLabel, answeredByRoadsAndWorks, type CirculationStatus,
 } from '@/services/eoPlannerService'
 import { dmApi, type Consultation } from '@/services/developmentManagementService'
 import { statusLabel } from '@/composables/useApplicationPipeline'
@@ -82,7 +82,7 @@ async function circulateOne(dept: string) {
       response_due_at: dueDraft[dept] || undefined,
       blocking: !!blockDraft[dept],
     })
-    fb.showToast(`Circulated to ${humanise(dept).toLowerCase()}.`, 'success')
+    fb.showToast(`Circulated to ${departmentLabel(dept)}.`, 'success')
     noteDraft[dept] = ''
     dueDraft[dept] = ''
     blockDraft[dept] = false
@@ -194,7 +194,7 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
           <AlertTriangle :size="16" aria-hidden="true" />
           <span>
             <strong>{{ blockingOutstanding.length }} blocking referral(s) outstanding.</strong>
-            {{ blockingOutstanding.map(d => humanise(d.name)).join(', ') }} — the case is not
+            {{ blockingOutstanding.map(d => departmentLabel(d.name)).join(', ') }} — the case is not
             ready for determination until these are back.
           </span>
         </p>
@@ -224,7 +224,8 @@ function selVal(e: Event): string { return (e.target as HTMLSelectElement | HTML
           <li v-for="d in status.departments" :key="d.name" class="tc-dept"
               :class="[`t-${outcomeTone(d.outcome)}`, { overdue: isOverdue(d) }]">
             <header class="tc-dept-head">
-              <strong>{{ humanise(d.name) }}</strong>
+              <strong>{{ departmentLabel(d.name) }}</strong>
+              <span v-if="answeredByRoadsAndWorks(d.name)" class="tc-when">roads, traffic, stormwater, water and sewer · replies on its own desk with the s.26(5) cost test</span>
               <span class="tc-outcome" :class="`t-${outcomeTone(d.outcome)}`">
                 <component :is="d.outcome === 'no_objection' ? CheckCircle2
                                 : d.outcome === 'pending' ? Clock : AlertTriangle"

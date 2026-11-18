@@ -85,8 +85,8 @@ async function waitGates(page) {
   assertLocal()
   // Playwright's own Chromium if installed, otherwise the Edge that ships with Windows
   const browser = await chromium.launch().catch(() => chromium.launch({ channel: 'msedge' }))
-  const [cashier, clerk, planner, eo, revenue, supervisor] = await Promise.all(
-    ['demo.cashier', 'demo.clerk', 'demo.planner', 'demo.eo', 'demo.revenue', 'demo.supervisor'].map((w) => login(browser, w)))
+  const [cashier, clerk, planner, eo, revenue, supervisor, civilTech] = await Promise.all(
+    ['demo.cashier', 'demo.clerk', 'demo.planner', 'demo.eo', 'demo.revenue', 'demo.supervisor', 'demo.civil-tech'].map((w) => login(browser, w)))
 
   // ═══ Before the meeting (guide, "The day before") ═══
   console.log('Preparing')
@@ -196,6 +196,38 @@ async function waitGates(page) {
     await api(eo, 'PATCH', `/agenda-items/${item.id}`, { outcome, resolution })
   }
 
+  // The planner circulates a case to the departments on the circulation screen, each with a date to reply by.
+  async function circulate(id, depts, file) {
+    const p = planner.page
+    await openEo(planner, id, 'circulation')
+    for (const [dept, blocking] of depts) {
+      const card = p.locator('li.tc-dept').filter({ has: p.locator('header', { hasText: dept }) }).first()
+      await card.locator('.tc-send input[type=date]').fill(addDays(14))
+      if (blocking) await card.locator('.tc-send input[type=checkbox]').check()
+      await card.getByRole('button', { name: 'Circulate' }).click(); await sleep(1800)
+    }
+    await openEo(planner, id, 'circulation')
+    if (file) await shot(p, file)
+  }
+  // The Civil Engineering Technician answers a referral on the Roads and Works referral desk: each head of the s.26(5)
+  // infrastructure-cost test, then the department's reply and its reasons.
+  async function roadsWorksReply(applicant, { costs, response, notes }, file) {
+    const p = civilTech.page
+    await p.goto(`${BASE}/units/engineering?view=referrals`)
+    const item = p.locator('[data-testid="referrals-panel"] .rf-item', { hasText: applicant }).first()
+    await item.waitFor({ timeout: 30000 })
+    await item.getByRole('button', { name: 'Reply' }).click()
+    for (const h of ['roads', 'parking', 'drainage', 'sewerage', 'water']) {
+      await p.locator(`input[name="cost-${h}"][value="${!!costs[h]}"]`).check()
+    }
+    await p.locator(`input[name="resp"][value="${response}"]`).check()
+    await p.locator('.rf-form textarea').last().fill(notes)
+    await p.locator('.rf-form').scrollIntoViewIfNeeded()
+    if (file) await shot(p, file)
+    await p.getByRole('button', { name: 'Send the reply' }).click(); await sleep(2500)
+  }
+  const NO_COST = { roads: false, parking: false, drainage: false, sewerage: false, water: false }
+
   // ═══ Case 1: the extension, approved ═══
   console.log('Case 1')
   await step('1.1 cashier', () => payAtCashOffice('TPD/VUN/2026/0911', 'Mr B. Phiri', 'c1-01-cashier-receipt.png'))
@@ -204,19 +236,15 @@ async function waitGates(page) {
   await step('1.4 clerk mark sent', () => markSent('0911', 'c1-04-clerk-ack-sent.png'))
   // No status is set by hand: the sent letter makes the case Acknowledged (migration 248), the first circulation puts it in
   // circulation, and the Act's questions put it under review (backend src/services/caseProgress.js).
-  await step('1.5 planner circulation', async () => {
-    // on the screen: Engineering, marked blocking, and Environmental health, each with a date to reply by
-    const p = planner.page
-    await openEo(planner, id1, 'circulation')
-    for (const [dept, blocking] of [['Engineering', true], ['Environmental health', false]]) {
-      const card = p.locator('li.tc-dept').filter({ has: p.locator('header', { hasText: dept }) }).first()
-      await card.locator('.tc-send input[type=date]').fill(addDays(14))
-      if (blocking) await card.locator('.tc-send input[type=checkbox]').check()
-      await card.getByRole('button', { name: 'Circulate' }).click(); await sleep(1800)
-    }
-    await openEo(planner, id1, 'circulation')
-    await shot(planner.page, 'c1-05-planner-circulation.png')
-  })
+  await step('1.5 planner circulation', () =>
+    // Roads and Works, marked blocking, and Environmental health
+    circulate(id1, [['Roads and Works', true], ['Environmental health', false]], 'c1-05-planner-circulation.png'))
+  await step('1.5b Roads and Works replies: no objection, no cost to the council', () =>
+    // A two-bedroom extension on a serviced stand adds nothing to the council's roads, parking, drains, sewers or water.
+    roadsWorksReply('Phiri', {
+      costs: NO_COST, response: 'no_objection',
+      notes: 'No cost to the council under s.26(5): the extension uses the existing access, sewer and water connections. Roof water to a soakaway on the stand; the extension keeps clear of the road reserve.',
+    }, 'c1-05b-roads-works-reply.png'))
   await step('1.6 planner Act questions', async () => {
     await openEo(planner, id1, 'decision'); await waitGates(planner.page)
     const box = planner.page.locator('[data-testid="statutory-checks"]')
@@ -226,8 +254,8 @@ async function waitGates(page) {
     await shot(planner.page, 'c1-06-planner-act-questions.png')
   })
   await step('1.7 clerk committee', async () => {
-    // the departments have answered by the time the committee sits
-    psql(`UPDATE spatial_planning.application_consultation SET response_status = 'no_objection', response_received_at = now(), task_status = 'accepted' WHERE permit_app_id = '${id1}'`)
+    // the other departments have answered by the time the committee sits (Roads and Works answered on its desk, step 1.5b)
+    psql(`UPDATE spatial_planning.application_consultation SET response_status = 'no_objection', response_received_at = now(), task_status = 'accepted' WHERE permit_app_id = '${id1}' AND response_status = 'pending'`)
     await committee(id1, 'Planning Committee, November sitting', 'approved', 'Approved: the extension complies with the plan for the zone.')
     await openEo(clerk, id1, 'committee')
     await shot(clerk.page, 'c1-07-clerk-committee.png')
@@ -248,7 +276,11 @@ async function waitGates(page) {
     await shot(p, 'c1-08-eo-determination-form.png')
     await p.getByRole('button', { name: 'Approve', exact: true }).click(); await sleep(3000)
     await openEo(eo, id1, 'decision')
+    await p.getByText('Loading decision package').waitFor({ state: 'hidden', timeout: 30000 }).catch(() => {})
+    await sleep(800)
     await shot(p, 'c1-08-eo-approved.png')
+    const rw = p.locator('[data-testid="engineering-assessment"]')
+    if (await rw.count()) { await rw.scrollIntoViewIfNeeded(); await shot(p, 'c1-08b-eo-roads-works-assessment.png') }
   })
   await step('1.9 EO permit and notification', async () => {
     const rev = psql(`SELECT revision FROM spatial_planning.permit_application WHERE id = '${id1}'`)
@@ -292,6 +324,15 @@ async function waitGates(page) {
     await p.locator('[data-testid="statutory-checks"]').scrollIntoViewIfNeeded()
     await shot(p, 'c2-02-planner-referral-sent.png')
   })
+  await step('2.2b planner circulates to Roads and Works', () =>
+    circulate(id2, [['Roads and Works', true]], 'c2-02b-planner-circulates-roads-works.png'))
+  await step('2.2c Roads and Works objects', () =>
+    // The Gweru road is a State road: an access onto it is for the minister responsible for roads, not the council (the
+    // referral of step 2.2). The council's concern is the traffic and parking the shop would bring, and the bend.
+    roadsWorksReply('Hlongwane', {
+      costs: NO_COST, response: 'objection',
+      notes: 'Objection. The stand has no room for customer parking, so customers would stop on the shoulder of the Gweru road, on a bend where drivers cannot see far ahead. The Gweru road is a State road: any access onto it is for the Department of Roads, already referred under s.40(2)(c). No cost to the council under s.26(5) if the application is refused.',
+    }, 'c2-02c-roads-works-objection.png'))
   let objection
   await step('2.3 clerk records the objection', async () => {
     objection = await api(clerk, 'POST', `/permit-applications/${id2}/objections`, { objector_name: 'Mr J. Khumalo', grounds_detail: 'Noise and traffic from a shop beside the road, and no parking for customers.' })
@@ -301,7 +342,7 @@ async function waitGates(page) {
     await shot(clerk.page, 'c2-03-clerk-objection.png')
   })
   await step('2.4 EO considers the objection', async () => {
-    await api(eo, 'PATCH', `/objections/${objection.id}/consideration`, { sustained: true, consideration_notes: 'Sustained: there is no parking, and the stand is on a bend.' })
+    await api(eo, 'PATCH', `/objections/${objection.id}/consideration`, { sustained: true, consideration_notes: 'Sustained: there is no parking, and the stand is on a bend. Roads and Works objects on the same grounds.' })
     await openEo(eo, id2, 'notification')
     await eo.page.locator('.pn-objections').first().scrollIntoViewIfNeeded()
     await shot(eo.page, 'c2-04-eo-objection-considered.png')
@@ -337,7 +378,7 @@ async function waitGates(page) {
     await shot(p, 'c2-06b-safeguard-approval-refused.png')
   })
   await step('2.7 clerk records the committee refusal', async () => {
-    await committee(id2, 'Planning Committee, special sitting', 'refused', 'Refused: no parking is provided, the objection is sustained, and the access is on a bend.')
+    await committee(id2, 'Planning Committee, special sitting', 'refused', 'Refused: no parking is provided, the access is on a bend of the Gweru road (Roads and Works objects), and the objection is sustained.')
     await openEo(clerk, id2, 'committee')
     await shot(clerk.page, 'c2-07-clerk-committee-refused.png')
   })
@@ -346,17 +387,21 @@ async function waitGates(page) {
     await openEo(eo, id2, 'decision'); await waitGates(p)
     const check = p.getByRole('button', { name: /I have checked: none applies/ })
     if (await check.count()) { await check.click(); await sleep(1500) }
-    await p.locator('textarea[placeholder^="Reasons for the decision"]').fill('Refused on the committee\'s resolution (s.26(6)(b)): no parking is provided for customers, the objection of Mr J. Khumalo is sustained, and the access is on a bend of the Gweru road. The applicant may appeal to the Administrative Court within one month of notification.')
+    await p.locator('textarea[placeholder^="Reasons for the decision"]').fill('Refused on the committee\'s resolution (s.26(6)(b)): no parking is provided for customers, who would stop on the shoulder of the Gweru road on a bend (the objection of the Department of Roads and Works); and the objection of Mr J. Khumalo is sustained. The applicant may appeal to the Administrative Court within one month of notification.')
     await p.getByRole('button', { name: 'Refuse', exact: true }).click(); await sleep(3000)
     await openEo(eo, id2, 'decision')
+    await p.getByText('Loading decision package').waitFor({ state: 'hidden', timeout: 30000 }).catch(() => {})
+    await sleep(800)
     await shot(p, 'c2-08-eo-refused.png')
+    const rw = p.locator('[data-testid="engineering-assessment"]')
+    if (await rw.count()) { await rw.scrollIntoViewIfNeeded(); await shot(p, 'c2-08b-eo-roads-works-objection.png') }
   })
   await step('2.9 clerk refusal letter', async () => {
     // the clerk drafts the letter on the open file, from the committee's resolution
     await api(clerk, 'POST', '/planning-clerk/registers/refusals', {
       permit_application_id: id2, letter_no: 'VRDC/PL/REF/2026/0912', recipient: 'Mrs L. Hlongwane',
       council_resolution_date: new Date().toISOString(), due_by: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-      reasons: 'No parking is provided for customers; the objection of Mr J. Khumalo is sustained; the access is on a bend of the Gweru road. You may appeal to the Administrative Court within one month of being notified.' })
+      reasons: 'No parking is provided for customers, who would stop on the shoulder of the Gweru road on a bend (the objection of the council\'s Department of Roads and Works); the objection of Mr J. Khumalo is sustained. You may appeal to the Administrative Court within one month of being notified.' })
     await clerk.page.goto(`${BASE}/planning-clerk-portal?section=refusals`)
     await sleep(3000)
     await shot(clerk.page, 'c2-09-clerk-refusal-letter.png')
