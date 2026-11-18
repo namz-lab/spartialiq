@@ -413,6 +413,8 @@ const MIGRATIONS = [
   '245_ledger_entry_legacy_nullability.sql',
   // Planning fees in the ledger: an income code can be a planning fee; the cashier receipts it naming the application (which marks the fee paid); online fees are noted at once and vouchered by a revenue officer; finance.v_planning_fee. Rollback: migrations/rollback/246_planning_fees_in_the_ledger.down.sql.
   '246_planning_fees_in_the_ledger.sql',
+  // An inspection fee paid at the cash office releases the applicant's inspection booking (one stage paid, one booking), in either order; cancelling the receipt puts it back. Rollback: migrations/rollback/247_cash_office_inspection_fee_releases_booking.down.sql.
+  '247_cash_office_inspection_fee_releases_booking.sql',
 ]
 
 function createPool(env = process.env) {
