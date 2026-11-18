@@ -1,6 +1,6 @@
 # Full Council demonstration: a step-by-step guide
 
-**For the presenter. Use with the deck *Vungu Full Council - LAMIS planning showcase.pptx* (slides 25 and 26 are the on-screen summary of this guide).**
+**For the presenter. Use with the deck *Vungu Full Council - LAMIS planning showcase.pptx* (slides 26 and 27 are the on-screen summary of this guide; slide 22 shows the EO's team overview).**
 
 The demonstration takes the councillors through the two worked cases from the [EO Planning user manual](../manuals/eo-planning-user-manual.md) and the [team guide](../manuals/eo-planning-team-guide.md), signing in as each member of the team in turn: cashier, clerk, planner, EO, revenue officer. It takes about **16 minutes** (8 per case).
 
@@ -55,6 +55,8 @@ Open **http://localhost:5175** in the browser. The sign-in page there shows the 
 | 9 | EO | **Permits** | Show the issued permit, locked; record the **notification** date. | *Issued: this permit is a fixed record* | "The appeal month runs from the day the applicant is told." |
 | 10 | **Revenue officer** | Revenue → **Planning Fees** | Show the receipt from step 1. | The fee, *Awaiting posting*: it reaches the ledger when the cash-up is verified | "Every planning fee is visible to Finance, by application." |
 
+**Show the team at a glance:** when you first sign in as the EO (before step 8), the console opens on **At a glance**: one tile per desk under the EO. Point at the figures in amber and red, open the **Planners** tile to show the desk in full, then go to **Determination**. Say: "This is the first thing the EO sees each morning: where the team's work is waiting, read from the registers." (This needs the demonstration copy to be running the latest version of the system; if the tiles say they could not be read, show slide 22 instead.)
+
 **Optional, if time allows:** as the cashier, take an **inspection fee** (CASH-BIN, quantity = number of stages) for the same application, and show the applicant's stage booking move from *pending payment* to *waitlisted*.
 
 ## 3. Case 2: the tuck shop, refused (about 8 minutes)
@@ -79,7 +81,7 @@ Before you start this case, take its application fee and acknowledge it as in Ca
 
 ## 4. After the demonstration
 
-- Close the demonstration windows, then present slide 27 (*What council is asked to decide*).
+- Close the demonstration windows, then present slide 28 (*What council is asked to decide*).
 - Stop the demonstration backend and frontend after the meeting.
 - Nothing from the demonstration is in the live system.
 
