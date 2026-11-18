@@ -41,7 +41,7 @@ import type { UnitDashboard } from '@/services/units'
 const MAPS = { ward_register: { linked: true, wards: 19, basis: 'interim', instrument_ref: null }, run: null, measures: [], has_measures: true }
 
 const ENGINEERING: UnitDashboard = {
-  unit: { key: 'engineering', label: 'Engineering and Works', post: 'Engineer', desks: [{ label: 'Parcel and asset map', path: '/gis-officer-portal' }] },
+  unit: { key: 'engineering', label: 'Roads and Works', post: 'District Engineer', desks: [{ label: 'Parcel and asset map', path: '/gis-officer-portal' }] },
   as_of: '2026-11-14T08:00:00.000Z',
   head: { id: 'p1', title: 'Engineer', system_role: 'engineer', holder_name: 'Demo Engineer', vacant: false, is_head: true },
   establishment: {
@@ -74,7 +74,7 @@ describe('UnitDashboardView', () => {
     api.get.mockResolvedValue(ENGINEERING)
     const w = await mountPage('engineering')
     expect(api.get).toHaveBeenCalledWith('engineering')
-    expect(w.find('h1').text()).toContain('Engineering and Works')
+    expect(w.find('h1').text()).toContain('Roads and Works')
     expect(w.text()).toContain('Demo Engineer')
     expect(w.text()).toContain('4 of 6')
     // the map is a view of its own, opened from the menu

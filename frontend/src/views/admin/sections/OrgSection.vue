@@ -124,12 +124,12 @@ const mismatches = computed(() => positions.value.filter(p => p.roleMismatch))
 // ── Editing ─────────────────────────────────────────────────────────────
 const formOpen = ref(false)
 const editing = ref<OrgPosition | null>(null)
-const form = ref({ title: '', department: '', section: '', systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 })
+const form = ref({ title: '', department: '', section: '', grade: '' as string | number, systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 })
 const formError = ref<string | null>(null)
 
 function openNew() {
   editing.value = null
-  form.value = { title: '', department: '', section: '', systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 }
+  form.value = { title: '', department: '', section: '', grade: '' as string | number, systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 }
   formError.value = null
   formOpen.value = true
 }
@@ -140,6 +140,7 @@ function openEdit(p: OrgPosition) {
     title: p.title,
     department: p.department ?? '',
     section: p.section ?? '',
+    grade: p.grade ?? '',
     systemRole: p.system_role ?? '',
     holderId: p.holder_id ?? '',
     reportsTo: p.reports_to ?? '',
@@ -185,6 +186,7 @@ async function save() {
       title: form.value.title.trim(),
       department: form.value.department.trim() || null,
       section: form.value.section.trim() || null,
+      grade: form.value.grade === '' ? null : Number(form.value.grade),
       systemRole: form.value.systemRole || null,
       holderId: form.value.holderId || null,
       reportsTo: form.value.reportsTo || null,
@@ -297,7 +299,7 @@ const childCount = computed(() => {
           <div class="og-post">
             <strong class="og-title">{{ p.title }}</strong>
             <span class="og-meta">
-              {{ p.department || 'No department' }}<template v-if="p.section"> · {{ p.section }}</template> · {{ roleLabel(p.system_role) }}
+              {{ p.department || 'No department' }}<template v-if="p.section"> · {{ p.section }}</template><template v-if="p.grade != null"> · Grade {{ p.grade }}</template> · {{ roleLabel(p.system_role) }}
             </span>
           </div>
 
@@ -352,6 +354,11 @@ const childCount = computed(() => {
         <div class="ins-field">
           <label class="ins-label" for="og-section">Section</label>
           <input id="og-section" v-model="form.section" class="ins-input" placeholder="Roads and works" />
+        </div>
+
+        <div class="ins-field">
+          <label class="ins-label" for="og-grade">Grade</label>
+          <input id="og-grade" v-model="form.grade" type="number" class="ins-input" min="0" max="99" placeholder="e.g. 10" />
         </div>
 
         <div class="ins-field">

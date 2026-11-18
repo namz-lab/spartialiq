@@ -17,7 +17,7 @@ export const UNIT_OF_ROLE: Record<string, UnitKey | undefined> = {
 export const UNIT_LABEL: Record<UnitKey, string> = {
   finance: 'Finance',
   planning: 'Planning and Environment',
-  engineering: 'Engineering and Works',
+  engineering: 'Roads and Works',
   social_admin: 'Human Resources, Social Services and Administration',
   audit: 'Internal Audit',
 }

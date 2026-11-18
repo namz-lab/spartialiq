@@ -14,7 +14,8 @@ const UNITS = [
   { key: 'planning', label: 'Planning and Environment', post: 'Executive Officer — Planning & Environment', headRole: 'eo', section: 'planning',
     sections: ['planning', 'land'],
     desks: [{ label: 'Executive Officer desk', path: '/eo-planner-portal' }] },
-  { key: 'engineering', label: 'Engineering and Works', post: 'Engineer', headRole: 'engineer', section: 'engineering',
+  // The Department of Roads and Works, headed by the District Engineer (migration 251). The key stays 'engineering'.
+  { key: 'engineering', label: 'Roads and Works', post: 'District Engineer', headRole: 'engineer', section: 'engineering',
     memberRoles: ['civil_technician', 'roads_foreman', 'water_technician'],
     sections: ['engineering'],
     desks: [{ label: 'Parcel and asset map', path: '/gis-officer-portal' }] },

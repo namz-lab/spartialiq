@@ -94,10 +94,10 @@ const DEFAULT_DEMO_USERS = [
   // Migration 208. Recovers an abandoned drawer with a witness; never the cashier or the verifier.
   { email: 'demo.supervisor@vungu.test', name: 'Demo Cash Supervisor', role: 'cash_supervisor', department: 'Finance' },
   // Migration 216. Heads of Engineering and of HR / Social Services / Administration; each lands on their own unit dashboard.
-  { email: 'demo.engineer@vungu.test', name: 'Demo Engineer', role: 'engineer', department: 'Engineering' },
-  { email: 'demo.civil-tech@vungu.test', name: 'Demo Civil Technician', role: 'civil_technician', department: 'Engineering' },
-  { email: 'demo.roads-foreman@vungu.test', name: 'Demo Roads Foreman', role: 'roads_foreman', department: 'Engineering' },
-  { email: 'demo.water-tech@vungu.test', name: 'Demo Water and Sanitation Technician', role: 'water_technician', department: 'Engineering' },
+  { email: 'demo.engineer@vungu.test', name: 'Demo District Engineer', role: 'engineer', department: 'Roads and Works' },
+  { email: 'demo.civil-tech@vungu.test', name: 'Demo Civil Engineering Technician', role: 'civil_technician', department: 'Roads and Works' },
+  { email: 'demo.roads-foreman@vungu.test', name: 'Demo Roads and Works Foreman', role: 'roads_foreman', department: 'Roads and Works' },
+  { email: 'demo.water-tech@vungu.test', name: 'Demo Water and Sanitation Technician', role: 'water_technician', department: 'Roads and Works' },
   { email: 'demo.hr-social@vungu.test', name: 'Demo HR and Social Services Officer', role: 'hr_social_officer', department: 'Human Resources' },
 ]
 

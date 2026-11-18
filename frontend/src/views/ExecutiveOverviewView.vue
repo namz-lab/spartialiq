@@ -139,7 +139,7 @@ const cards = computed<Card[]>(() => {
       link: { to: '/executive/master-plan', label: 'Master plan: map and detail' },
     },
     {
-      key: 'engineering', unit: 'engineering', title: 'Engineering and Works', post: 'Engineer', icon: HardHat,
+      key: 'engineering', unit: 'engineering', title: 'Roads and Works', post: 'District Engineer', icon: HardHat,
       groups: [engineeringGroup(o?.engineering, miss('Engineering could not be read.'))],
     },
     {

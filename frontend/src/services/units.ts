@@ -33,6 +33,8 @@ export interface Post {
   /** The unit's section the post belongs to (migration 249); null for the head and for undivided units. */
   section?: string | null
   reports_to?: string | null
+  /** The post's grade on the council's establishment (migration 251). */
+  grade?: number | null
   holder_name: string | null
   /** A post that needs a system account, with nobody holding it. */
   vacant: boolean
