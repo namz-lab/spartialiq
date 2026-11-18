@@ -275,6 +275,8 @@ After issue, record the **copies due** (section 5, *Before you decide*) and the 
 | **CEO (accounting officer)** | Turns switches on, with their written evidence; is told of every ministerial direction | |
 | **Administrator** | Turns switches on; may override the committee requirement **with a written reason** | Override the clock, a direction or the acknowledgement |
 
+The team's own steps in the two worked examples, role by role (clerk, planner, inspector, specialists, and the cash office), are in [the EO Planning team guide](eo-planning-team-guide.md).
+
 ## 13. Two worked examples
 
 These follow two real cases through the console, screen by screen. The people and the stands are made up for this manual; the screens, the dates and the messages are what the system shows. Today in both is **16 November 2026**.

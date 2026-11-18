@@ -217,6 +217,7 @@ describe('migration plan', () => {
       '244_finance_property_gis.sql',
       '245_ledger_entry_legacy_nullability.sql',
       '246_planning_fees_in_the_ledger.sql',
+      '247_cash_office_inspection_fee_releases_booking.sql',
     ])
 
     for (const filename of MIGRATIONS) {
