@@ -174,7 +174,7 @@ async function seed (db) {
               { name: 'Ms. L.T. Maheru', role: 'Human Resources, Social Services & Administration Officer' },
               { name: 'Mr. C. Maramwidze', role: 'Executive Officer — Planner' },
               { name: 'Mr. Lawrence Chikwira', role: 'Internal Auditor' },
-              { name: 'Mr. Kudzai Njodzi', role: 'Engineer' },
+              { name: 'Mr. Kudzai Njodzi', role: 'District Engineer' },
             ],
           },
         ],

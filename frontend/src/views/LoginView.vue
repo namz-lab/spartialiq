@@ -251,7 +251,7 @@ const financeDemoAccounts: DemoAccount[] = showDemoLogins
       { label: 'Cash supervisor', email: 'demo.supervisor@vungu.test',    password: 'demo1234', role: 'cash_supervisor' },
       { label: 'Revenue',       email: 'demo.revenue@vungu.test',         password: 'demo1234', role: 'revenue_officer' },
       { label: 'CEO',           email: 'demo.ceo@vungu.test',             password: 'demo1234', role: 'accounting_officer' },
-      { label: 'Engineer',      email: 'demo.engineer@vungu.test',        password: 'demo1234', role: 'engineer' },
+      { label: 'Dist. Engineer', email: 'demo.engineer@vungu.test',        password: 'demo1234', role: 'engineer' },
       { label: 'Civil tech',    email: 'demo.civil-tech@vungu.test',      password: 'demo1234', role: 'civil_technician' },
       { label: 'Roads foreman', email: 'demo.roads-foreman@vungu.test',   password: 'demo1234', role: 'roads_foreman' },
       { label: 'Water tech',    email: 'demo.water-tech@vungu.test',      password: 'demo1234', role: 'water_technician' },

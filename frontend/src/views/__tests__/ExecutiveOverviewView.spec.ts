@@ -88,7 +88,7 @@ describe('ExecutiveOverviewView', () => {
     const wrapper = await mountPage()
     const titles = wrapper.findAll('h2').map((h) => h.text())
     expect(titles).toEqual([
-      'At a glance', 'Finance', 'Planning and Environment', 'Engineering and Works', 'Social Services',
+      'At a glance', 'Finance', 'Planning and Environment', 'Roads and Works', 'Social Services',
       'Human Resources and Administration', 'Internal Audit',
     ])
   })
@@ -107,7 +107,7 @@ describe('ExecutiveOverviewView', () => {
       engineering: { loaded: false, note: 'The road, water and asset registers have not been loaded yet.' },
     })
     const wrapper = await mountPage()
-    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Roads and Works')!
     expect(eng.text()).toContain('have not been loaded yet')
     expect(eng.find('dl').exists()).toBe(false)
   })
@@ -155,7 +155,7 @@ describe('ExecutiveOverviewView', () => {
   it("calls the roads the council's, says they are unverified, and shows national roads apart", async () => {
     api.overview.mockResolvedValue(FULL)
     const wrapper = await mountPage()
-    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Roads and Works')!
     const stat = (label: string) => eng.findAll('.xo-stat').find((s) => s.find('dt').text() === label)
     expect(stat('Council roads')!.find('dd').text()).toBe('1,059 (1,676.5 km, unverified)')
     expect(stat("National roads (not the council's)")!.find('dd').text()).toBe('148 (577.1 km)')
@@ -166,7 +166,7 @@ describe('ExecutiveOverviewView', () => {
   it('says the water-point register is incomplete, and does not read an unknown state as broken', async () => {
     api.overview.mockResolvedValue(FULL)
     const wrapper = await mountPage()
-    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Roads and Works')!
     const stat = (label: string) => eng.findAll('.xo-stat').find((s) => s.find('dt').text() === label)
     expect(stat('Water points recorded')!.find('dd').text()).toBe('133')
     expect(stat('State of repair recorded for')!.find('dd').text()).toBe('0 of 133')
@@ -178,14 +178,14 @@ describe('ExecutiveOverviewView', () => {
   it('shows the dams mapped, with the water they cover', async () => {
     api.overview.mockResolvedValue(FULL)
     const wrapper = await mountPage()
-    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Roads and Works')!
     expect(eng.findAll('.xo-stat').find((s) => s.find('dt').text() === 'Dams mapped')!.find('dd').text()).toBe('134 (2,797 ha of water)')
   })
 
   it('shows a working figure only for the points whose state is recorded', async () => {
     api.overview.mockResolvedValue({ ...FULL, engineering: { ...FULL.engineering, water_points: 133, water_points_state_known: 6, water_points_working: 4 } })
     const wrapper = await mountPage()
-    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Roads and Works')!
     const stat = (label: string) => eng.findAll('.xo-stat').find((s) => s.find('dt').text() === label)
     expect(stat('Working, of those with a recorded state')!.find('dd').text()).toBe('4 of 6')
   })
@@ -193,7 +193,7 @@ describe('ExecutiveOverviewView', () => {
   it('shows no roads caveat when the roads are not all unverified', async () => {
     api.overview.mockResolvedValue({ ...FULL, engineering: { ...FULL.engineering, roads_unverified: 0, national_roads: 0 } })
     const wrapper = await mountPage()
-    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Engineering and Works')!
+    const eng = wrapper.findAll('section').find((s) => s.find('h2').text() === 'Roads and Works')!
     expect(eng.text()).not.toContain('unverified')
     expect(eng.text()).not.toContain('National roads')
   })

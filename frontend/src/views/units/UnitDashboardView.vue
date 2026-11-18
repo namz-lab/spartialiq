@@ -61,7 +61,7 @@ watch(() => props.unit, load)
 const isChief = computed(() => auth.user?.role === 'accounting_officer')
 // A unit's members (migration 250) are named by their own post, not the head's.
 const MEMBER_LABEL: Record<string, string> = {
-  civil_technician: 'Civil Technician', roads_foreman: 'Roads Foreman', water_technician: 'Water and Sanitation Technician',
+  civil_technician: 'Civil Engineering Technician', roads_foreman: 'Roads and Works Foreman/Technician', water_technician: 'Water and Sanitation Technician',
 }
 const roleLabel = computed(() => (isChief.value ? 'Chief Executive'
   : MEMBER_LABEL[auth.user?.role ?? ''] ?? (dash.value?.unit.post ?? 'Unit head')))
@@ -253,11 +253,12 @@ const otherUnits = computed(() => (isChief.value
               </p>
               <table v-else class="ud-table">
                 <caption class="ud-sr">Posts in this unit</caption>
-                <thead><tr><th scope="col">Post</th><th scope="col">Holder</th></tr></thead>
+                <thead><tr><th scope="col">Post</th><th scope="col" class="ud-grade">Grade</th><th scope="col">Holder</th></tr></thead>
                 <tbody v-for="g in postGroups" :key="g.section ?? '—'">
-                  <tr v-if="g.section" class="ud-section-row"><th scope="rowgroup" colspan="2">{{ g.section }}</th></tr>
+                  <tr v-if="g.section" class="ud-section-row"><th scope="rowgroup" colspan="3">{{ g.section }}</th></tr>
                   <tr v-for="p in g.posts" :key="p.id" :class="{ 'is-head': p.is_head }">
                     <th scope="row">{{ p.title }}</th>
+                    <td class="ud-grade">{{ p.grade ?? '' }}</td>
                     <td>
                       <span v-if="p.vacant" class="ud-tag">Vacant</span>
                       <span v-else-if="p.holder_not_recorded" class="ud-muted">Not recorded in the system</span>
@@ -349,6 +350,7 @@ const otherUnits = computed(() => (isChief.value
 .ud-table tr.is-head th { font-weight: 600; }
 .ud-table tr.ud-section-row th { padding-top: 0.875rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); }
 .ud-muted { color: var(--ent-text-3); font-size: 0.8125rem; }
+.ud-table .ud-grade { width: 4.5rem; text-align: center; font-variant-numeric: tabular-nums; }
 .ud-tag { display: inline-block; padding: 0.0625rem 0.5rem; border-radius: 999px; background: var(--ent-warning-soft); color: var(--ent-warning); font-size: 0.75rem; font-weight: 600; }
 
 .ud-wardmap :deep(.wm), .ud-wardtable :deep(.wt-root) { margin-top: 0; }

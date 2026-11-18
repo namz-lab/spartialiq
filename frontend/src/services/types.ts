@@ -62,7 +62,7 @@ export type Role =
   // Backend migration 216: heads of the Executive Arm's other units. Each lands on their own unit dashboard.
   | 'engineer'
   | 'hr_social_officer'
-  // Backend migration 250: engineering staff under the Engineer; they open the Engineering and Works dashboard.
+  // Backend migration 250: staff under the District Engineer; they open the Roads and Works dashboard.
   | 'civil_technician'
   | 'roads_foreman'
   | 'water_technician'

@@ -459,6 +459,8 @@ export interface OrgPosition {
   department: string | null
   /** The section of the unit (e.g. Roads and works); null for a head or an undivided unit (migration 249). */
   section: string | null
+  /** The post's grade on the council's establishment (migration 251). */
+  grade: number | null
   system_role: string | null
   holder_id: string | null
   holder_name: string | null
@@ -480,6 +482,7 @@ export interface OrgInput {
   title?: string
   department?: string | null
   section?: string | null
+  grade?: number | null
   systemRole?: string | null
   holderId?: string | null
   reportsTo?: string | null

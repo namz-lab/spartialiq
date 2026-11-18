@@ -1029,10 +1029,13 @@ async function adminConsoleRoutes(fastify) {
   // ═════════════════════════════════════════════════════════════════════
   // ORGANISATION STRUCTURE
   // ═════════════════════════════════════════════════════════════════════
+  /** A post's grade on the establishment (migration 251): a whole number from 0 to 99, or none. */
+  const gradeOf = (v) => (v === '' || v === null || v === undefined || !Number.isInteger(Number(v)) || Number(v) < 0 || Number(v) > 99 ? null : Number(v))
+
   fastify.get('/admin/org', admin, async (_request, reply) => {
     try {
       const { rows } = await systemOf(fastify.pg).query(
-        `SELECT p.id, p.title, p.department, p.section, p.system_role, p.holder_id,
+        `SELECT p.id, p.title, p.department, p.section, p.grade, p.system_role, p.holder_id,
                 p.reports_to, p.sort_order,
                 COALESCE(u.full_name, u.name) AS holder_name,
                 u.email  AS holder_email,
@@ -1064,8 +1067,8 @@ async function adminConsoleRoutes(fastify) {
       const title = orNull(request.body?.title, 160)
       if (!title) return reply.code(400).send({ success: false, error: 'title_required' })
       const { rows } = await systemOf(fastify.pg).query(
-        `INSERT INTO public.admin_org_position (title, department, system_role, holder_id, reports_to, sort_order, section)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        `INSERT INTO public.admin_org_position (title, department, system_role, holder_id, reports_to, sort_order, section, grade)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
         [
           title,
           orNull(request.body?.department, 120),
@@ -1074,6 +1077,7 @@ async function adminConsoleRoutes(fastify) {
           isUuid(request.body?.reportsTo) ? request.body.reportsTo : null,
           Number(request.body?.sortOrder) || 0,
           orNull(request.body?.section, 80),
+          gradeOf(request.body?.grade),
         ],
       )
       return reply.code(201).send({ success: true, data: rows[0] })
@@ -1104,6 +1108,7 @@ async function adminConsoleRoutes(fastify) {
            reports_to  = CASE WHEN $9::boolean THEN $10 ELSE reports_to END,
            sort_order  = COALESCE($11, sort_order),
            section     = CASE WHEN $12::boolean THEN $13 ELSE section END,
+           grade       = CASE WHEN $14::boolean THEN $15::smallint ELSE grade END,
            updated_at  = now()
          WHERE id = $1
          RETURNING id`,
@@ -1119,6 +1124,7 @@ async function adminConsoleRoutes(fastify) {
           Object.hasOwn(b, 'reportsTo'), isUuid(b.reportsTo) ? b.reportsTo : null,
           Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : null,
           Object.hasOwn(b, 'section'), orNull(b.section, 80),
+          Object.hasOwn(b, 'grade'), gradeOf(b.grade),
         ],
       )
       if (!rows.length) return reply.code(404).send({ success: false, error: 'not_found' })

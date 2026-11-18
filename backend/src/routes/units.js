@@ -44,7 +44,7 @@ async function unitRoutes(fastify) {
    */
   async function establishment(unit, authorityId) {
     const { rows } = await systemOf(pg).query(
-      `SELECT p.id, p.title, p.system_role, p.section, p.reports_to,
+      `SELECT p.id, p.title, p.system_role, p.section, p.reports_to, p.grade,
               CASE WHEN u.id IS NOT NULL AND u.authority_id IS NOT DISTINCT FROM $2
                    THEN COALESCE(u.full_name, u.name) END AS holder_name
          FROM public.admin_org_position p
@@ -52,10 +52,11 @@ async function unitRoutes(fastify) {
         WHERE p.unit_key = $1
         -- the head first; then each section where its first post falls in the chart's order, its posts together
         ORDER BY COALESCE(p.system_role = $3, false) DESC,
-                 min(p.sort_order) OVER (PARTITION BY p.section), p.section NULLS FIRST, p.sort_order, p.title`,
+                 min(p.sort_order) OVER (PARTITION BY p.section), p.section NULLS FIRST, p.grade DESC NULLS LAST, p.sort_order, p.title`,
       [unit.key, authorityId, unit.headRole])
     const posts = rows.map((r) => ({
       id: r.id, title: r.title, system_role: r.system_role, section: r.section ?? null, reports_to: r.reports_to ?? null,
+      grade: r.grade ?? null,
       holder_name: r.holder_name ?? null,
       vacant: r.holder_name === null && r.system_role !== null,
       holder_not_recorded: r.holder_name === null && r.system_role === null,

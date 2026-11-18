@@ -318,19 +318,18 @@ describe('the establishment: sections and vacancies (migration 249)', () => {
     }
   })
 
-  test('the head comes first, and every other engineering post sits in a section', async () => {
+  test('the head comes first, then the posts by grade, highest first', async () => {
     const { data } = (await get('/api/units/engineering', 'accounting_officer')).json()
     const posts = data.establishment.posts
     expect(posts[0].is_head).toBe(true)
-    const below = posts.filter((p) => !p.is_head)
-    if (!below.length) return console.warn('migration 249 not applied: no engineering posts below the head')
-    for (const p of below) expect(p.section).toEqual(expect.any(String))
+    const grades = posts.slice(1).map((p) => p.grade).filter((g) => g !== null)
+    expect(grades).toEqual([...grades].sort((a, b) => b - a))
   })
 })
 
 describe('engineering staff (migration 250)', () => {
   const { unitOfRole: unitOf, canSeeUnit: canSee, UNIT_ROLES_ALL: ALL } = require('../../config/units')
-  test.each(['civil_technician', 'roads_foreman', 'water_technician'])('%s belongs to Engineering and Works and sees no other unit', (role) => {
+  test.each(['civil_technician', 'roads_foreman', 'water_technician'])('%s belongs to Roads and Works and sees no other unit', (role) => {
     expect(unitOf(role)).toBe('engineering')
     expect(ALL).toContain(role)
     expect(canSee({ role }, 'engineering')).toBe(true)
@@ -340,12 +339,31 @@ describe('engineering staff (migration 250)', () => {
   test('their posts carry the roles, and need an account', async () => {
     const { data } = (await get('/api/units/engineering', 'accounting_officer')).json()
     const byTitle = Object.fromEntries(data.establishment.posts.map((p) => [p.title, p]))
-    if (!byTitle['Civil Technician']?.system_role) return console.warn('migration 250 not applied')
-    expect(byTitle['Civil Technician'].system_role).toBe('civil_technician')
-    expect(byTitle['Roads Foreman'].system_role).toBe('roads_foreman')
-    expect(byTitle['Water and Sanitation Technician'].system_role).toBe('water_technician')
-    for (const t of ['Civil Technician', 'Roads Foreman', 'Water and Sanitation Technician']) {
+    if (!byTitle['Civil Engineering Technician']) return console.warn('migration 251 not applied')
+    expect(byTitle['Civil Engineering Technician'].system_role).toBe('civil_technician')
+    expect(byTitle['Roads and Works Foreman/Technician'].system_role).toBe('roads_foreman')
+    for (const t of ['Civil Engineering Technician', 'Roads and Works Foreman/Technician']) {
       expect(byTitle[t].holder_not_recorded).toBe(false)
     }
+  })
+})
+
+describe('the Department of Roads and Works, 2027 establishment (migration 251)', () => {
+  const PROPOSAL = [
+    ['District Engineer', 10, 1], ['Civil Engineering Technician', 9, 1], ['Roads and Works Foreman/Technician', 8, 1],
+    ['Grader Operator', 6, 1], ['Heavy Equipment Operator', 6, 2], ['Class 2 Driver', 5, 2],
+    ['Tractor Driver', 3, 1], ['Tow Grader Operator', 3, 1], ['General Hand', 1, 1],
+  ]
+
+  test('is the proposal: each post, its grade and how many, and nothing else', async () => {
+    const { data } = (await get('/api/units/engineering', 'accounting_officer')).json()
+    if (!data.establishment.posts.some((p) => p.title === 'District Engineer')) return console.warn('migration 251 not applied')
+    expect(data.unit.label).toBe('Roads and Works')
+    expect(data.unit.post).toBe('District Engineer')
+    const counted = {}
+    for (const p of data.establishment.posts) counted[p.title] = (counted[p.title] ?? 0) + 1
+    expect(counted).toEqual(Object.fromEntries(PROPOSAL.map(([t, , n]) => [t, n])))
+    for (const [t, g] of PROPOSAL) for (const p of data.establishment.posts.filter((x) => x.title === t)) expect(p.grade).toBe(g)
+    expect(data.establishment.posts.every((p) => p.section === null)).toBe(true)
   })
 })
