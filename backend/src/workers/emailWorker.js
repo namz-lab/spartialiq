@@ -319,10 +319,11 @@ module.exports = { startEmailWorker, processBatch, selectTransport, activeTransp
 if (require.main === module) {
   // eslint-disable-next-line global-require
   const { Pool } = require('pg')
-  const pool = new Pool({
+  // A worker on its own is a process of its own: a dropped connection must not end it either.
+  const pool = require('../lib/pgResilience').guardPool(new Pool({
     connectionString: process.env.DATABASE_URL ||
       'postgresql://postgres@localhost:5432/vungu_master_db_v1',
-  })
+  }), console, 'email-worker')
   startEmailWorker(pool, { log: console })
 
   process.on('SIGINT', () => { process.exit(0) })

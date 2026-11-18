@@ -92,7 +92,7 @@ async function runScheduled(pg, { readers = loadReaders(), apply = true, trigger
       const run = (await pg.query(`INSERT INTO integration.surveypro_import_run (trigger, applied, councils) VALUES ($1, $2, $3) RETURNING id`, [trigger, !!apply, readers.length])).rows[0]
       const totals = zero(); const councils = []; let failed = false
       for (const reader of readers) {
-        const source = new Pool({ connectionString: reader.url, max: 1, connectionTimeoutMillis: 15_000 })
+        const source = require('../lib/pgResilience').guardPool(new Pool({ connectionString: reader.url, max: 1, connectionTimeoutMillis: 15_000 }), console, 'surveypro-source')
         try {
           const report = await runImport(pg, source, { apply, schema })
           add(totals, report.totals)
