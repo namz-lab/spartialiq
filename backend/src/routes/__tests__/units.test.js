@@ -307,3 +307,23 @@ describe('GET /api/units/planning/team', () => {
     if (gis.loaded) expect(gis.tasks_overdue).toBeLessThanOrEqual(gis.tasks_open)
   })
 })
+
+describe('the establishment: sections and vacancies (migration 249)', () => {
+  test('a post for staff who do not sign in is never counted as a vacancy', async () => {
+    const { data } = (await get('/api/units/engineering', 'accounting_officer')).json()
+    for (const p of data.establishment.posts) {
+      if (p.system_role === null) expect(p.vacant).toBe(false)
+      if (p.vacant) expect(p.system_role).not.toBeNull()
+      expect(p.holder_not_recorded).toBe(p.holder_name === null && p.system_role === null)
+    }
+  })
+
+  test('the head comes first, and every other engineering post sits in a section', async () => {
+    const { data } = (await get('/api/units/engineering', 'accounting_officer')).json()
+    const posts = data.establishment.posts
+    expect(posts[0].is_head).toBe(true)
+    const below = posts.filter((p) => !p.is_head)
+    if (!below.length) return console.warn('migration 249 not applied: no engineering posts below the head')
+    for (const p of below) expect(p.section).toEqual(expect.any(String))
+  })
+})

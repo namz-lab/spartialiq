@@ -117,18 +117,19 @@ const tree = computed<Node[]>(() => {
   return flat
 })
 
-const vacancies = computed(() => positions.value.filter(p => !p.holder_id))
+// A vacancy is a post that needs an account with nobody in it; a post for staff who do not sign in is not one (migration 249).
+const vacancies = computed(() => positions.value.filter(p => !p.holder_id && p.system_role))
 const mismatches = computed(() => positions.value.filter(p => p.roleMismatch))
 
 // ── Editing ─────────────────────────────────────────────────────────────
 const formOpen = ref(false)
 const editing = ref<OrgPosition | null>(null)
-const form = ref({ title: '', department: '', systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 })
+const form = ref({ title: '', department: '', section: '', systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 })
 const formError = ref<string | null>(null)
 
 function openNew() {
   editing.value = null
-  form.value = { title: '', department: '', systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 }
+  form.value = { title: '', department: '', section: '', systemRole: '', holderId: '', reportsTo: '', sortOrder: 0 }
   formError.value = null
   formOpen.value = true
 }
@@ -138,6 +139,7 @@ function openEdit(p: OrgPosition) {
   form.value = {
     title: p.title,
     department: p.department ?? '',
+    section: p.section ?? '',
     systemRole: p.system_role ?? '',
     holderId: p.holder_id ?? '',
     reportsTo: p.reports_to ?? '',
@@ -182,6 +184,7 @@ async function save() {
     const payload = {
       title: form.value.title.trim(),
       department: form.value.department.trim() || null,
+      section: form.value.section.trim() || null,
       systemRole: form.value.systemRole || null,
       holderId: form.value.holderId || null,
       reportsTo: form.value.reportsTo || null,
@@ -288,13 +291,13 @@ const childCount = computed(() => {
       <div class="ins-card-head"><h3>The establishment</h3></div>
       <ul v-if="tree.length" class="og-tree">
         <li v-for="p in tree" :key="p.id" class="og-row"
-            :class="{ vacant: !p.holder_id, mismatch: p.roleMismatch }"
+            :class="{ vacant: !p.holder_id && p.system_role, mismatch: p.roleMismatch }"
             :style="{ '--depth': p.depth }">
           <span class="og-rule" aria-hidden="true" />
           <div class="og-post">
             <strong class="og-title">{{ p.title }}</strong>
             <span class="og-meta">
-              {{ p.department || 'No department' }} · {{ roleLabel(p.system_role) }}
+              {{ p.department || 'No department' }}<template v-if="p.section"> · {{ p.section }}</template> · {{ roleLabel(p.system_role) }}
             </span>
           </div>
 
@@ -307,9 +310,10 @@ const childCount = computed(() => {
                 Account holds “{{ roleLabel(p.holder_role) }}”
               </small>
             </template>
-            <span v-else class="og-vacant">
+            <span v-else-if="p.system_role" class="og-vacant">
               <UserX :size="14" aria-hidden="true" /> Vacant
             </span>
+            <small v-else>No system account: staff who do not sign in</small>
           </div>
 
           <div class="og-row-actions">
@@ -343,6 +347,11 @@ const childCount = computed(() => {
         <div class="ins-field">
           <label class="ins-label" for="og-dept">Department</label>
           <input id="og-dept" v-model="form.department" class="ins-input" placeholder="Planning &amp; Environment" />
+        </div>
+
+        <div class="ins-field">
+          <label class="ins-label" for="og-section">Section</label>
+          <input id="og-section" v-model="form.section" class="ins-input" placeholder="Roads and works" />
         </div>
 
         <div class="ins-field">

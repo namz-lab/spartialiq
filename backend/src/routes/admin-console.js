@@ -140,8 +140,9 @@ async function adminConsoleRoutes(fastify) {
             WHERE status = 'pending')                                            AS outbox_pending,
           (SELECT count(*)::int FROM public.notifications_outbox
             WHERE status = 'failed')                                             AS outbox_failed,
+          -- a vacancy is a post that needs an account (it carries a system role) with nobody in it (migration 249)
           (SELECT count(*)::int FROM public.admin_org_position
-            WHERE holder_id IS NULL)                                             AS posts_vacant,
+            WHERE holder_id IS NULL AND system_role IS NOT NULL)                 AS posts_vacant,
           (SELECT count(*)::int FROM public.admin_announcement
             WHERE withdrawn_at IS NULL AND starts_at <= now()
               AND (ends_at IS NULL OR ends_at > now()))                          AS announcements_live
@@ -1031,7 +1032,7 @@ async function adminConsoleRoutes(fastify) {
   fastify.get('/admin/org', admin, async (_request, reply) => {
     try {
       const { rows } = await systemOf(fastify.pg).query(
-        `SELECT p.id, p.title, p.department, p.system_role, p.holder_id,
+        `SELECT p.id, p.title, p.department, p.section, p.system_role, p.holder_id,
                 p.reports_to, p.sort_order,
                 COALESCE(u.full_name, u.name) AS holder_name,
                 u.email  AS holder_email,
@@ -1063,8 +1064,8 @@ async function adminConsoleRoutes(fastify) {
       const title = orNull(request.body?.title, 160)
       if (!title) return reply.code(400).send({ success: false, error: 'title_required' })
       const { rows } = await systemOf(fastify.pg).query(
-        `INSERT INTO public.admin_org_position (title, department, system_role, holder_id, reports_to, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        `INSERT INTO public.admin_org_position (title, department, system_role, holder_id, reports_to, sort_order, section)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
         [
           title,
           orNull(request.body?.department, 120),
@@ -1072,6 +1073,7 @@ async function adminConsoleRoutes(fastify) {
           isUuid(request.body?.holderId) ? request.body.holderId : null,
           isUuid(request.body?.reportsTo) ? request.body.reportsTo : null,
           Number(request.body?.sortOrder) || 0,
+          orNull(request.body?.section, 80),
         ],
       )
       return reply.code(201).send({ success: true, data: rows[0] })
@@ -1101,6 +1103,7 @@ async function adminConsoleRoutes(fastify) {
            holder_id   = CASE WHEN $7::boolean THEN $8 ELSE holder_id END,
            reports_to  = CASE WHEN $9::boolean THEN $10 ELSE reports_to END,
            sort_order  = COALESCE($11, sort_order),
+           section     = CASE WHEN $12::boolean THEN $13 ELSE section END,
            updated_at  = now()
          WHERE id = $1
          RETURNING id`,
@@ -1115,6 +1118,7 @@ async function adminConsoleRoutes(fastify) {
           Object.hasOwn(b, 'holderId'), isUuid(b.holderId) ? b.holderId : null,
           Object.hasOwn(b, 'reportsTo'), isUuid(b.reportsTo) ? b.reportsTo : null,
           Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : null,
+          Object.hasOwn(b, 'section'), orNull(b.section, 80),
         ],
       )
       if (!rows.length) return reply.code(404).send({ success: false, error: 'not_found' })

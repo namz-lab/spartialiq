@@ -96,6 +96,18 @@ const keptElsewhere = computed(() => props.unit === 'finance'
   ? "The financial position is kept in the finance workspaces. Open them from the links below; this page does not repeat it."
   : '')
 
+/** The establishment by section, in the order the server gives (the head first, then each section): migration 249. */
+const postGroups = computed(() => {
+  const out: { section: string | null; posts: NonNullable<typeof dash.value>['establishment']['posts'] }[] = []
+  for (const p of dash.value?.establishment.posts ?? []) {
+    const section = p.section ?? null
+    const last = out[out.length - 1]
+    if (last && last.section === section) last.posts.push(p)
+    else out.push({ section, posts: [p] })
+  }
+  return out
+})
+
 const asOf = computed(() => {
   const t = dash.value?.as_of
   return t ? new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
@@ -237,10 +249,15 @@ const otherUnits = computed(() => (isChief.value
               <table v-else class="ud-table">
                 <caption class="ud-sr">Posts in this unit</caption>
                 <thead><tr><th scope="col">Post</th><th scope="col">Holder</th></tr></thead>
-                <tbody>
-                  <tr v-for="p in dash.establishment.posts" :key="p.id" :class="{ 'is-head': p.is_head }">
+                <tbody v-for="g in postGroups" :key="g.section ?? '—'">
+                  <tr v-if="g.section" class="ud-section-row"><th scope="rowgroup" colspan="2">{{ g.section }}</th></tr>
+                  <tr v-for="p in g.posts" :key="p.id" :class="{ 'is-head': p.is_head }">
                     <th scope="row">{{ p.title }}</th>
-                    <td><span v-if="p.vacant" class="ud-tag">Vacant</span><template v-else>{{ p.holder_name }}</template></td>
+                    <td>
+                      <span v-if="p.vacant" class="ud-tag">Vacant</span>
+                      <span v-else-if="p.holder_not_recorded" class="ud-muted">Not recorded in the system</span>
+                      <template v-else>{{ p.holder_name }}</template>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -325,6 +342,8 @@ const otherUnits = computed(() => (isChief.value
 .ud-table th, .ud-table td { padding: 0.4375rem 0.5rem; border-top: 1px solid var(--ent-surface-2); text-align: left; font-weight: 400; }
 .ud-table thead th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); border-top: 0; }
 .ud-table tr.is-head th { font-weight: 600; }
+.ud-table tr.ud-section-row th { padding-top: 0.875rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ent-text-2); }
+.ud-muted { color: var(--ent-text-3); font-size: 0.8125rem; }
 .ud-tag { display: inline-block; padding: 0.0625rem 0.5rem; border-radius: 999px; background: var(--ent-warning-soft); color: var(--ent-warning); font-size: 0.75rem; font-weight: 600; }
 
 .ud-wardmap :deep(.wm), .ud-wardtable :deep(.wt-root) { margin-top: 0; }

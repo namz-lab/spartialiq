@@ -457,6 +457,8 @@ export interface OrgPosition {
   id: string
   title: string
   department: string | null
+  /** The section of the unit (e.g. Roads and works); null for a head or an undivided unit (migration 249). */
+  section: string | null
   system_role: string | null
   holder_id: string | null
   holder_name: string | null
@@ -477,6 +479,7 @@ export async function listOrg(): Promise<OrgPosition[]> {
 export interface OrgInput {
   title?: string
   department?: string | null
+  section?: string | null
   systemRole?: string | null
   holderId?: string | null
   reportsTo?: string | null
