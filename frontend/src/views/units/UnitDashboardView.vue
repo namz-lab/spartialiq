@@ -133,7 +133,9 @@ const hasMeasures = computed(() => !!dash.value?.maps.has_measures)
 const views = computed(() => [
   { key: 'stands', label: 'Where the unit stands', icon: ClipboardList, group: 'unit' },
   // Roads and Works' plant register (migration 252)
-  ...(props.unit === 'engineering' ? [{ key: 'plant', label: 'Plant', icon: Wrench, Send, group: 'unit' }] : []),
+  ...(props.unit === 'engineering' ? [{ key: 'plant', label: 'Plant', icon: Wrench, group: 'unit' }] : []),
+  // Roads and Works in the planning workflow: the applications circulated to Engineering (migration 253)
+  ...(props.unit === 'engineering' && auth.user?.role !== 'accounting_officer' ? [{ key: 'referrals', label: 'Engineering referrals', icon: Send, group: 'unit' }] : []),
   ...(hasMeasures.value ? [
     { key: 'wards-map', label: 'Ward map', icon: MapIcon, group: 'wards' },
     ...(props.unit === 'planning' ? [{ key: 'wards-registers', label: 'What the registers hold', icon: Table2, group: 'wards' }] : []),
