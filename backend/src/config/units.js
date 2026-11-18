@@ -2,7 +2,8 @@
  * The Executive Arm's units: the single source for which unit exists, who heads it, and what it opens.
  * Follows the Council's own Executive Arm (https://vungurdc.org.zw/our-team/) and migration 216.
  *
- * Visibility: the Chief Executive (accounting_officer) sees every unit; a unit's head sees that unit only.
+ * Visibility: the Chief Executive (accounting_officer) sees every unit; a unit's head, and its members (`memberRoles`,
+ * migration 250), see that unit only.
  * `canSeeUnit` is the one rule; routes and tests use it so they cannot drift.
  */
 const CHIEF_EXECUTIVE_ROLE = 'accounting_officer'
@@ -14,6 +15,7 @@ const UNITS = [
     sections: ['planning', 'land'],
     desks: [{ label: 'Executive Officer desk', path: '/eo-planner-portal' }] },
   { key: 'engineering', label: 'Engineering and Works', post: 'Engineer', headRole: 'engineer', section: 'engineering',
+    memberRoles: ['civil_technician', 'roads_foreman', 'water_technician'],
     sections: ['engineering'],
     desks: [{ label: 'Parcel and asset map', path: '/gis-officer-portal' }] },
   { key: 'social_admin', label: 'Human Resources, Social Services and Administration', post: 'Human Resources, Social Services & Administration Officer',
@@ -24,10 +26,11 @@ const UNITS = [
 
 const UNIT_KEYS = UNITS.map((u) => u.key)
 const unitByKey = (key) => UNITS.find((u) => u.key === key) ?? null
-const unitOfRole = (role) => UNITS.find((u) => u.headRole === role)?.key ?? null
-const UNIT_ROLES_ALL = [CHIEF_EXECUTIVE_ROLE, ...UNITS.map((u) => u.headRole)]
+/** The unit a role heads or belongs to (a member: migration 250). */
+const unitOfRole = (role) => UNITS.find((u) => u.headRole === role || (u.memberRoles ?? []).includes(role))?.key ?? null
+const UNIT_ROLES_ALL = [CHIEF_EXECUTIVE_ROLE, ...UNITS.flatMap((u) => [u.headRole, ...(u.memberRoles ?? [])])]
 
-/** The chief executive sees every unit; a head sees their own; nobody else sees any. */
+/** The chief executive sees every unit; a head or member sees their own; nobody else sees any. */
 function canSeeUnit(user, key) {
   if (!user || !unitByKey(key)) return false
   if (user.role === CHIEF_EXECUTIVE_ROLE) return true

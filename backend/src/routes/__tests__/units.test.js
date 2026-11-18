@@ -327,3 +327,25 @@ describe('the establishment: sections and vacancies (migration 249)', () => {
     for (const p of below) expect(p.section).toEqual(expect.any(String))
   })
 })
+
+describe('engineering staff (migration 250)', () => {
+  const { unitOfRole: unitOf, canSeeUnit: canSee, UNIT_ROLES_ALL: ALL } = require('../../config/units')
+  test.each(['civil_technician', 'roads_foreman', 'water_technician'])('%s belongs to Engineering and Works and sees no other unit', (role) => {
+    expect(unitOf(role)).toBe('engineering')
+    expect(ALL).toContain(role)
+    expect(canSee({ role }, 'engineering')).toBe(true)
+    for (const other of UNITS.map((u) => u.key).filter((k) => k !== 'engineering')) expect(canSee({ role }, other)).toBe(false)
+  })
+
+  test('their posts carry the roles, and need an account', async () => {
+    const { data } = (await get('/api/units/engineering', 'accounting_officer')).json()
+    const byTitle = Object.fromEntries(data.establishment.posts.map((p) => [p.title, p]))
+    if (!byTitle['Civil Technician']?.system_role) return console.warn('migration 250 not applied')
+    expect(byTitle['Civil Technician'].system_role).toBe('civil_technician')
+    expect(byTitle['Roads Foreman'].system_role).toBe('roads_foreman')
+    expect(byTitle['Water and Sanitation Technician'].system_role).toBe('water_technician')
+    for (const t of ['Civil Technician', 'Roads Foreman', 'Water and Sanitation Technician']) {
+      expect(byTitle[t].holder_not_recorded).toBe(false)
+    }
+  })
+})

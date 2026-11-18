@@ -2,11 +2,14 @@
 // Mirrors backend src/config/units.js; the server decides who may open what, so this is only for routing and wording.
 import type { UnitKey } from '@/services/units'
 
-/** The role that heads each unit. The chief executive (accounting_officer) is above all of them. */
+/** The unit each role heads or belongs to (members: migration 250). The chief executive (accounting_officer) is above all of them. */
 export const UNIT_OF_ROLE: Record<string, UnitKey | undefined> = {
   eo: 'planning',
   finance_admin: 'finance',
   engineer: 'engineering',
+  civil_technician: 'engineering',
+  roads_foreman: 'engineering',
+  water_technician: 'engineering',
   hr_social_officer: 'social_admin',
   auditor: 'audit',
 }

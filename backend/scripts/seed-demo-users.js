@@ -44,6 +44,10 @@ const VALID_ROLES = new Set([
   // Migration 216: heads of the Executive Arm's other units.
   'engineer',
   'hr_social_officer',
+  // Migration 250: engineering staff under the Engineer.
+  'civil_technician',
+  'roads_foreman',
+  'water_technician',
 ])
 
 const DEFAULT_DEMO_USERS = [
@@ -91,6 +95,9 @@ const DEFAULT_DEMO_USERS = [
   { email: 'demo.supervisor@vungu.test', name: 'Demo Cash Supervisor', role: 'cash_supervisor', department: 'Finance' },
   // Migration 216. Heads of Engineering and of HR / Social Services / Administration; each lands on their own unit dashboard.
   { email: 'demo.engineer@vungu.test', name: 'Demo Engineer', role: 'engineer', department: 'Engineering' },
+  { email: 'demo.civil-tech@vungu.test', name: 'Demo Civil Technician', role: 'civil_technician', department: 'Engineering' },
+  { email: 'demo.roads-foreman@vungu.test', name: 'Demo Roads Foreman', role: 'roads_foreman', department: 'Engineering' },
+  { email: 'demo.water-tech@vungu.test', name: 'Demo Water and Sanitation Technician', role: 'water_technician', department: 'Engineering' },
   { email: 'demo.hr-social@vungu.test', name: 'Demo HR and Social Services Officer', role: 'hr_social_officer', department: 'Human Resources' },
 ]
 
