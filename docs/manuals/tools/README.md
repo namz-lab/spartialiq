@@ -7,6 +7,7 @@ The EO Planning user manual (`../eo-planning-user-manual.md`) has two diagrams a
 | `make-figs.js` | Draws Figure 1 (the road of an application) and Figure 2 (the gates before an approval) as SVG and renders them to PNG. |
 | `capture.js` | Signs in as the demo planner and EO, works the two examples of section 13 through the real screens, and saves a screenshot at each step. It records what it creates in `created.json`. |
 | `capture-team.js` | Signs in as the demo EO and clerk and captures the planning team's *At a glance* screens (`team-1` to `team-3`) for the council deck. Read-only: it creates nothing, so it needs no clean-up. It falls back to the Edge that comes with Windows when Playwright's Chromium is not installed. |
+| `capture-demo-steps.js` | Works both Full Council cases through the real screens **on the demonstration copy only** (backend 3011 on the local database, front end 5175; it refuses otherwise) and saves a screenshot of every step to `docs/presentations/demo-steps/`. It cashes up a till left open from an earlier day, lodges the two applications, and withdraws an earlier rehearsal's, marking them *(rehearsal)*. What it creates is listed in `demo-created.json` (not committed). |
 | `cleanup.js` | Deletes everything `capture.js` created (the two cases, the meetings), using `created.json`. **Run it after every capture.** |
 
 ```bash
