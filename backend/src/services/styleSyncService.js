@@ -10,9 +10,9 @@ const { Pool } = require('pg');
 class StyleSyncService extends EventEmitter {
   constructor() {
     super();
-    this.pool = new Pool({
+    this.pool = require('../lib/pgResilience').guardPool(new Pool({
       connectionString: process.env.DATABASE_URL
-    });
+    }), console, 'style-sync');
     
     // Configuration
     this.syncInterval = '*/5 * * * *'; // Every 5 minutes

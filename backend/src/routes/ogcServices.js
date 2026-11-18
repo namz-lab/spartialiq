@@ -446,9 +446,9 @@ async function ogcServicesRoutes(fastify, options) {
         // DATABASE_URL when set, otherwise the standard PG* env vars that the
         // pg driver reads by itself. No credentials live in code.
         const { Pool } = require('pg')
-        const pool = new Pool(
+        const pool = require('../lib/pgResilience').guardPool(new Pool(
           process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : {}
-        )
+        ), console, 'ogc')
 
         // The layer name doubles as the table name and is interpolated as a
         // quoted identifier below — reject anything that isn't a plain

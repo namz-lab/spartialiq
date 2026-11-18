@@ -370,9 +370,10 @@ async function build() {
     max: 30,
   })
 
-  // A hosted database (Neon) closes idle connections. node-postgres reports that as an 'error' on the pool; with no listener, Node
-  // treats it as fatal and the whole server exits. The pool drops the dead client and opens a new one on the next query, so log it.
-  server.pg.pool.on('error', (err) => { server.log.warn({ err: err.message }, '[db] an idle connection was closed by the server; it will be replaced') })
+  // A hosted database (Neon) closes connections. node-postgres reports that as an 'error' event on the pool (an idle client) or on
+  // the client itself (one a route or worker has checked out); with no listener either one is fatal and the whole server exits.
+  // guardPool listens on both (src/lib/pgResilience.js): the query on a dropped connection fails, and the next gets a new one.
+  require('./src/lib/pgResilience').guardPool(server.pg.pool, server.log, 'main')
 
   await require('./src/lib/runtimeDb').assertRuntimeRole(server.pg.pool, { log: server.log })
 

@@ -259,7 +259,7 @@ class RefinedOGCBridge {
       ? { connectionString: process.env.DATABASE_URL }
       : this.dbConfig
     console.log(`[Refined OGC] 🔌 Connecting to DB: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':***@') : this.dbConfig.host}`)
-    const pool = new Pool(poolConfig)
+    const pool = require('../../lib/pgResilience').guardPool(new Pool(poolConfig), console, 'ogc-bridge')
 
     try {
       const tableName = this.mapLayerName(layerName)
@@ -1019,7 +1019,7 @@ class RefinedOGCBridge {
     } catch (error) {
       // Fallback: Get schema from PostgreSQL (same DATABASE_URL preference as getDirectFeatures)
       const { Pool } = require('pg')
-      const pool = new Pool(process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : this.dbConfig)
+      const pool = require('../../lib/pgResilience').guardPool(new Pool(process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : this.dbConfig), console, 'ogc-bridge')
 
       try {
         const tableName = this.mapLayerName(layerName)
