@@ -107,3 +107,46 @@ export const unitsApi = {
     return res.data.data
   },
 }
+
+// ── The Department of Roads and Works' plant register (backend migration 252) ─────────────────────
+export type PlantStatus = 'working' | 'under_repair' | 'broken_down' | 'standby' | 'disposed'
+export interface PlantItem {
+  id: string
+  plant_no: string
+  kind: string
+  description: string
+  registration: string | null
+  serial_no: string | null
+  status: PlantStatus
+  location: string | null
+  hour_meter: string | number | null
+  last_service_on: string | null
+  next_service_hours: string | number | null
+  notes: string | null
+  operator_post: string | null
+  hours_this_month: number | null
+  fuel_this_month: number | null
+  days_this_month: number
+  last_worked_on: string | null
+  last_job: string | null
+  service_due: boolean
+}
+export interface PlantRegister {
+  plant: PlantItem[]
+  totals: { items: number; working: number; out_of_action: number; service_due: number }
+  /** The District Engineer, the Civil Engineering Technician and the Foreman may write; the Chief Executive reads. */
+  can_write: boolean
+}
+export interface PlantDay { worked_on?: string; hours?: number | null; fuel_litres?: number | null; hour_meter_end?: number | null; job?: string; operator_name?: string }
+
+export const plantApi = {
+  async list(): Promise<PlantRegister> {
+    return (await api.get<{ success: boolean; data: PlantRegister }>('/units/engineering/plant')).data.data
+  },
+  async logDay(id: string, day: PlantDay): Promise<void> {
+    await api.post(`/units/engineering/plant/${encodeURIComponent(id)}/log`, day)
+  },
+  async update(id: string, patch: { status?: PlantStatus; location?: string | null; last_service_on?: string | null; next_service_hours?: number | null; notes?: string | null }): Promise<void> {
+    await api.patch(`/units/engineering/plant/${encodeURIComponent(id)}`, patch)
+  },
+}

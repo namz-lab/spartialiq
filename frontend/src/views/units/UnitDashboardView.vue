@@ -16,12 +16,13 @@
 import { computed, nextTick, onMounted, ref, watch, type Component } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeft, ArrowRight, Banknote, Building2, ChartColumn, ClipboardList, HardHat, HeartPulse, Info, Map as MapIcon, ShieldCheck, Table2, TriangleAlert,
+  ArrowLeft, ArrowRight, Banknote, Building2, ChartColumn, ClipboardList, HardHat, HeartPulse, Info, Map as MapIcon, ShieldCheck, Table2, TriangleAlert, Wrench,
 } from 'lucide-vue-next'
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import ExecutiveWardMap from '@/views/executive/ExecutiveWardMap.vue'
 import WardTable from '@/components/executive/WardTable.vue'
 import ExportMenu from '@/components/shared/ExportMenu.vue'
+import PlantPanel from '@/views/units/PlantPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import { unitsApi, type UnitDashboard, type UnitKey } from '@/services/units'
 import { UNIT_LABEL, unitPath } from '@/views/units/unitCatalogue'
@@ -130,6 +131,8 @@ const desks = computed(() => dash.value?.unit.desks ?? [])
 const hasMeasures = computed(() => !!dash.value?.maps.has_measures)
 const views = computed(() => [
   { key: 'stands', label: 'Where the unit stands', icon: ClipboardList, group: 'unit' },
+  // Roads and Works' plant register (migration 252)
+  ...(props.unit === 'engineering' ? [{ key: 'plant', label: 'Plant', icon: Wrench, group: 'unit' }] : []),
   ...(hasMeasures.value ? [
     { key: 'wards-map', label: 'Ward map', icon: MapIcon, group: 'wards' },
     ...(props.unit === 'planning' ? [{ key: 'wards-registers', label: 'What the registers hold', icon: Table2, group: 'wards' }] : []),
@@ -269,6 +272,8 @@ const otherUnits = computed(() => (isChief.value
               </table>
             </section>
           </div>
+
+          <PlantPanel v-if="view === 'plant'" />
 
           <!-- The unit's wards. The map is not printed: the tables carry the same figures. -->
           <p v-if="!hasMeasures" v-show="view === 'stands'" class="ud-missing ud-nomap"><Info :size="16" aria-hidden="true" /><span>{{ noMapText }}</span></p>
