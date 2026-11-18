@@ -1,6 +1,6 @@
 # Full Council demonstration: a step-by-step guide
 
-**For the presenter. Use with the deck *Vungu Full Council - SpatialIQ planning showcase.pptx* (slides 21 and 22 are the on-screen summary of this guide).**
+**For the presenter. Use with the deck *Vungu Full Council - LAMIS planning showcase.pptx* (slides 25 and 26 are the on-screen summary of this guide).**
 
 The demonstration takes the councillors through the two worked cases from the [EO Planning user manual](../manuals/eo-planning-user-manual.md) and the [team guide](../manuals/eo-planning-team-guide.md), signing in as each member of the team in turn: cashier, clerk, planner, EO, revenue officer. It takes about **16 minutes** (8 per case).
 
@@ -79,7 +79,7 @@ Before you start this case, take its application fee and acknowledge it as in Ca
 
 ## 4. After the demonstration
 
-- Close the demonstration windows, then present slide 23 (*What council is asked to decide*).
+- Close the demonstration windows, then present slide 27 (*What council is asked to decide*).
 - Stop the demonstration backend and frontend after the meeting.
 - Nothing from the demonstration is in the live system.
 
