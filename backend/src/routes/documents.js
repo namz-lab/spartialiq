@@ -18,6 +18,7 @@
  */
 
 const { systemOf } = require('../lib/dbContext')
+const personAssurance = require('../services/personAssurance')
 const path = require('node:path')
 const fs   = require('node:fs/promises')
 const fsSync = require('node:fs')
@@ -397,7 +398,16 @@ async function documentRoutes(fastify) {
         }
       }
 
-      return reply.send({ success: true, data: docDTO(row) })
+      // The register of persons (migration 257): an officer's approval of an identity document or a proof of residence
+      // raises the citizen's person, when the officer is one of the registrar's desks. Said back to the officer in words.
+      let register = null
+      if (decision === 'verified') {
+        register = await personAssurance.fromApprovedDocument(systemOf(fastify.pg), {
+          userId: row.user_id, docKind: row.doc_kind, docId: row.id, officer: request.user,
+        }).catch((err) => { request.log.error({ err }, 'register of persons: document approval not recorded'); return null })
+      }
+
+      return reply.send({ success: true, data: docDTO(row), register })
     } catch (err) {
       request.log.error({ err }, 'doc verify failed')
       return reply.code(500).send({ success: false, error: 'internal' })

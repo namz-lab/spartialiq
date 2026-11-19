@@ -11,6 +11,8 @@
  * Everything made here is removed afterwards.
  */
 require('dotenv').config()
+// These cases are about the register itself; the Registrar-General check has its own suite (person-assurance.test.js).
+process.env.RG_MODE = 'off'
 const { randomUUID } = require('node:crypto')
 const Fastify = require('fastify')
 const fastifyPostgres = require('@fastify/postgres')
@@ -89,7 +91,7 @@ maybe('Mr Phiri is registered at the counter, his ID seen; the same ID again is 
   expect(res.statusCode).toBe(201)
   const p = res.json().data.person
   persons.push(p.id)
-  expect(p).toMatchObject({ display_name: `Mr Bernard Phiri${tag}`, verified: true, source: 'counter' })
+  expect(p).toMatchObject({ display_name: `Mr Bernard Phiri${tag}`, verified: true, source: 'counter', assurance_level: 3, level_label: 'Original sighted' })
   expect(p.identifiers[0]).toMatchObject({ kind: 'national_id', masked: false })
 
   const again = await clerkCall('POST', '/api/persons', {
@@ -129,7 +131,7 @@ maybe('Mrs Hlongwane shares a phone with someone registered: shown them first, r
 
   const made = await clerkCall('POST', '/api/persons', { ...hers, confirm_new: true })
   expect(made.statusCode).toBe(201)
-  expect(made.json().data.person).toMatchObject({ verified: false, preferred_channel: 'post' })
+  expect(made.json().data.person).toMatchObject({ verified: false, preferred_channel: 'post', assurance_level: 0 })
   persons.push(made.json().data.person.id)
 })
 
@@ -186,5 +188,5 @@ maybe('the counter records that an unverified person\'s ID was seen', async () =
     preferred_channel: 'sms',
   })
   expect(ok.statusCode).toBe(200)
-  expect(ok.json().data.person).toMatchObject({ verified: true, preferred_channel: 'sms' })
+  expect(ok.json().data.person).toMatchObject({ verified: true, preferred_channel: 'sms', assurance_level: 3 })
 })

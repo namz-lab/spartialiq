@@ -12,6 +12,9 @@ vi.mock('@/services/persons', async (orig) => ({
   personsApi: { search: api.search, register: api.register },
 }))
 
+const auth = vi.hoisted(() => ({ user: { role: 'planning_clerk' } as { role: string } }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
+
 import PersonPicker from '../PersonPicker.vue'
 import type { Person } from '@/services/persons'
 
@@ -19,7 +22,9 @@ const person = (over: Partial<Person> = {}): Person => ({
   id: 'p1', kind: 'individual', title: 'Mr', surname: 'Phiri', first_names: 'Bernard', organisation_name: null,
   display_name: 'Mr Bernard Phiri', phone: '+263 77 123 4567', alt_phone: null, email: null, physical_address: 'Stand 1378',
   postal_address: null, ward_no: null, preferred_channel: 'sms', source: 'counter', verified: true, verified_at: '2026-11-19',
-  verified_how: 'National ID card', status: 'active',
+  verified_how: 'National ID card', status: 'active', date_of_birth: '1979-04-12', assurance_level: 3, level_label: 'Original sighted',
+  resident: false, identity_method: 'original_sighted', original_sighted_at: '2026-11-19', residency_verified_at: null,
+  residency_evidence: null, registrar_general: null,
   identifiers: [{ kind: 'national_id', value: '63-•••••••X27', masked: true }],
   appears_as: { applications: 1, objections: 0, receipts: 1 }, ...over,
 })
@@ -32,7 +37,7 @@ const search = async (w: ReturnType<typeof mount>, q: string) => {
   await flushPromises()
 }
 
-beforeEach(() => { api.search.mockReset(); api.register.mockReset() })
+beforeEach(() => { api.search.mockReset(); api.register.mockReset(); auth.user = { role: 'planning_clerk' } })
 
 describe('PersonPicker', () => {
   it('finds a person and chooses them', async () => {
@@ -46,9 +51,13 @@ describe('PersonPicker', () => {
     expect(w.emitted('update:modelValue')![0]).toEqual([expect.objectContaining({ id: 'p1' })])
   })
 
-  it('shows the chosen person with whether their ID was seen, and where they appear', () => {
-    const w = mount(PersonPicker, { props: { modelValue: person({ verified: false }) } })
-    expect(w.get('[data-testid=pp-chosen]').text()).toContain('ID not yet seen')
+  it('shows the chosen person with their level, where they appear, and what the Registrar-General said', () => {
+    const w = mount(PersonPicker, { props: { modelValue: person({
+      verified: false, assurance_level: 0, level_label: 'Recorded',
+      registrar_general: { document_type: 'national_id', outcome: 'no_match', document_status: 'valid', fields: { surname: 'no_match' }, service: 'prototype', blocks: 'The Registrar-General says the particulars do not agree with the document.' },
+    }) } })
+    expect(w.get('[data-testid=pp-level]').text()).toBe('Level 0 · Recorded')
+    expect(w.get('[data-testid=pp-rg]').text()).toContain('The particulars do not agree')
     expect(w.text()).toContain('1 application · 1 receipt')
     expect(w.text()).toContain('Letters: SMS')
   })
@@ -101,6 +110,28 @@ describe('PersonPicker', () => {
     await flushPromises()
     expect(w.get('[data-testid=pp-conflict]').text()).toContain('already registered')
     expect(w.find('[data-testid=pp-confirm-new]').exists()).toBe(false)
+  })
+
+  it('a desk that is not the registrar\'s registers at level 0, with no "I have the original"', async () => {
+    auth.user = { role: 'cashier' }
+    api.search.mockResolvedValue([])
+    const w = mount(PersonPicker, { props: { modelValue: null } })
+    await search(w, 'Khumalo')
+    await w.get('[data-testid=pp-register]').trigger('click')
+    expect(w.find('[data-testid=pp-verified]').exists()).toBe(false)
+    expect(w.get('[data-testid=pp-verify-note]').text()).toContain('planning clerk confirms')
+  })
+
+  it('shows a registration the Registrar-General would not let be verified', async () => {
+    api.search.mockResolvedValue([])
+    api.register.mockResolvedValue({ person: person({ assurance_level: 0, level_label: 'Recorded' }), warning: 'Registered, but not as verified: The Registrar-General records the holder as deceased.' })
+    const w = mount(PersonPicker, { props: { modelValue: null } })
+    await search(w, 'Moyo')
+    await w.get('[data-testid=pp-register]').trigger('click')
+    await w.get('[data-testid=pp-form]').trigger('submit')
+    await flushPromises()
+    await w.setProps({ modelValue: (w.emitted('update:modelValue')![0] as [Person])[0] })
+    expect(w.get('[role=alert]').text()).toContain('deceased')
   })
 
   it('will not say the ID was seen without its number', async () => {

@@ -13,12 +13,27 @@
  *   PUT   /api/permit-applications/:id/applicant-person   link an application's applicant to the register
  *   PUT   /api/objections/:id/objector-person             link an objection's objector to the register
  *
+ *   POST  /api/persons/:id/assurance               raise the person's level: { step: 'original_sighted' | 'residency', how,
+ *                                                evidence? }   (the registrar's desks only)
+ *   POST  /api/persons/:id/registrar-general-check  check their national ID or passport with the Registrar-General
+ *   GET   /api/registrar-general/status            whether a Registrar-General check can be made here, and how
+ *   GET   /api/persons/levels                      the four levels, in words
+ *
+ * LEVELS (migration 257, src/services/personAssurance.js): 0 recorded, 1 identity verified, 2 resident or ratepayer,
+ * 3 original identity document sighted. Many desks register a person, at level 0; only the registrar's desks (the
+ * planning clerk, with the cash supervisor and the administrator as back-up) raise a level. A Registrar-General answer
+ * that the document is not theirs or not valid stops it being used to verify identity.
+ *
  * Who: the posts that meet people at the counter register them (the planning clerk, the cashier, the revenue officer and
  * the planning officers). An identity number is personal information (Cyber and Data Protection Act [Chapter 12:07]): it is
  * shown masked, revealed in full only to the posts that register people, and every reveal is logged.
  * Every query runs as the person asking (row-level security), so each council sees only its own register.
  */
 const { requireRole } = require('../middleware/jwtAuth')
+const assurance = require('../services/personAssurance')
+const registrarGeneral = require('../services/registrarGeneral')
+
+const { VERIFIERS } = assurance
 
 const REGISTRARS = ['planning_clerk', 'planner', 'eo', 'cashier', 'cash_supervisor', 'revenue_officer', 'finance_officer', 'admin']
 const READERS = [...REGISTRARS, 'accounting_officer', 'engineer', 'civil_technician', 'finance_admin']
@@ -30,6 +45,10 @@ const TITLES = ['Mr', 'Mrs', 'Ms', 'Miss', 'Dr', 'Prof', 'Rev', 'Chief']
 const CHANNELS = ['sms', 'email', 'post', 'collect']
 const ID_KINDS = ['national_id', 'passport', 'company_registration']
 
+/** A date column's own day (it arrives as local midnight), as YYYY-MM-DD. */
+const localDay = (d) => (d instanceof Date
+  ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  : d ? String(d).slice(0, 10) : null)
 const isUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ').slice(0, max) : null)
 const normalise = (v) => (typeof v === 'string' ? v.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '')
@@ -57,7 +76,8 @@ function maskId(kind, v) {
 
 const PERSON_COLS = `p.id, p.kind, p.title, p.surname, p.first_names, p.organisation_name, p.display_name, p.phone, p.alt_phone,
   p.email, p.physical_address, p.postal_address, p.ward_no, p.preferred_channel, p.source, p.verified_at, p.verified_how,
-  p.notes, p.status, p.merged_into, p.created_at, p.updated_at`
+  p.notes, p.status, p.merged_into, p.created_at, p.updated_at, p.date_of_birth, p.identity_method, p.original_sighted_at,
+  p.residency_verified_at, p.residency_method, p.residency_evidence, p.assurance_level, p.resident`
 
 /** Check a person's details; returns the problems found, in words for the officer, and the clean values. */
 function readPerson(b, { partial = false } = {}) {
@@ -82,6 +102,13 @@ function readPerson(b, { partial = false } = {}) {
   if (has('email')) {
     out.email = text(b.email, 255)
     if (out.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(out.email)) problems.push('The email address is not one that can be written to.')
+  }
+  if (has('date_of_birth')) {
+    out.date_of_birth = b.date_of_birth === null || b.date_of_birth === '' ? null : b.date_of_birth
+    if (out.date_of_birth !== null && !(typeof out.date_of_birth === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(out.date_of_birth)
+      && out.date_of_birth >= '1900-01-01' && out.date_of_birth <= new Date().toISOString().slice(0, 10))) {
+      problems.push('The date of birth is a date in the past (YYYY-MM-DD).')
+    }
   }
   if (has('ward_no')) {
     out.ward_no = b.ward_no === null || b.ward_no === '' ? null : Number(b.ward_no)
@@ -182,14 +209,26 @@ async function personsRoutes(fastify) {
     return new Map(rows.map((r) => [r.id, r]))
   }
 
+  /** The latest Registrar-General answer for each person. */
+  async function latestChecks(db, personIds) {
+    if (!personIds.length) return new Map()
+    const { rows } = await db.query(
+      `SELECT DISTINCT ON (person_id) person_id, document_type, outcome, document_status, fields, rg_reference, service, requested_at
+         FROM registry.identity_check WHERE person_id = ANY($1::uuid[]) ORDER BY person_id, requested_at DESC`, [personIds])
+    return new Map(rows.map((r) => [r.person_id, r]))
+  }
+
   async function present(db, rows, reveal = false) {
     const ids = rows.map((r) => r.id)
-    const [idents, counts] = await Promise.all([identifiersOf(db, ids), linkCounts(db, ids)])
+    const [idents, counts, checks] = await Promise.all([identifiersOf(db, ids), linkCounts(db, ids), latestChecks(db, ids)])
     return rows.map((r) => {
       const c = counts.get(r.id) || {}
+      const rg = checks.get(r.id)
       return {
         ...r,
         verified: !!r.verified_at,
+        level_label: assurance.levelLabel(r.assurance_level),
+        registrar_general: rg ? { ...rg, blocks: registrarGeneral.blocks(rg) } : null,
         identifiers: shownIds(idents.get(r.id), reveal),
         appears_as: { applications: c.applications || 0, objections: c.objections || 0, receipts: c.receipts || 0 },
       }
@@ -251,13 +290,25 @@ async function personsRoutes(fastify) {
            FROM registry.receipt_payer x JOIN finance.cash_receipt r ON r.id = x.receipt_id
           WHERE x.person_id = $1 ORDER BY r.received_on DESC LIMIT 50`, [row.id]).catch(() => ({ rows: null })),
     ])
+    const [events, checks] = await Promise.all([
+      pg.query(
+        `SELECT e.event, e.method, e.evidence, e.level_after, e.recorded_role, e.recorded_at
+           FROM registry.assurance_event e WHERE e.person_id = $1 ORDER BY e.recorded_at DESC LIMIT 50`, [row.id]),
+      pg.query(
+        `SELECT id, document_type, outcome, document_status, fields, rg_reference, service, purpose, requested_at
+           FROM registry.identity_check WHERE person_id = $1 ORDER BY requested_at DESC LIMIT 20`, [row.id]),
+    ])
     if (reveal) {
       request.auditDetails = { action: 'person_identity_revealed', person_id: row.id }
       request.log.info({ person_id: row.id, user_id: request.user.id }, 'person identity number revealed')
     }
     return reply.send({
       success: true,
-      data: { person, applications: applications.rows, objections: objections.rows, receipts: receipts.rows },
+      data: {
+        person, applications: applications.rows, objections: objections.rows, receipts: receipts.rows,
+        history: events.rows,
+        registrar_general_checks: checks.rows.map((c) => ({ ...c, blocks: registrarGeneral.blocks(c) })),
+      },
     })
   })
 
@@ -267,8 +318,14 @@ async function personsRoutes(fastify) {
     const { ids, problems: idProblems } = readIdentifiers(b.identifiers)
     const verified = b.verified === true
     const verifiedHow = text(b.verified_how, 200)
+    if (verified && !VERIFIERS.includes(request.user.role)) {
+      return reply.code(403).send({
+        success: false, error: 'not_a_verifier',
+        message: 'Only the planning clerk records that an identity document was seen. Register the person; the clerk confirms their identity.',
+      })
+    }
     if (verified && !(verifiedHow && verifiedHow.length >= 3)) problems.push('Say which identity document was seen.')
-    if (verified && !ids.length) problems.push('A person whose identity document was seen is registered with its number.')
+    if (verified && !ids.some((i) => i.kind !== 'company_registration')) problems.push('A person whose identity document was seen is registered with its number.')
     const all = [...problems, ...idProblems]
     if (all.length) return reply.code(400).send({ success: false, error: 'incomplete', message: all.join(' '), problems: all })
 
@@ -292,26 +349,38 @@ async function personsRoutes(fastify) {
       })
     }
 
+    // Ask the Registrar-General before anything is written, when there is a document of theirs to ask about.
+    const rgDoc = values.kind === 'individual' ? ids.find((i) => i.kind === 'national_id') || ids.find((i) => i.kind === 'passport') : null
+    const rgAnswer = rgDoc ? await registrarGeneral.check(pg, {
+      document_type: rgDoc.kind, document_number: rgDoc.value, surname: values.surname, first_names: values.first_names,
+      date_of_birth: values.date_of_birth, purpose: verified ? 'verification_at_counter' : 'registration',
+    }) : null
+
     let created
+    let warning = null
     try {
       created = await pg.transact(async (client) => {
         const row = (await client.query(
           `INSERT INTO registry.person (kind, title, surname, first_names, organisation_name, phone, alt_phone, email, physical_address,
-                                        postal_address, ward_no, preferred_channel, source, verified_at, verified_by, verified_how,
-                                        notes, created_by, updated_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'counter',$13,$14,$15,$16,$17,$17)
+                                        postal_address, ward_no, preferred_channel, source, notes, date_of_birth, created_by, updated_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'counter',$13,$14,$15,$15)
            RETURNING id`,
           [values.kind, values.title ?? null, values.kind === 'individual' ? values.surname : null,
             values.kind === 'individual' ? values.first_names ?? null : null,
             values.kind === 'organisation' ? values.organisation_name : null,
             values.phone ?? null, values.alt_phone ?? null, values.email ?? null, values.physical_address ?? null,
             values.postal_address ?? null, values.ward_no ?? null, values.preferred_channel,
-            verified ? new Date() : null, verified ? request.user.id : null, verified ? verifiedHow : null,
-            values.notes ?? null, request.user.id])).rows[0]
+            values.notes ?? null, values.date_of_birth ?? null, request.user.id])).rows[0]
         for (const i of ids) {
           await client.query(
             'INSERT INTO registry.person_identifier (person_id, kind, value, created_by) VALUES ($1, $2, $3, $4)',
             [row.id, i.kind, i.value, request.user.id])
+        }
+        await assurance.recordEvent(client, row.id, { event: 'registered', method: 'counter', by: request.user.id, role: request.user.role })
+        if (rgAnswer) await saveCheck(client, row.id, rgDoc, values, rgAnswer, request.user.id, verified ? 'verification_at_counter' : 'registration')
+        if (verified) {
+          const r = await assurance.verifyIdentity(client, row.id, { method: 'original_sighted', how: verifiedHow, by: request.user.id, role: request.user.role })
+          if (r.refused) warning = `Registered, but not as verified: ${r.refused}`
         }
         return (await client.query(`SELECT ${PERSON_COLS} FROM registry.person p WHERE p.id = $1`, [row.id])).rows[0]
       })
@@ -319,10 +388,22 @@ async function personsRoutes(fastify) {
       if (err.code === '23505') return reply.code(409).send({ success: false, error: 'already_registered', message: 'That identity number was registered a moment ago. Search again.' })
       throw err
     }
-    request.auditDetails = { action: 'person_registered', person_id: created.id, verified, identifiers: ids.map((i) => i.kind) }
+    request.auditDetails = { action: 'person_registered', person_id: created.id, verified, level: created.assurance_level, identifiers: ids.map((i) => i.kind) }
     const [person] = await present(pg, [created], REVEALERS.includes(request.user.role))
-    return reply.code(201).send({ success: true, data: { person } })
+    return reply.code(201).send({ success: true, data: { person, warning } })
   })
+
+  /** Keep the Registrar-General's answer on the council's side: what was sent, the outcome and the reference. */
+  async function saveCheck(db, personId, doc, values, a, userId, purpose) {
+    const sent = { surname: !!values.surname, first_names: !!values.first_names, date_of_birth: !!values.date_of_birth }
+    const { rows } = await db.query(
+      `INSERT INTO registry.identity_check (person_id, document_type, document_number, sent, outcome, document_status, fields,
+                                            rg_reference, service, requested_by, purpose)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      [personId, doc.kind, doc.value, JSON.stringify(sent), a.outcome, a.document_status || null, JSON.stringify(a.fields || {}),
+        a.reference || null, a.service, userId, purpose])
+    return rows[0].id
+  }
 
   fastify.patch('/persons/:id', { preHandler: requireRole(fastify, REGISTRARS) }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
@@ -336,6 +417,9 @@ async function personsRoutes(fastify) {
     const { ids, problems: idProblems } = readIdentifiers(b.identifiers)
     const verify = b.verified === true
     const verifiedHow = text(b.verified_how, 200)
+    if (verify && !VERIFIERS.includes(request.user.role)) {
+      return reply.code(403).send({ success: false, error: 'not_a_verifier', message: 'Only the planning clerk records that an identity document was seen.' })
+    }
     if (verify && !(verifiedHow && verifiedHow.length >= 3)) problems.push('Say which identity document was seen.')
     const merged = { ...current, ...values }
     if (merged.kind === 'individual' && !(merged.surname && merged.surname.length >= 2)) problems.push('An individual keeps a surname.')
@@ -351,10 +435,6 @@ async function personsRoutes(fastify) {
       updated = await pg.transact(async (client) => {
         const params = sets.map((k) => values[k])
         const assigns = sets.map((k, i) => `${k} = $${i + 2}`)
-        if (verify) {
-          params.push(request.user.id, verifiedHow)
-          assigns.push(`verified_at = now(), verified_by = $${params.length}, verified_how = $${params.length + 1}`)
-        }
         params.push(request.user.id)
         assigns.push(`updated_at = now(), updated_by = $${params.length + 1}`)
         await client.query(`UPDATE registry.person SET ${assigns.join(', ')} WHERE id = $1`, [current.id, ...params])
@@ -367,10 +447,18 @@ async function personsRoutes(fastify) {
           }
           if (!has) await client.query('INSERT INTO registry.person_identifier (person_id, kind, value, created_by) VALUES ($1,$2,$3,$4)', [current.id, i.kind, i.value, request.user.id])
         }
-        if (verify && !(await client.query('SELECT 1 FROM registry.person_identifier WHERE person_id = $1', [current.id])).rows.length) {
+        if (verify && !(await client.query(`SELECT 1 FROM registry.person_identifier WHERE person_id = $1 AND kind <> 'company_registration'`, [current.id])).rows.length) {
           const e = new Error('verify_without_id')
           e.userMessage = 'Record the number of the identity document that was seen.'
           throw e
+        }
+        if (verify) {
+          const r = await assurance.verifyIdentity(client, current.id, { method: 'original_sighted', how: verifiedHow, by: request.user.id, role: request.user.role })
+          if (r.refused) {
+            const e = new Error('registrar_general_refused')
+            e.userMessage = r.refused
+            throw e
+          }
         }
         return (await client.query(`SELECT ${PERSON_COLS} FROM registry.person p WHERE p.id = $1`, [current.id])).rows[0]
       })
@@ -382,6 +470,85 @@ async function personsRoutes(fastify) {
     request.auditDetails = { action: 'person_updated', person_id: current.id, fields: sets, verified: verify, identifiers_added: ids.map((i) => i.kind) }
     const [person] = await present(pg, [updated], REVEALERS.includes(request.user.role))
     return reply.send({ success: true, data: { person } })
+  })
+
+  fastify.get('/persons/levels', { preHandler: requireRole(fastify, READERS) }, async (request, reply) => reply.send({
+    success: true,
+    data: {
+      levels: assurance.LEVELS,
+      residency_evidence: assurance.RESIDENCY_EVIDENCE,
+      verifiers: VERIFIERS,
+      can_verify: VERIFIERS.includes(request.user.role),
+    },
+  }))
+
+  fastify.get('/registrar-general/status', { preHandler: requireRole(fastify, READERS) }, async (_request, reply) =>
+    reply.send({ success: true, data: await registrarGeneral.status(pg) }))
+
+  /** Raise a person's level: the original identity document seen (level 3), or residence proved (level 2 with identity). */
+  fastify.post('/persons/:id/assurance', { preHandler: requireRole(fastify, VERIFIERS) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const b = request.body || {}
+    const how = text(b.how, 200)
+    if (!['original_sighted', 'residency'].includes(b.step)) {
+      return reply.code(400).send({ success: false, error: 'bad_step', message: 'Say what was checked: the original identity document, or residence.' })
+    }
+    if (b.step === 'residency' && !assurance.RESIDENCY_EVIDENCE[b.evidence]) {
+      return reply.code(400).send({ success: false, error: 'bad_evidence', message: `Say which proof of residence was seen: ${Object.values(assurance.RESIDENCY_EVIDENCE).join('; ')}.` })
+    }
+    if (!(how && how.length >= 3)) return reply.code(400).send({ success: false, error: 'how_missing', message: 'Say what was seen, for the record (for example: "National ID card, original").' })
+    const current = (await pg.query(`SELECT ${PERSON_COLS} FROM registry.person p WHERE p.id = $1`, [request.params.id])).rows[0]
+    if (!current) return reply.code(404).send({ success: false, error: 'not_found', message: 'No person with that reference in this council\'s register.' })
+    if (current.status !== 'active') return reply.code(409).send({ success: false, error: 'not_active', message: 'This record is not active.' })
+    if (current.kind !== 'individual') return reply.code(409).send({ success: false, error: 'organisation', message: 'An organisation is not verified this way: record its company registration.' })
+    let updated
+    try {
+      updated = await pg.transact(async (client) => {
+        if (b.step === 'original_sighted') {
+          const hasId = (await client.query(`SELECT 1 FROM registry.person_identifier WHERE person_id = $1 AND kind IN ('national_id', 'passport')`, [current.id])).rows.length
+          if (!hasId) { const e = new Error('no_document'); e.userMessage = 'Record the number of the national ID or passport that was seen first.'; throw e }
+          const r = await assurance.verifyIdentity(client, current.id, { method: 'original_sighted', how, by: request.user.id, role: request.user.role })
+          if (r.refused) { const e = new Error('registrar_general_refused'); e.userMessage = r.refused; throw e }
+        } else {
+          const done = await assurance.verifyResidency(client, current.id, {
+            method: 'counter', evidence: `${assurance.RESIDENCY_EVIDENCE[b.evidence]}: ${how}`, by: request.user.id, role: request.user.role,
+          })
+          if (!done) { const e = new Error('already'); e.userMessage = 'Residence is already verified for this person.'; throw e }
+        }
+        return (await client.query(`SELECT ${PERSON_COLS} FROM registry.person p WHERE p.id = $1`, [current.id])).rows[0]
+      })
+    } catch (err) {
+      if (err.userMessage) return reply.code(409).send({ success: false, error: err.message, message: err.userMessage })
+      throw err
+    }
+    request.auditDetails = { action: 'person_assurance_raised', person_id: current.id, step: b.step, level_before: current.assurance_level, level_after: updated.assurance_level }
+    const [person] = await present(pg, [updated], REVEALERS.includes(request.user.role))
+    return reply.send({ success: true, data: { person } })
+  })
+
+  /** Check the person's national ID (or passport) with the Registrar-General, and keep the answer. */
+  fastify.post('/persons/:id/registrar-general-check', { preHandler: requireRole(fastify, REGISTRARS) }, async (request, reply) => {
+    if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
+    const current = (await pg.query(`SELECT ${PERSON_COLS} FROM registry.person p WHERE p.id = $1`, [request.params.id])).rows[0]
+    if (!current) return reply.code(404).send({ success: false, error: 'not_found', message: 'No person with that reference in this council\'s register.' })
+    if (current.kind !== 'individual') return reply.code(409).send({ success: false, error: 'organisation', message: 'The Registrar-General holds people, not organisations.' })
+    const wanted = ['national_id', 'passport'].includes(request.body?.document_type) ? request.body.document_type : null
+    const docs = (await pg.query(`SELECT kind, value FROM registry.person_identifier WHERE person_id = $1 AND kind IN ('national_id', 'passport')`, [current.id])).rows
+    const doc = (wanted ? docs.find((d) => d.kind === wanted) : docs.find((d) => d.kind === 'national_id') || docs[0])
+    if (!doc) return reply.code(409).send({ success: false, error: 'no_document', message: 'Record their national ID or passport number first.' })
+    const st = await registrarGeneral.status(pg)
+    if (!st.available) return reply.code(503).send({ success: false, error: 'unavailable', message: st.label })
+    const a = await registrarGeneral.check(pg, {
+      document_type: doc.kind, document_number: doc.value, surname: current.surname, first_names: current.first_names,
+      date_of_birth: localDay(current.date_of_birth), purpose: 'verification_at_counter',
+    })
+    const checkId = await saveCheck(pg, current.id, { kind: doc.kind, value: doc.value },
+      { surname: current.surname, first_names: current.first_names, date_of_birth: current.date_of_birth }, a, request.user.id, 'verification_at_counter')
+    request.auditDetails = { action: 'registrar_general_check', person_id: current.id, check_id: checkId, outcome: a.outcome }
+    return reply.send({
+      success: true,
+      data: { check: { id: checkId, document_type: doc.kind, ...a, blocks: registrarGeneral.blocks(a) }, service: st },
+    })
   })
 
   /** Link a record's person. The text on the record stays as written; the link says who it is. */

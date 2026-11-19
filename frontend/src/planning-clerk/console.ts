@@ -38,7 +38,7 @@
 
 export const SECTION_KEYS = [
   // Front counter
-  'dashboard', 'search', 'receipt', 'verification', 'public_inspection', 'matrix',
+  'dashboard', 'search', 'receipt', 'verification', 'persons', 'public_inspection', 'matrix',
   // Statutory clocks
   'deadlines', 'acknowledgements', 'notices', 'refusals',
   // Registers
@@ -64,7 +64,7 @@ export const GROUP_LABELS: Record<SectionGroup, string> = {
 /** Which group each section belongs to. Drives the rail's headings. */
 export const SECTION_GROUP: Record<SectionKey, SectionGroup> = {
   dashboard: 'counter', search: 'counter', receipt: 'counter',
-  verification: 'counter', public_inspection: 'counter', matrix: 'counter',
+  verification: 'counter', persons: 'counter', public_inspection: 'counter', matrix: 'counter',
 
   deadlines: 'clocks', acknowledgements: 'clocks', notices: 'clocks', refusals: 'clocks',
 

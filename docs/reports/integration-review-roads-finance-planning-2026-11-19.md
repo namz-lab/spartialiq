@@ -180,3 +180,17 @@ The panel appears in three places:
 On the live system: applied on 19 November 2026 with `backend/scripts/apply-person-register-256-to-live.js --apply`. It backfilled one person, linked one application, and left 29 records to link. The code that reads it goes live with the next deploy.
 
 Not in Phase 1: the review screen for unlinked records (only the API exists), merging duplicates, and citizens' online accounts.
+
+**One register with four levels, and the Registrar-General prototype (migrations 257 and 258).**
+
+What is now in place:
+- **One register.** Online sign-up joins the register. An officer's approval of an uploaded ID or proof of residence raises the person's level, and so does a deed check. The account's residency status now mirrors the register.
+- **Four levels:** 0 recorded, 1 identity verified, 2 resident or ratepayer, 3 original sighted. Every desk can register a person, but only the planning clerk raises a level, with the cash supervisor and the administrator as back-up.
+- **A new clerk desk, *Register of persons*,** with the level ladder, the Registrar-General's answer, *Confirm at the counter*, the history, and the work list of records not yet linked.
+- **A prototype Registrar-General service** at `/api/rg-prototype/v1` with a fictional register, and its console at `/mock/registrar-general`. The demonstration is described in [registrar-general-prototype-demo.md](../presentations/registrar-general-prototype-demo.md).
+
+On the live system:
+- 257 was applied on 19 November 2026 (`scripts/apply-person-levels-257-to-live.js --apply`). All 13 online citizen accounts are now in the register, at level 0.
+- 258 is never applied to live, and the check stays off there.
+
+Still to do: merging duplicate persons, and the gates that require a level for acts of legal weight (issuing a permit, allocating a stand). The levels each act requires are for the council to adopt.

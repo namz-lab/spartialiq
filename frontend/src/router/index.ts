@@ -617,6 +617,18 @@ const router = createRouter({
       },
     },
     {
+      // PROTOTYPE of a Registrar-General identity verification service (backend migration 258): its own console, for
+      // demonstrating the design. A fictional register; never connected on the live system.
+      path: '/mock/registrar-general',
+      name: 'registrar-general-prototype',
+      component: () => import('@/views/RegistrarGeneralPrototypeView.vue'),
+      meta: {
+        title: 'Registrar-General identity verification (Prototype)',
+        requiresAuth: true,
+        roles: ['admin', 'accounting_officer', 'planning_clerk'],
+      },
+    },
+    {
       path: '/plan-review',
       name: 'plan-review',
       component: PlanReviewView,
