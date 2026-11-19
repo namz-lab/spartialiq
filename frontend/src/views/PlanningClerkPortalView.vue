@@ -60,6 +60,7 @@ import DashboardSection        from './planning-clerk/sections/DashboardSection.
 import FileSearchSection       from './planning-clerk/sections/FileSearchSection.vue'
 import ApplicationReceiptSection from './planning-clerk/sections/ApplicationReceiptSection.vue'
 import IdentityReviewSection   from './planning-clerk/sections/IdentityReviewSection.vue'
+import PersonsRegisterSection  from './planning-clerk/sections/PersonsRegisterSection.vue'
 import PublicInspectionSection from './planning-clerk/sections/PublicInspectionSection.vue'
 import DeadlinesSection        from './planning-clerk/sections/DeadlinesSection.vue'
 import AcknowledgementsSection from './planning-clerk/sections/AcknowledgementsSection.vue'
@@ -76,7 +77,7 @@ import PreferencesSection      from './planning-clerk/sections/PreferencesSectio
 import DevelopmentMatrixManager from '@/components/admin/land-use/DevelopmentMatrixManager.vue'
 
 import {
-  FileText, LayoutDashboard, Search, FileInput, ShieldCheck, Eye,
+  FileText, LayoutDashboard, Search, FileInput, ShieldCheck, Eye, Contact,
   AlarmClock, Mail, Megaphone, FileX, BookOpen, Inbox, Receipt, FolderInput,
   Send, ShieldAlert, Scale, Settings2, Menu, X, CornerDownLeft, RefreshCw,
   AlertTriangle, FolderOpen, Table2,
@@ -110,6 +111,8 @@ const SECTIONS: readonly Omit<Section, 'badge'>[] = [
 
   { key: 'verification',      label: 'Document verification', short: 'Verify',  icon: ShieldCheck,     group: 'counter',
     desc: 'AI-checked documents awaiting an officer’s confirmation' },
+  { key: 'persons',           label: 'Register of persons',  short: 'Persons',  icon: Contact,         group: 'counter',
+    desc: 'Find or register a person, confirm who they are and where they live' },
   { key: 'public_inspection', label: 'Public inspection',    short: 'Public',   icon: Eye,             group: 'counter',
     desc: 'Register inspections, certified copies and planning searches' },
 
@@ -185,7 +188,7 @@ const activeMeta = computed(() =>
 
 const SECTION_COMPONENTS: Record<SectionKey, Component> = {
   dashboard: DashboardSection, search: FileSearchSection,
-  receipt: ApplicationReceiptSection, verification: IdentityReviewSection,
+  receipt: ApplicationReceiptSection, verification: IdentityReviewSection, persons: PersonsRegisterSection,
   public_inspection: PublicInspectionSection, matrix: DevelopmentMatrixManager,
   deadlines: DeadlinesSection, acknowledgements: AcknowledgementsSection,
   notices: PublicNoticesSection, refusals: RefusalsSection,

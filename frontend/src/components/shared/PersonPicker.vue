@@ -4,11 +4,12 @@
 // the person. The server refuses a second record for the same ID and warns on the same phone or name, and this panel
 // shows who is already there so the officer can choose them instead.
 import { computed, reactive, ref, watch } from 'vue'
-import { BadgeCheck, Loader2, Search, UserPlus, X } from 'lucide-vue-next'
+import { BadgeCheck, Home, Loader2, Search, ShieldAlert, UserPlus, X } from 'lucide-vue-next'
 import {
-  personsApi, CHANNEL_LABEL, ID_LABEL, MATCH_LABEL, TITLES, looksLikeNationalId,
+  personsApi, CHANNEL_LABEL, ID_LABEL, MATCH_LABEL, TITLES, VERIFIERS, RG_OUTCOME_LABEL, RG_STATUS_LABEL, looksLikeNationalId,
   type Channel, type IdentifierKind, type Person, type PersonKind, type RegisterConflict,
 } from '@/services/persons'
+import { useAuthStore } from '@/stores/auth'
 
 const props = withDefaults(defineProps<{
   modelValue: Person | null
@@ -18,6 +19,12 @@ const props = withDefaults(defineProps<{
   canRegister?: boolean
 }>(), { role: 'person', canRegister: true })
 const emit = defineEmits<{ 'update:modelValue': [Person | null] }>()
+
+// Only the registrar's desks record that an identity document was seen (migration 257); every desk may register.
+const auth = useAuthStore()
+const canVerify = computed(() => VERIFIERS.includes(auth.user?.role ?? ''))
+/** What the server said about a registration it made but could not verify (a Registrar-General refusal). */
+const notice = ref('')
 
 const uid = `pp-${Math.random().toString(36).slice(2, 8)}`
 const q = ref('')
@@ -46,6 +53,7 @@ async function runSearch() {
 watch(q, () => { clearTimeout(timer); timer = setTimeout(runSearch, 300) })
 
 function choose(p: Person) {
+  notice.value = ''
   emit('update:modelValue', p)
   registering.value = false
   conflict.value = null
@@ -63,15 +71,16 @@ const saving = ref(false)
 const conflict = ref<RegisterConflict | null>(null)
 const form = reactive({
   kind: 'individual' as PersonKind, title: '', first_names: '', surname: '', organisation_name: '',
-  id_kind: 'national_id' as IdentifierKind, id_value: '', phone: '', email: '', physical_address: '',
-  preferred_channel: 'post' as Channel, verified: false, verified_how: 'National ID card',
+  id_kind: 'national_id' as IdentifierKind, id_value: '', phone: '', email: '', physical_address: '', date_of_birth: '',
+  preferred_channel: 'post' as Channel, verified: false, verified_how: 'National ID card, original',
 })
 
 function startRegister() {
   const term = q.value.trim()
   Object.assign(form, {
     kind: 'individual', title: '', first_names: '', surname: '', organisation_name: '', id_kind: 'national_id',
-    id_value: '', phone: '', email: '', physical_address: '', preferred_channel: 'post', verified: false, verified_how: 'National ID card',
+    id_value: '', phone: '', email: '', physical_address: '', date_of_birth: '', preferred_channel: 'post', verified: false,
+    verified_how: 'National ID card, original',
   })
   // Carry over what was searched for, so it is not typed twice.
   if (looksLikeNationalId(term)) form.id_value = term
@@ -110,14 +119,17 @@ async function register(confirmNew = false) {
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       physical_address: form.physical_address.trim() || null,
+      date_of_birth: form.kind === 'individual' ? form.date_of_birth || null : null,
       preferred_channel: form.preferred_channel,
       identifiers: form.id_value.trim() ? [{ kind: form.id_kind, value: form.id_value.trim() }] : [],
-      verified: form.verified,
-      verified_how: form.verified ? form.verified_how.trim() : null,
+      verified: canVerify.value && form.verified,
+      verified_how: canVerify.value && form.verified ? form.verified_how.trim() : null,
       confirm_new: confirmNew,
     })
-    if ('person' in result) choose(result.person)
-    else conflict.value = result
+    if ('person' in result) {
+      choose(result.person)
+      notice.value = result.warning || ''
+    } else conflict.value = result
   } catch (err: unknown) {
     const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message
     error.value = msg || 'The person could not be registered.'
@@ -126,6 +138,13 @@ async function register(confirmNew = false) {
   }
 }
 
+const levelTone = (p: Person) => (p.assurance_level >= 1 ? 'ok' : 'warn')
+const rgLine = (p: Person) => {
+  const c = p.registrar_general
+  if (!c || c.outcome === 'unavailable') return ''
+  const status = c.document_status && c.document_status !== 'valid' ? `; document ${RG_STATUS_LABEL[c.document_status] ?? c.document_status}` : ''
+  return `Registrar-General: ${RG_OUTCOME_LABEL[c.outcome]}${status}`
+}
 const idShown = (p: Person) => p.identifiers.find((i) => i.kind === 'national_id') || p.identifiers[0]
 const appears = (p: Person) => {
   const a = p.appears_as
@@ -144,11 +163,16 @@ const appears = (p: Person) => {
     <div v-if="modelValue" class="pp-chosen" data-testid="pp-chosen">
       <div class="pp-chosen-main">
         <strong>{{ modelValue.display_name }}</strong>
-        <span class="pp-badge" :class="modelValue.verified ? 'ok' : 'warn'">
-          <BadgeCheck v-if="modelValue.verified" :size="12" aria-hidden="true" />
-          {{ modelValue.verified ? 'ID seen' : 'ID not yet seen' }}
+        <span class="pp-badge" :class="levelTone(modelValue)" data-testid="pp-level">
+          <BadgeCheck v-if="modelValue.assurance_level >= 1" :size="12" aria-hidden="true" />
+          Level {{ modelValue.assurance_level }} · {{ modelValue.level_label }}
         </span>
+        <span v-if="modelValue.resident" class="pp-badge ok"><Home :size="12" aria-hidden="true" /> Resident</span>
       </div>
+      <p v-if="rgLine(modelValue)" class="pp-meta" :class="{ 'pp-alert': modelValue.registrar_general?.blocks }" data-testid="pp-rg">
+        <ShieldAlert v-if="modelValue.registrar_general?.blocks" :size="12" aria-hidden="true" /> {{ rgLine(modelValue) }}
+      </p>
+      <p v-if="notice" class="pp-error" role="alert">{{ notice }}</p>
       <p class="pp-meta">
         <span v-if="idShown(modelValue)">{{ ID_LABEL[idShown(modelValue)!.kind] }} {{ idShown(modelValue)!.value }}</span>
         <span v-if="modelValue.phone">{{ modelValue.phone }}</span>
@@ -181,7 +205,7 @@ const appears = (p: Person) => {
               <span v-if="p.match">{{ MATCH_LABEL[p.match] }}</span>
               <span v-if="idShown(p)">{{ idShown(p)!.value }}</span>
               <span v-if="p.phone">{{ p.phone }}</span>
-              <span>{{ p.verified ? 'ID seen' : 'ID not yet seen' }}</span>
+              <span>Level {{ p.assurance_level }} · {{ p.level_label }}</span>
             </span>
           </button>
         </li>
@@ -212,9 +236,13 @@ const appears = (p: Person) => {
           <span class="ins-label">First names</span>
           <input v-model="form.first_names" class="ins-input" autocomplete="off" />
         </label>
-        <label class="ins-field full">
+        <label class="ins-field">
           <span class="ins-label">Surname</span>
           <input v-model="form.surname" class="ins-input" autocomplete="off" required data-testid="pp-surname" />
+        </label>
+        <label class="ins-field">
+          <span class="ins-label">Date of birth</span>
+          <input v-model="form.date_of_birth" class="ins-input" type="date" :max="new Date().toISOString().slice(0, 10)" data-testid="pp-dob" />
         </label>
       </template>
       <label v-else class="ins-field full">
@@ -252,12 +280,15 @@ const appears = (p: Person) => {
           <option v-for="(label, c) in CHANNEL_LABEL" :key="c" :value="c">{{ label }}</option>
         </select>
       </label>
-      <div class="ins-field">
+      <div v-if="canVerify && form.kind === 'individual'" class="ins-field">
         <label class="pp-check">
-          <input v-model="form.verified" type="checkbox" data-testid="pp-verified" /> I have seen the identity document
+          <input v-model="form.verified" type="checkbox" data-testid="pp-verified" /> I have the original identity document in my hands
         </label>
         <input v-if="form.verified" v-model="form.verified_how" class="ins-input" aria-label="Which document was seen" />
       </div>
+      <p v-else class="ins-hint pp-hint" data-testid="pp-verify-note">
+        The person is registered as recorded (level 0). The planning clerk confirms their identity when they bring the original.
+      </p>
 
       <div v-if="conflict" class="pp-conflict full" role="alert" data-testid="pp-conflict">
         <p>{{ conflict.message }}</p>
@@ -330,6 +361,8 @@ const appears = (p: Person) => {
 .pp-conflict { padding: 10px; border: 1px solid var(--ent-tone-warning-line, var(--ent-border)); border-radius: var(--ent-radius-sm, 6px); background: var(--ent-tone-warning-bg, transparent); display: grid; gap: 8px; }
 .pp-conflict p { margin: 0; }
 .pp-error { margin: 0; color: var(--ent-danger); font-size: 0.85rem; }
+.pp-alert { color: var(--ent-danger); align-items: center; }
+.pp-hint { margin: 20px 0 0; font-size: 0.82rem; }
 .pp-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 560px) { .pp-form { grid-template-columns: 1fr; } }
 </style>

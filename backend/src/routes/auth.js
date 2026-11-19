@@ -64,6 +64,7 @@ async function captchaOk(request, body, email) {
   return verifyCaptchaChallenge(body?.captcha_token, request.ip)
 }
 const loginSecurity = require('../services/loginSecurity')
+const personAssurance = require('../services/personAssurance')
 const { getSetting } = require('../services/adminSettings')
 
 // Customer-facing registration is pinned to one of these two roles only.
@@ -209,6 +210,13 @@ async function authRoutes(fastify) {
       const user = rows[0]
       const { accessToken, refreshToken } = await createSession(fastify, user, request)
       setAuthCookies(reply, { accessToken, refreshToken })
+
+      // The council's register of persons (migration 257): every account is a person, at level 0 until an officer checks
+      // their documents. Best effort: a sign-up never fails because the register could not be written.
+      if (CUSTOMER_ROLES.has(user.role)) {
+        await personAssurance.fromOnlineSignUp(systemOf(fastify.pg), fastify.pg, user)
+          .catch((err) => request.log.error({ err, user_id: user.id }, 'register of persons: online sign-up not recorded'))
+      }
 
       return reply.send({
         success: true,

@@ -22,6 +22,7 @@
  */
 
 const { systemOf } = require('../lib/dbContext')
+const personAssurance = require('../services/personAssurance')
 const { requireAuth, requireRole } = require('../middleware/jwtAuth')
 
 /** Document kinds that count as residency evidence once verified. */
@@ -101,8 +102,9 @@ async function residencyRoutes(fastify) {
   fastify.get('/residency/status', { preHandler: requireAuth(fastify) }, async (request, reply) => {
     try {
       const { rows: urows } = await systemOf(fastify.pg).query(
-        `SELECT residency_status, residency_method, residency_verified_at
-         FROM users WHERE id = $1`,
+        `SELECT u.residency_status, u.residency_method, u.residency_verified_at,
+                p.assurance_level, p.resident, p.identity_method
+         FROM users u LEFT JOIN registry.person p ON p.id = u.person_id WHERE u.id = $1`,
         [request.user.id],
       )
       const u = urows[0]
@@ -122,6 +124,13 @@ async function residencyRoutes(fastify) {
           status: u.residency_status,
           method: u.residency_method,
           verifiedAt: u.residency_verified_at,
+          // The council's register of persons (migration 257) is the record; the account reads it.
+          register: u.assurance_level == null ? null : {
+            level: u.assurance_level,
+            label: personAssurance.levelLabel(u.assurance_level),
+            resident: u.resident,
+            identityVerified: u.identity_method != null,
+          },
           evidence: docs.map((d) => ({
             id: d.id,
             docKind: d.doc_kind,
@@ -179,6 +188,15 @@ async function residencyRoutes(fastify) {
            WHERE id = $1`,
           [request.user.id],
         )
+        // The register of persons (migration 257): residence proved by the deeds registry. Level 2 still needs the
+        // person's identity verified; the deed match rests on the national ID the citizen gave.
+        const personId = (await systemOf(fastify.pg).query('SELECT person_id FROM users WHERE id = $1', [request.user.id])).rows[0]?.person_id
+        if (personId) {
+          await personAssurance.verifyResidency(systemOf(fastify.pg), personId, {
+            method: 'deeds_registry', evidence: `Title deed ${deed.deed_number}, holder's national ID matches`,
+            by: null, role: 'deeds_registry', documentId: null,
+          }).catch((err) => request.log.error({ err }, 'register of persons: deed check not recorded'))
+        }
       }
 
       return reply.send({
