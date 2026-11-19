@@ -143,6 +143,7 @@ const DUPLICATES = {
  * underneath, and anything can be refused by the ledger, so both translators are consulted.
  */
 function cashRefusal(err) {
+  if (err && err.refusal) return err.refusal
   const message = `${err && err.message ? err.message : ''}`
   const constraint = err && err.constraint ? err.constraint : ''
 
@@ -317,6 +318,20 @@ async function financeCashRoutes(fastify) {
     if (mapped) return fail(reply, mapped.status, mapped.error, mapped.message)
     fastify.log.error({ err }, fallback)
     return fail(reply, 500, 'cash_error', fallback)
+  }
+
+  /**
+   * Who paid, in the council's register of persons (migration 256). Linked beside the receipt, which is a fixed record,
+   * in the same transaction: a receipt naming a person who is not in this council's register is not issued.
+   */
+  async function linkPayer(client, receiptId, personId, userId) {
+    const { rows } = await client.query("SELECT status FROM registry.person WHERE id = $1", [personId])
+    if (!rows.length || rows[0].status === 'merged') {
+      const e = new Error('The payer chosen is not in the register of persons. Search for them again.')
+      e.refusal = { status: 400, error: 'payer_not_registered', message: e.message }
+      throw e
+    }
+    await client.query('INSERT INTO registry.receipt_payer (receipt_id, person_id, created_by) VALUES ($1, $2, $3)', [receiptId, personId, userId])
   }
 
   const idParams = { type: 'object', required: ['id'], properties: { id: uuid } }
@@ -1283,6 +1298,7 @@ async function financeCashRoutes(fastify) {
           ...receiptCommon,
           payer_name: { type: 'string', minLength: 2, maxLength: 160 },
           party_id: uuid,
+          payer_person_id: uuid,
           lines: {
             type: 'array', minItems: 1, maxItems: 40,
             items: {
@@ -1308,6 +1324,7 @@ async function financeCashRoutes(fastify) {
           'SELECT finance.record_cash_receipt($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10) AS id',
           [b.session_id, request.user.id, b.payer_name, b.currency, b.method, JSON.stringify(checked.lines),
             b.deposit_account_id || null, b.party_id || null, b.method_reference || null, b.narration || null])
+        if (b.payer_person_id) await linkPayer(client, rows[0].id, b.payer_person_id, request.user.id)
         return rows[0].id
       })
       const { rows } = await pg.query(`${RECEIPT_SELECT} WHERE r.receipt_id = $1`, [id])
@@ -1396,6 +1413,7 @@ async function financeCashRoutes(fastify) {
           permit_application_id: uuid,
           payer_name: { type: 'string', minLength: 2, maxLength: 160 },
           party_id: uuid,
+          payer_person_id: uuid,
           lines: {
             type: 'array', minItems: 1, maxItems: 20,
             items: {
@@ -1422,6 +1440,7 @@ async function financeCashRoutes(fastify) {
           [b.session_id, request.user.id, b.permit_application_id, b.payer_name, b.currency, b.method,
             JSON.stringify(checked.lines), b.deposit_account_id || null, b.party_id || null,
             b.method_reference || null, b.narration || null])
+        if (b.payer_person_id) await linkPayer(client, rows[0].id, b.payer_person_id, request.user.id)
         return rows[0].id
       })
       const [{ rows }, { rows: app }] = await Promise.all([

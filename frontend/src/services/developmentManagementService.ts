@@ -260,6 +260,8 @@ export interface Objection {
   consideration_notes?: string | null
   considered_at?: string | null
   resolution_document_url?: string | null
+  /** The objector in the council's register of persons (migration 256). */
+  objector_person_id?: string | null
 }
 
 // Section 26(3) public-notification record (migration 089). One per permit.

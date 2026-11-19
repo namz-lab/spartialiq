@@ -422,6 +422,8 @@ export interface SundryReceiptBody {
   method_reference?: string
   deposit_account_id?: string
   narration?: string
+  /** Who paid, in the council's register of persons (migration 256). payer_name stays as printed. */
+  payer_person_id?: string
   lines: ReceiptLineBody[]
 }
 

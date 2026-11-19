@@ -45,9 +45,11 @@ import { createEntry, errorMessage } from '@/services/planningClerk'
 import { determinationDeadline } from '@/statutory/periods'
 import UiButton from '@/components/ui/UiButton.vue'
 import PermitDocumentsPanel from '@/components/workflow/PermitDocumentsPanel.vue'
+import PersonPicker from '@/components/shared/PersonPicker.vue'
+import { personsApi, type Person } from '@/services/persons'
 import {
   FileInput, Stamp, CheckCircle2, AlertTriangle, FolderOpen,
-  Search, Receipt as ReceiptIcon, Mail, Inbox, XCircle, RefreshCw,
+  Search, Receipt as ReceiptIcon, Mail, Inbox, XCircle, RefreshCw, UserRound,
 } from 'lucide-vue-next'
 
 const nav = useClerkNav()
@@ -85,6 +87,37 @@ const recipient = ref('')
 const lodgedBy = ref('')
 
 const permit = computed(() => overview.file.value?.permit ?? null)
+
+// ── The applicant in the council's register of persons (migration 256) ──
+// The name on the application stays as written; the link says who it is, so the same person is known across
+// applications, objections and receipts. Read from the register when the file opens; linked as soon as one is chosen.
+const applicant = ref<Person | null>(null)
+const applicantError = ref('')
+const linkingApplicant = ref(false)
+watch(() => [permit.value?.id, permit.value?.applicant_person_id] as const, async ([, personId]) => {
+  applicantError.value = ''
+  if (!personId) { applicant.value = null; return }
+  if (applicant.value?.id === personId) return
+  try { applicant.value = (await personsApi.get(personId)).person } catch { applicant.value = null }
+}, { immediate: true })
+async function chooseApplicant(p: Person | null) {
+  if (!permit.value || linkingApplicant.value) return
+  const before = applicant.value
+  applicant.value = p
+  linkingApplicant.value = true
+  applicantError.value = ''
+  try {
+    await personsApi.linkApplicant(permit.value.id, p ? p.id : null)
+    permit.value.applicant_person_id = p ? p.id : null
+    // Re-read, so "where they appear" counts this application.
+    if (p) applicant.value = (await personsApi.get(p.id)).person
+  } catch (err) {
+    applicant.value = before
+    applicantError.value = errorMessage(err, 'The applicant could not be linked.')
+  } finally {
+    linkingApplicant.value = false
+  }
+}
 
 // ── The fee: what the cash office (or an online payment) took ───────────
 // Read from the open file (migration 246). A cancelled receipt does not pay.
@@ -325,6 +358,22 @@ const anyFailed = computed(() => steps.value.some((s) => s.state === 'failed'))
             <div><dt>Development</dt><dd>{{ asLabel(permit.development_type) }}</dd></div>
             <div><dt>Status</dt><dd>{{ asLabel(permit.status) }}</dd></div>
           </dl>
+        </div>
+      </section>
+
+      <!-- Who the applicant is, in the council's register of persons (migration 256) -->
+      <section class="ins-card" data-testid="applicant-person">
+        <header class="ins-card-head">
+          <h3><UserRound :size="15" aria-hidden="true" /> Applicant in the register</h3>
+          <span v-if="!applicant" class="ins-count">Not yet linked</span>
+        </header>
+        <div class="ins-card-body">
+          <p v-if="!applicant" class="ins-hint">
+            The application names <strong>{{ permit.applicant_name }}</strong>. Find them in the council's register, or register them
+            with the identity document they bring, so their letters, payments and other applications are on one record.
+          </p>
+          <PersonPicker :model-value="applicant" role="applicant" @update:model-value="chooseApplicant" />
+          <p v-if="applicantError" class="ins-hint" role="alert">{{ applicantError }}</p>
         </div>
       </section>
 

@@ -820,7 +820,7 @@ async function planningClerkRoutes(fastify) {
     try {
       const permit = await fastify.pg.query(
         `SELECT ${PERMIT_SUMMARY}, p.street_address, p.stand_area_sqm, p.description,
-                p.applicant_email, p.applicant_phone, p.decision_at, p.decision_conditions, p.statutory_due_date,
+                p.applicant_email, p.applicant_phone, p.applicant_person_id, p.decision_at, p.decision_conditions, p.statutory_due_date,
                 p.clock_state, p.updated_at
          FROM spatial_planning.permit_application p WHERE p.id = $1`, [permitId])
       if (!permit.rowCount) {
