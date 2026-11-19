@@ -444,6 +444,8 @@ export interface ClerkFile {
     description: string | null
     applicant_email: string | null
     applicant_phone: string | null
+    /** The applicant in the council's register of persons (migration 256); null until the counter links them. */
+    applicant_person_id?: string | null
     decision_at: string | null
     decision_conditions: string | null
     statutory_due_date: string | null

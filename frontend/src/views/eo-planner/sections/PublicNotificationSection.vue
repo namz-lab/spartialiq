@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PersonPicker from '@/components/shared/PersonPicker.vue'
+import type { Person } from '@/services/persons'
 // Public notification — RTCP Act [Ch. 29:12] s.26(3).
 //
 // Three things must be done and evidenced before an application that requires
@@ -219,6 +221,15 @@ async function resolve(o: Objection, sustained: boolean) {
 
 // Objections arrive on paper at the counter as often as through the portal.
 const lodgeOpen = ref(false)
+// The objector in the council's register of persons (migration 256): found, or registered at the counter. The name and
+// address on the objection are filled from the register and stay as written.
+const objectorPerson = ref<Person | null>(null)
+watch(objectorPerson, (p) => {
+  if (!p) return
+  lodgeForm.objector_name = p.display_name
+  if (p.physical_address) lodgeForm.objector_address = p.physical_address
+  if (p.phone || p.email) lodgeForm.objector_contact = [p.phone, p.email].filter(Boolean).join(' · ')
+})
 const lodgeForm = reactive({
   objector_name: '', objector_contact: '', objector_address: '',
   grounds: '', grounds_detail: '', received_at: isoDay(), document_url: '',
@@ -241,9 +252,11 @@ async function lodgeObjection() {
       grounds_detail: lodgeForm.grounds_detail.trim() || null,
       received_at: lodgeForm.received_at,
       document_url: lodgeForm.document_url.trim() || null,
+      ...(objectorPerson.value ? { objector_person_id: objectorPerson.value.id } : {}),
     })
     objections.value = [created, ...objections.value]
     lodgeOpen.value = false
+    objectorPerson.value = null
     Object.assign(lodgeForm, {
       objector_name: '', objector_contact: '', objector_address: '',
       grounds: '', grounds_detail: '', received_at: isoDay(), document_url: '',
@@ -544,9 +557,12 @@ async function requestResponse() {
     <UiSheet :open="lodgeOpen" title="Record an objection"
              subtitle="Received at the counter or by post" width="34rem"
              @close="lodgeOpen = false" @update:open="lodgeOpen = $event">
+      <div class="pn-person" data-testid="objector-person">
+        <PersonPicker v-model="objectorPerson" role="objector" />
+      </div>
       <form class="ins-form" @submit.prevent="lodgeObjection">
         <label class="ins-field">
-          <span class="ins-label">Objector</span>
+          <span class="ins-label">Objector (as written)</span>
           <input v-model="lodgeForm.objector_name" class="ins-input" />
         </label>
         <label class="ins-field">
@@ -640,6 +656,7 @@ async function requestResponse() {
 .pn-request .ins-field { width:100%; }
 .pn-sheet-actions { display:flex; justify-content:flex-end; gap:var(--ent-s2); }
 
+.pn-person { margin-bottom: var(--ent-s3, 12px); }
 .pn-btn { display:inline-flex; align-items:center; gap:var(--ent-s2);
   min-height:var(--ent-control-h); padding:0 var(--ent-control-px);
   font-family:var(--ent-font); font-size:var(--ent-fs-sm); font-weight:var(--ent-fw-medium);

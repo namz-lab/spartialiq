@@ -415,8 +415,8 @@ async function developmentManagementRoutes(fastify) {
            (dev_app_id, tpd_reference, dev_register_no, stand_number, suburb_ward,
             street_address, stand_area_sqm, applicant_name, applicant_id_number,
             applicant_phone, applicant_email, development_type, description,
-            site_plan_url, received_at, created_by, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            site_plan_url, received_at, created_by, status, applicant_person_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING *`,
         [
           b.dev_app_id || null,
@@ -436,6 +436,9 @@ async function developmentManagementRoutes(fastify) {
           isDate(b.received_at) ? b.received_at : new Date().toISOString().slice(0, 10),
           request.user.id,
           initialStatus,
+          // The applicant in the council's register of persons (migration 256), when the counter picked one. Only staff
+          // link: a citizen applying online cannot name someone else's record.
+          STAFF_ROLES.includes(request.user.role) && isUuid(b.applicant_person_id) ? b.applicant_person_id : null,
         ],
       )
       let row = rows[0]
@@ -486,6 +489,9 @@ async function developmentManagementRoutes(fastify) {
 
       return reply.code(201).send({ success: true, data: row })
     } catch (err) {
+      if (err.code === '23503' && /person/.test(err.constraint || '')) {
+        return reply.code(404).send({ success: false, error: 'person_not_found', message: 'No person with that reference in the register.' })
+      }
       request.log.error({ err }, 'permit-application create failed')
       return reply.code(500).send({ success: false, error: 'internal' })
     }
@@ -1218,18 +1224,23 @@ async function developmentManagementRoutes(fastify) {
       const { rows } = await db(request).query(
         `INSERT INTO spatial_planning.application_objection
            (permit_app_id, objector_name, objector_address, objector_id_number,
-            grounds, grounds_detail, received_at, document_url)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            grounds, grounds_detail, received_at, document_url, objector_person_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          RETURNING *`,
         [request.params.id, b.objector_name, b.objector_address || null,
          b.objector_id_number || null,
          Array.isArray(b.grounds) ? JSON.stringify(b.grounds) : '[]',
          b.grounds_detail || null,
          isDate(b.received_at) ? b.received_at : new Date().toISOString().slice(0, 10),
-         b.document_url || null],
+         b.document_url || null,
+         // the objector in the council's register of persons (migration 256); the name stays as written
+         isUuid(b.objector_person_id) ? b.objector_person_id : null],
       )
       return reply.code(201).send({ success: true, data: rows[0] })
     } catch (err) {
+      if (err.code === '23503' && /person/.test(err.constraint || '')) {
+        return reply.code(404).send({ success: false, error: 'person_not_found', message: 'No person with that reference in the register.' })
+      }
       if (err.code === '23503') return reply.code(404).send({ success: false, error: 'application_not_found' })
       request.log.error({ err }, 'create objection failed')
       return reply.code(500).send({ success: false, error: 'internal' })

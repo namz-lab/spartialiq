@@ -23,6 +23,8 @@ import MethodTiles from '../components/MethodTiles.vue'
 import TillNotice from '../components/TillNotice.vue'
 import ReceiptDocument from '../components/ReceiptDocument.vue'
 import ReceiptOutput from '../components/ReceiptOutput.vue'
+import PersonPicker from '@/components/shared/PersonPicker.vue'
+import type { Person } from '@/services/persons'
 
 interface Line { key: number; income_code_id: string; quantity: string; unit_amount: string }
 
@@ -45,6 +47,10 @@ const attempted = ref(false)
 const busy = ref(false)
 const error = ref<string | null>(null)
 const payerEl = ref<HTMLInputElement | null>(null)
+// Who paid, in the council's register of persons (migration 256). Optional: a walk-in paying a sundry charge need not be
+// registered. Choosing someone fills "Received from" with their name if it is still empty.
+const payerPerson = ref<Person | null>(null)
+watch(payerPerson, (p) => { if (p && payer.value.trim().length < 2) payer.value = p.display_name })
 
 const canReceipt = computed(() => store.can('finance.cash.receipt.record'))
 const codes = computed(() => (state.desk?.income_codes ?? []).filter((c) => receiptableIn(c, currency.value)))
@@ -148,6 +154,7 @@ async function issue(): Promise<void> {
     const body = {
       session_id: session.value.id,
       payer_name: payer.value.trim(),
+      ...(payerPerson.value ? { payer_person_id: payerPerson.value.id } : {}),
       currency: currency.value,
       method: method.value,
       lines: lines.value.map((l) => ({
@@ -199,6 +206,7 @@ function next(): void {
   issuedApplication.value = null
   application.value = null
   payer.value = ''
+  payerPerson.value = null
   lines.value = [newLine()]
   reference.value = ''
   tendered.value = ''
@@ -248,6 +256,10 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
             <span class="cw-label">Received from <span class="req">*</span></span>
             <input ref="payerEl" v-model="payer" class="cw-input" autocomplete="off" maxlength="160" :class="{ 'is-invalid': attempted && payer.trim().length < 2 }" />
           </label>
+          <details class="ir-person" :open="!!payerPerson" data-testid="ir-payer-person">
+            <summary class="cw-label">{{ payerPerson ? 'Payer in the register' : 'Find or register the payer (optional)' }}</summary>
+            <PersonPicker v-model="payerPerson" role="payer" />
+          </details>
           <div class="cw-field">
             <span class="cw-label">Currency</span>
             <div class="cw-seg" role="group" aria-label="Currency">
@@ -397,6 +409,7 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
 .ir-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); gap: 18px; align-items: start; }
 .ir-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .ir-stack { display: flex; flex-direction: column; gap: 14px; }
+.ir-person > summary { cursor: pointer; margin-bottom: 8px; }
 .ir-tender { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .ir-change { display: flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 8px; background: var(--cw-pos-soft); color: var(--cw-pos); font-size: 17px; font-weight: 800; }
 .ir-change.is-neg { background: var(--cw-neg-soft); color: var(--cw-neg); }

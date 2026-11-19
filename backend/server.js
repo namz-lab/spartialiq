@@ -116,6 +116,7 @@ const { spatialEngineRoutes } = require('./src/routes/spatial-engine')
 const { unitRoutes } = require('./src/routes/units')
 const { plantRoutes } = require('./src/routes/plant')
 const { roadsWorksReferralRoutes } = require('./src/routes/roads-works-referrals')
+const { personsRoutes } = require('./src/routes/persons')
 const { roadsWorksRegisterRoutes } = require('./src/routes/roads-works-registers')
 const { councilRegistersRoutes } = require('./src/routes/council-registers')
 // Integrated budget and financial management (migration 188). Seven modules, split by the thing
@@ -746,6 +747,8 @@ async function build() {
     await server.register(plantRoutes, { prefix: '/api' })
     // The Department of Roads and Works in the planning workflow: engineering referrals and assessments (migration 253).
     await server.register(roadsWorksReferralRoutes, { prefix: '/api' })
+    // The council's register of persons (migration 256): applicants, objectors, payers, account holders
+    await server.register(personsRoutes, { prefix: '/api' })
     // Its field survey, recorded in the road, structure, water point and council asset registers (migration 254).
     await server.register(roadsWorksRegisterRoutes, { prefix: '/api' })
     await server.register(councilRegistersRoutes, { prefix: '/api' })
