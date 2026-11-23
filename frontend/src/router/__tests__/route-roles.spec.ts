@@ -133,7 +133,10 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
   })
 
   it('sends an address for a workspace not in this build to the redirecting catch-all', () => {
-    expect(router.resolve('/finance/committee').name).toBe('finance-unknown')
+    // An address that will never be a workspace: a real key that is not built yet (as "committee" once was) stops
+    // testing the catch-all the day it is built.
+    expect(router.resolve('/finance/not-a-workspace').name).toBe('finance-unknown')
+    expect(router.resolve('/finance/committee').name).not.toBe('finance-unknown')
     expect(router.resolve('/finance/no-workspace').name).toBe('finance-no-workspace')
   })
 

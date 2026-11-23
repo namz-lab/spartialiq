@@ -7,6 +7,7 @@ const { buildAppForTest } = require('../../../test/helpers/buildApp')
 const { systemOf } = require('../../lib/dbContext')
 const { loginAs } = require('../../../test/helpers/auth')
 const { answerChecks } = require('../../../test/helpers/statutoryChecks')
+const { answerCirculation } = require('../../../test/helpers/circulation')
 
 describe('the permit record fields', () => {
   let app, eo, planner, admin
@@ -45,6 +46,7 @@ describe('the permit record fields', () => {
         expect(r.statusCode).toBe(200)
         rev = r.json().data.revision
       }
+      await answerCirculation(systemOf(app.pg), id)   // acknowledging circulated the case (migration 255)
       const chk = await app.inject({ method: 'POST', url: `/api/permit-applications/${id}/direction-check`, headers: as(eo) })
       expect(chk.statusCode).toBe(200)
       await answerChecks(app, eo, id)

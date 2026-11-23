@@ -1,13 +1,32 @@
 const nock = require('nock')
 const { systemOf } = require('../../lib/dbContext')   // fixtures use the system connection (TENANCY_MODE=strict has no request context)
 const crypto = require('crypto')
-const { buildAppForTest } = require('../../../test/helpers/buildApp')
+const { buildAppForTest, assertDisposableDatabase } = require('../../../test/helpers/buildApp')
 const { loginAs }         = require('../../../test/helpers/auth')
+
+// A paid planning fee is noted for the ledger (migration 246) in finance.planning_fee, which never lets a row be deleted:
+// each run leaves that record behind wherever it runs. So this suite is an integration suite (scripts/test-suites.js),
+// it refuses a database that is not a disposable one, and it removes its rows with the keeping trigger switched off.
+async function removeFixture(client, paymentId, permitId) {
+  await client.query('BEGIN')
+  try {
+    await client.query('ALTER TABLE finance.planning_fee DISABLE TRIGGER trg_planning_fee_kept')
+    await client.query('DELETE FROM finance.planning_fee WHERE payment_id = $1', [paymentId])
+    await client.query('ALTER TABLE finance.planning_fee ENABLE TRIGGER trg_planning_fee_kept')
+    await client.query('DELETE FROM payments WHERE id = $1', [paymentId])
+    await client.query('DELETE FROM spatial_planning.permit_application WHERE id = $1', [permitId])
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  }
+}
 
 describe('application fee payment lifecycle', () => {
   let app, token
 
   beforeAll(async () => {
+    assertDisposableDatabase('the application fee suite')
     process.env.PAYNOW_INTEGRATION_ID  = '12345'
     process.env.PAYNOW_INTEGRATION_KEY = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
     process.env.PAYNOW_RESULT_URL      = 'https://example.test/api/payments/webhook/paynow'
@@ -16,7 +35,7 @@ describe('application fee payment lifecycle', () => {
     app = await buildAppForTest()
     token = await loginAs(app, 'demo.viewer@vungu.test', 'demo1234')
   })
-  afterAll(async () => { await app.close() })
+  afterAll(async () => { await app?.close() })
   afterEach(() => nock.cleanAll())
 
   async function setupPaidFlow() {
@@ -33,10 +52,13 @@ describe('application fee payment lifecycle', () => {
       )
       permitId = created.rows[0].id
 
+      // A poll URL of this run's own: the webhook finds its payment by it, and a fixed one ('guid=ZZ') matched the paid
+      // rows an interrupted earlier run had left behind, so the webhook settled one of those and this run's stayed unpaid.
+      const guid = crypto.randomUUID()
       nock('https://www.paynow.co.zw')
         .post('/interface/remotetransaction')
         .reply(200,
-          'status=Ok&pollurl=https%3A%2F%2Fwww.paynow.co.zw%2FInterface%2FCheckPayment%2F%3Fguid%3DZZ&hash=AA')
+          `status=Ok&pollurl=https%3A%2F%2Fwww.paynow.co.zw%2FInterface%2FCheckPayment%2F%3Fguid%3D${guid}&hash=AA`)
 
       const initRes = await app.inject({
         method:  'POST', url: '/api/payments',
@@ -87,9 +109,7 @@ describe('application fee payment lifecycle', () => {
       expect(pay.rows[0].status).toBe('paid')
       expect(pay.rows[0].issued_receipt_no).toMatch(/^VRDC-\d{4}-\d{6}$/)
     } finally {
-      await client.query(`DELETE FROM payments WHERE id = $1`, [paymentId])
-      await client.query(`DELETE FROM spatial_planning.permit_application WHERE id = $1`, [permitId])
-      client.release()
+      try { await removeFixture(client, paymentId, permitId) } finally { client.release() }
     }
   })
 
@@ -116,9 +136,7 @@ describe('application fee payment lifecycle', () => {
         `SELECT issued_receipt_no FROM payments WHERE id = $1`, [paymentId])).rows[0].issued_receipt_no
       expect(secondReceipt).toBe(firstReceipt)
     } finally {
-      await client.query(`DELETE FROM payments WHERE id = $1`, [paymentId])
-      await client.query(`DELETE FROM spatial_planning.permit_application WHERE id = $1`, [permitId])
-      client.release()
+      try { await removeFixture(client, paymentId, permitId) } finally { client.release() }
     }
   })
 })

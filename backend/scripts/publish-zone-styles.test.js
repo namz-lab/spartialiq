@@ -7,6 +7,14 @@ const fs = require('node:fs')
 const path = require('node:path')
 const qgisImport = require('../src/services/gis/qgisImport')
 const { LAYERS, QML_DIR, renamed } = require('./publish-zone-styles')
+const { RENAMED_ZONES } = require('../src/utils/eoMatrix')
+
+// A zone as the system names it once loaded: the file's "Cemetry" is loaded as "Cemetery" (load-zones.js), and the EO's
+// matrix renames "Light Industry" to "Light and General Industry" with its polygons (load-eo-matrix.js).
+const asLoaded = (zone) => {
+  const name = zone === 'Cemetry' ? 'Cemetery' : zone
+  return RENAMED_ZONES.find((r) => r.from === name)?.to ?? name
+}
 
 const zonesDir = path.join(__dirname, '..', 'data', 'reference', 'vungu', 'zones')
 const read = (n) => JSON.parse(fs.readFileSync(path.join(zonesDir, `${n}.geojson`), 'utf8')).features
@@ -26,7 +34,7 @@ describe('zone styles', () => {
 
   test('every peri-urban zone name in the file has a colour, except the known gaps', () => {
     const have = colours(styled(peri))
-    const names = new Set(read('peri_urban_zones').map((f) => (f.properties.Zone === 'Cemetry' ? 'Cemetery' : f.properties.Zone)))
+    const names = new Set(read('peri_urban_zones').map((f) => asLoaded(f.properties.Zone)))
     expect([...names].filter((n) => !have[n]).sort()).toEqual(KNOWN_UNSTYLED)
   })
 

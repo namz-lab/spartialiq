@@ -12,6 +12,7 @@ const { buildAppForTest } = require('../../../test/helpers/buildApp')
 const { systemOf } = require('../../lib/dbContext')   // fixtures use the system connection (TENANCY_MODE=strict has no request context)
 const { loginAs } = require('../../../test/helpers/auth')
 const { answerChecks } = require('../../../test/helpers/statutoryChecks')
+const { answerCirculation } = require('../../../test/helpers/circulation')
 
 describe('the gates on eo-decision', () => {
   let app, eo, planner, admin
@@ -66,6 +67,8 @@ describe('the gates on eo-decision', () => {
       expect([200, 201]).toContain(r.statusCode)
       rev = r.json().data.revision
     }
+    // Acknowledging circulated the case (migration 255); the departments reply, so the gates below are what is tested.
+    await answerCirculation(systemOf(app.pg), id)
     if (checked) { await checkDirections(id); await answerChecks(app, eo, id) }
     return id
   }

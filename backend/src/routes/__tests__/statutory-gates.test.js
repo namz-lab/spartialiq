@@ -12,6 +12,7 @@ const { buildAppForTest } = require('../../../test/helpers/buildApp')
 const { systemOf } = require('../../lib/dbContext')
 const { loginAs } = require('../../../test/helpers/auth')
 const { answerChecks } = require('../../../test/helpers/statutoryChecks')
+const { answerCirculation } = require('../../../test/helpers/circulation')
 
 describe('the statutory gates on an approval', () => {
   let app, eo, planner, admin
@@ -51,6 +52,8 @@ describe('the statutory gates on an approval', () => {
       expect(r.statusCode).toBe(200)
       rev = r.json().data.revision
     }
+    // Acknowledging circulated the case (migration 255); the departments reply, so the statutory gates are what is tested.
+    await answerCirculation(systemOf(app.pg), id)
     expect((await app.inject({ method: 'POST', url: `/api/permit-applications/${id}/direction-check`, headers: as(eo) })).statusCode).toBe(200)
     if (answered) await answerChecks(app, eo, id, answers)
     return id

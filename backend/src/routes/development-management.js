@@ -992,7 +992,12 @@ async function developmentManagementRoutes(fastify) {
         has_conditions: !!permit_conditions,
         decision_conditions: decision_conditions || null,
       })
-      return reply.send({ success: true, data: rows[0] })
+      // Answer with the case as it now stands. RETURNING gives the row before the AFTER triggers ran, and an
+      // acknowledgement circulates the case (migration 255): its status becomes 'circulation' and its revision moves on
+      // again, so the RETURNING row would send the officer a stale revision and their next change would be refused.
+      const { rows: [now] } = await db(request).query(
+        'SELECT * FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+      return reply.send({ success: true, data: now || rows[0] })
     } catch (err) {
       request.log.error({ err }, 'patch permit status failed')
       return reply.code(500).send({ success: false, error: 'internal' })
