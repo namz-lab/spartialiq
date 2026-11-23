@@ -9,6 +9,7 @@ const { buildAppForTest } = require('./helpers/buildApp')
 const { systemOf } = require('../src/lib/dbContext')
 const { loginAs } = require('./helpers/auth')
 const { answerChecks } = require('./helpers/statutoryChecks')
+const { answerCirculation } = require('./helpers/circulation')
 const { suspendAffirmation } = require('./helpers/proposedCells')
 
 describe('applications and the plan', () => {
@@ -59,6 +60,7 @@ describe('applications and the plan', () => {
         const r = await app.inject({ method: 'PATCH', url: `/api/permit-applications/${id}/status`, headers: auth(planner), payload: { status: step, expectedRevision: rev } })
         rev = r.json().data.revision
       }
+      await answerCirculation(sys, id)   // acknowledging circulated the case (migration 255)
       const chk = await app.inject({ method: 'POST', url: `/api/permit-applications/${id}/direction-check`, headers: auth(eo) })
       expect(chk.statusCode).toBe(200)
       await answerChecks(app, eo, id)

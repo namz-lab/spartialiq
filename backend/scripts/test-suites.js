@@ -65,6 +65,14 @@
  *   permit-workflow      demo.planner and demo.admin (statutory chain, EO gate)
  *   soft-delete          a session, and rows of its own to tombstone
  *   stand-allocation     a session; places stands against the topology trigger
+ *   payments.applicationfee  demo.viewer; a fee paid online is noted in finance.planning_fee (migration
+ *                        246), which keeps every row, so the suite removes its own with the trigger off
+ *   finance.assets, finance.bank, finance.migration, finance.payables, finance.salaries, finance.vote-book
+ *                        the accounting workspace end to end (asset register, bank reconciliation, cut-over
+ *                        from the previous package, creditors, salaries journal, vote book). Each builds its
+ *                        app with buildFinanceAppForTest, which refuses a database that is not disposable, so
+ *                        in a bare `npm test` they could only fail; they were added on 17 November without
+ *                        being listed here
  *
  * Run with: npm run test:db
  */
@@ -96,6 +104,13 @@ const integration = [
   'src/routes/__tests__/permit-workflow.test.js',
   'src/routes/__tests__/soft-delete.test.js',
   'src/routes/__tests__/stand-allocation.test.js',
+  'src/routes/__tests__/payments.applicationfee.test.js',
+  'src/routes/__tests__/finance.assets.test.js',
+  'src/routes/__tests__/finance.bank.test.js',
+  'src/routes/__tests__/finance.migration.test.js',
+  'src/routes/__tests__/finance.payables.test.js',
+  'src/routes/__tests__/finance.salaries.test.js',
+  'src/routes/__tests__/finance.vote-book.test.js',
 ]
 
 /**

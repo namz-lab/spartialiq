@@ -38,16 +38,19 @@ const row = async (id) => (await c.query('SELECT status, revision, acknowledged_
 const events = async (id) => (await c.query(`SELECT detail FROM spatial_planning.permit_event WHERE permit_app_id = $1 AND event_type = 'status_changed'`, [id])).rows
 
 describe('migration 248: the sent acknowledgement moves the case on', () => {
-  maybe('a sent letter moves a registered case to acknowledged, with its date, a new revision and an audit entry', async () => {
+  // Once acknowledged, the case is circulated at once by the rules (migration 255) and moves on into 'circulation', so
+  // the case is seen there; the acknowledgement is in its date and its own audit entry.
+  maybe('a sent letter acknowledges a registered case, with its date, a new revision and an audit entry; it then goes into circulation', async () => {
     const p = await newCase('registered')
     await letter(p.id, true)
     const r = await row(p.id)
-    expect(r.status).toBe('acknowledged')
+    expect(r.status).toBe('circulation')
     expect(r.acknowledged_at).not.toBeNull()
     expect(r.revision).toBeGreaterThan(p.revision)
-    const ev = await events(p.id)
-    expect(ev).toHaveLength(1)
-    expect(ev[0].detail).toMatchObject({ status: 'acknowledged', from_status: 'registered', automatic: true })
+    const ev = (await events(p.id)).map((e) => e.detail)
+    expect(ev).toHaveLength(2)
+    expect(ev).toContainEqual(expect.objectContaining({ status: 'acknowledged', from_status: 'registered', automatic: true }))
+    expect(ev).toContainEqual(expect.objectContaining({ status: 'circulation', from_status: 'acknowledged', automatic: true }))
   })
 
   maybe('an unsent draft moves nothing', async () => {
@@ -61,7 +64,9 @@ describe('migration 248: the sent acknowledgement moves the case on', () => {
     const p = await newCase('registered')
     await letter(p.id, false)
     await c.query(`UPDATE spatial_planning.clerk_acknowledgement SET sent_at = now(), sent_method = 'hand' WHERE permit_application_id = $1`, [p.id])
-    expect((await row(p.id)).status).toBe('acknowledged')
+    const r = await row(p.id)
+    expect(r.acknowledged_at).not.toBeNull()
+    expect(r.status).toBe('circulation')   // acknowledged, then circulated (migration 255)
   })
 
   maybe('a case already further on is not moved back', async () => {

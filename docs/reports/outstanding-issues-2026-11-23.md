@@ -44,6 +44,32 @@ Reviewed at `main` 339d79d (after PR #55). Checks run:
 
 ## 2. Test suite: 18 of 104 backend suites fail (89 of 1,265 tests)
 
+> **Addressed on branch `fix/stale-tests`.** The stale tests are fixed. Against the local database, a plain `npm test` now leaves only four failing suites, all of them down to the environment:
+>
+> - `inspector-gis`: the local `buildings` table is empty;
+> - `parcels.nearby`: `pois_points` is missing;
+> - `spatial-engine.sql`: the 30-second statement timeout;
+> - `plan-revisions`: the same timeout, only under the full run.
+>
+> **Flaky:** `application-plan` passes alone (7 of 7), but can fail in the full parallel run. `committee-gate` switches the council's delegation settings (S1 to S5) on and off in the same database, and a refusal by the EO alone depends on them. To fix it, either run the two suites serially, or give `committee-gate` its own authority for the switches.
+>
+> The frontend passes in full.
+>
+> What was done:
+>
+> - **The status route.** `PATCH /permit-applications/:id/status` answered with the row from before the AFTER triggers ran. An acknowledgement circulates the case and moves its revision on, so the officer was given a stale revision and status, and their next change was refused as a conflict. The route now answers with the case as it stands. This was a real bug, found through the tests.
+> - **The test walks.** They now record the automatic referrals' replies with `test/helpers/circulation.js`. Roads and Works is consulted on every case, blocking, so a case is not decided until it replies.
+> - **`acknowledgement-moves-case`** expects the case to go on into `circulation`, with both automatic entries in its history.
+> - **`payments.applicationfee`.**
+>   - It used a fixed Paynow poll URL, so payments left by interrupted runs were settled in place of its own.
+>   - Since migration 246, every run leaves a `finance.planning_fee` row, which can never be deleted.
+>   - It now uses its own poll URL, refuses a database that is not a test one, removes its rows with the keeping trigger off, and is an integration suite.
+> - **Six finance suites** (assets, bank, migration, payables, salaries, vote-book) refuse a database that is not a test one, but were never listed as integration suites. They are now listed.
+> - **`publish-zone-styles`** names zones as the system loads them: "Light Industry" becomes "Light and General Industry" (`load-eo-matrix.js`).
+> - **`route-roles.spec.ts`** uses an address that will never be a workspace; the committee workspace has since been built.
+>
+> Left behind by interrupted runs: the local database holds six test payments with undeletable `finance.planning_fee` notes. They are local only.
+
 The frontend passes 2,238 of 2,240 tests, and `vue-tsc` reports no type errors.
 
 Causes:
