@@ -16,7 +16,7 @@
  * computes a balance: every figure is a string from SQL, formatted.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import {
   Search, Layers, X, MapPin, Loader2, AlertTriangle, Maximize2, Home, ListChecks, Download, Info, Map as MapIcon,
   Wallet, CircleAlert, Users, PlugZap, Crosshair, ChevronRight, MousePointerClick,
@@ -294,7 +294,7 @@ function initMap(): void {
     center: [29.7954, -19.3763],
     zoom: props.mode === 'cashier' || props.compact ? 14 : 10,
     attributionControl: { compact: true },
-    preserveDrawingBuffer: true,
+    canvasContextAttributes: { preserveDrawingBuffer: true },
   })
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'bottom-right')
   map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')

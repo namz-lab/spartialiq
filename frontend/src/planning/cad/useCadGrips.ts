@@ -14,7 +14,7 @@
 // the host component only needs to call addGripLayer(map) once on mount.
 // ─────────────────────────────────────────────────────────────────────────
 import { ref, computed, watch } from 'vue'
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import { getGrips, type CadGrip } from './cadGrips'
 import { syncGrips, GRIP_LAYER_ID } from './cadRender'
 import type { CadDocumentApi } from './useCadDocument'

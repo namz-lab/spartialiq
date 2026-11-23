@@ -11,8 +11,8 @@ const clickHandlers: Array<(e: any) => void> = []
 // What the basemap layers would return under the cursor.
 let renderedHits: any[] = []
 
-vi.mock('maplibre-gl', () => ({
-  default: {
+vi.mock('maplibre-gl', () => {
+  const m = {
     Map: class {
       on(ev: string, a: any, b?: any) { if (ev === 'click' && typeof a === 'function') clickHandlers.push(a); void b }
       addControl() {} remove() {} flyTo() {} getZoom() { return 10 }
@@ -30,8 +30,9 @@ vi.mock('maplibre-gl', () => ({
     NavigationControl: class {}, ScaleControl: class {},
     Marker: class { setLngLat() { return this } setPopup() { return this } addTo() { return this } remove() {} },
     Popup: class { setHTML() { return this } },
-  },
-}))
+  }
+  return { default: m, ...m }
+})
 // The real pickTopHit is kept: layer priority is what decides which feature a
 // click is about, so a stub would make the attribute test meaningless.
 vi.mock('@/map/vunguBasemap', async (importOriginal) => ({

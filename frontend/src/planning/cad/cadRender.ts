@@ -5,7 +5,7 @@
 // highlight via feature-state. Mirrors planning-layers.ts so paint config lives
 // in one place. Pure map plumbing — no Vue, no turf.
 // ─────────────────────────────────────────────────────────────────────────
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import type { FeatureCollection } from 'geojson'
 import type { CadGrip } from './cadGrips'
 

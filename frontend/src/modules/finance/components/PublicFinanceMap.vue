@@ -17,7 +17,7 @@
  * the choropleth and is always present.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import { AlertTriangle, Info, MapPin } from 'lucide-vue-next'
 import {
   addVunguBasemap, PLANNER_BASEMAP_DEFAULT, prefersReducedMotion, watchWebglContext,

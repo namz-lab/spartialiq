@@ -15,7 +15,7 @@
  * confident line the driver might follow into a river.
  */
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import {
   Navigation2, X, LocateFixed, RefreshCw, AlertTriangle, WifiOff, CornerUpLeft, CornerUpRight,
   ArrowUp, MapPin, Flag, ChevronUp, ChevronDown, RotateCcw, Volume2, VolumeX,

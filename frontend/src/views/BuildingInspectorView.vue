@@ -23,7 +23,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // @ts-ignore — turf has no separate @types package in this project
 import * as turf from '@turf/turf'
@@ -641,7 +641,7 @@ onMounted(async () => {
       // Retain the WebGL drawing buffer so MapToolbar's "Export PDF" can read
       // the rendered canvas back with toDataURL() — without it the exported
       // A4 sheet comes out blank on every host that mounts the toolbar.
-      preserveDrawingBuffer: true,
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     })
     mapRef.value = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right')

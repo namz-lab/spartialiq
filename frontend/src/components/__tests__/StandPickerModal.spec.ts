@@ -5,13 +5,14 @@ import StandPickerModal from '../StandPickerModal.vue'
 import type { StandLocation } from '@/services/parcels'
 
 // Stub MapLibre + basemap so the component mounts without a real canvas.
-vi.mock('maplibre-gl', () => ({
-  default: {
+vi.mock('maplibre-gl', () => {
+  const m = {
     Map: class { on() {} addControl() {} remove() {} flyTo() {} resize() {} },
     NavigationControl: class {}, ScaleControl: class {},
     Marker: class { setLngLat() { return this } addTo() { return this } remove() {} },
-  },
-}))
+  }
+  return { default: m, ...m }
+})
 vi.mock('@/map/vunguBasemap', () => ({ addVunguBasemap: vi.fn() }))
 
 const inVungu: StandLocation = {

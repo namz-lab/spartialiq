@@ -174,7 +174,7 @@ async function draw() {
     mapReady = false
   }
   if (!map.value) {
-    const { default: maplibregl } = await import('maplibre-gl')
+    const maplibregl = await import('maplibre-gl')
     if (!host.value) return
     const m = new maplibregl.Map({
       container: host.value,

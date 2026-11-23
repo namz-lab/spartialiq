@@ -24,7 +24,7 @@ vi.mock('maplibre-gl', () => {
     queryRenderedFeatures() { return [] }
     remove() {}
   }
-  return { default: { Map: FakeMap } }
+  return { default: { Map: FakeMap }, Map: FakeMap }
 })
 vi.mock('@/services/vectorTiles', () => ({ getTileLayerCatalog: vi.fn(async () => []) }))
 

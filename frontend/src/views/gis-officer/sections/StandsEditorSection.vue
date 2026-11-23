@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive, nextTick, shallowRef } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import MapboxDraw from '@mapbox/mapbox-gl-draw'
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css'
@@ -309,8 +309,8 @@ function initMap() {
       map!.on('mouseleave', lyr, () => { map!.getCanvas().style.cursor = '' })
     }
 
-    map!.on('draw.create', onDrawCreate)
-    map!.on('draw.update', onDrawUpdate)
+    map!.on('draw.create' as keyof maplibregl.MapEventType, onDrawCreate as never)
+    map!.on('draw.update' as keyof maplibregl.MapEventType, onDrawUpdate as never)
   })
 }
 

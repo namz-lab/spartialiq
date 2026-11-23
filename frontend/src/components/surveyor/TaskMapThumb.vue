@@ -4,7 +4,7 @@
 // the task point with a marker. No pan/zoom/animation — purely a "where is
 // this" glance; the detail panel links out to the full MapView for real work.
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapPin } from 'lucide-vue-next'
 

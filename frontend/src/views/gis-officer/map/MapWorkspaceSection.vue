@@ -9,6 +9,7 @@
 // non-interactive so its drill-down never competes. Switching tools with an
 // unfinished drawing asks first.
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import type { MapEventType } from 'maplibre-gl'
 import MapboxDraw from '@mapbox/mapbox-gl-draw'
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css'
 import turfArea from '@turf/area'
@@ -78,7 +79,7 @@ const readoutText = ref({ wgs: '', utm: '', lo: '' })
 
 // ── Map setup ─────────────────────────────────────────────────────────
 onMounted(async () => {
-  const [{ default: maplibregl }, { addVunguBasemap }] = await Promise.all([
+  const [maplibregl, { addVunguBasemap }] = await Promise.all([
     import('maplibre-gl'), import('@/map/vunguBasemap'),
   ])
   if (!host.value) return
@@ -118,7 +119,7 @@ onMounted(async () => {
     m.on('mousemove', onMouseMove)
     m.on('mousedown', onMouseDown)
     m.on('mouseup', onMouseUp)
-    m.on('draw.create', onDrawCreate)
+    m.on('draw.create' as keyof MapEventType, onDrawCreate as never)
     m.on('moveend', refreshSnapCandidates)
   }
   if (m.loaded()) void initMap()
@@ -560,7 +561,7 @@ async function go(h: SearchHit) {
   if (h.bbox) m.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 80, maxZoom: 18, duration })
   else m.flyTo({ center: h.center, zoom: Math.max(m.getZoom(), 16), duration })
   if (h.kind === 'coordinate') {
-    const { default: maplibregl } = await import('maplibre-gl')
+    const maplibregl = await import('maplibre-gl')
     marker?.remove()
     marker = new maplibregl.Marker({ color: SELECTION_COLOUR }).setLngLat(h.center).addTo(m)
   }

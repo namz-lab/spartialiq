@@ -32,7 +32,7 @@ function draw() {
 
 onMounted(async () => {
   try {
-    const [{ default: maplibregl }, { addVunguBasemap }] = await Promise.all([import('maplibre-gl'), import('@/map/vunguBasemap')])
+    const [maplibregl, { addVunguBasemap }] = await Promise.all([import('maplibre-gl'), import('@/map/vunguBasemap')])
     if (!host.value) return
     const b = bounds(props.features)
     map.value = new maplibregl.Map({

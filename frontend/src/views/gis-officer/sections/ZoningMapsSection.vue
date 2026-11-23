@@ -4,7 +4,7 @@
 // review the zoning overlay, toggle basemap, and brief downstream users.
 
 import { ref, onMounted, onBeforeUnmount, shallowRef } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addVunguBasemap } from '@/map/vunguBasemap'
 import { gisOfficerService } from '@/services/gisOfficerService'

@@ -43,7 +43,7 @@ vi.mock('maplibre-gl', () => {
     remove() {}
   }
   class NavigationControl {}
-  return { default: { Map, NavigationControl } }
+  return { default: { Map, NavigationControl }, Map, NavigationControl }
 })
 
 import ExecutiveWardMap from '../ExecutiveWardMap.vue'
