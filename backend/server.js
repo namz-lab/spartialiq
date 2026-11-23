@@ -95,7 +95,7 @@ const { tilesRoutes } = require('./src/routes/tiles')
 const { parcelsRoutes } = require('./src/routes/parcels')
 const { statutoryPlansRoutes } = require('./src/routes/statutory-plans')
 // QGIS Desktop plugin sync API (/api/qgis/sync/upload, /health, etc.). This
-// was only wired in the unused src/index.ts entry point, so the plugin's
+// was only wired in the unused src/index.ts entry point (since removed), so the plugin's
 // endpoints 404'd on the running server.js. Register it here so the plugin works.
 const { createQGISRoutes } = require('./src/routes/qgis')
 const { gisRoutes } = require('./src/routes/gis')

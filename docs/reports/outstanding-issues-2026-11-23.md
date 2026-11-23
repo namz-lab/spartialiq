@@ -39,8 +39,8 @@ Reviewed at `main` 339d79d (after PR #55). Checks run:
 |---|---|---|---|
 | 1.1 | **The live site is out of date.** Render has not deployed since about PR #45. The live database already has migrations 256 and 257, but the code that uses them is not deployed. | `GET https://spartialiq.onrender.com/api/persons/search` returns **404** (a deployed route would answer 401). `/api/health` returns 200. | Deploy `main` from the Render dashboard. Add a deploy hook or `render.yaml` so that a merge deploys. |
 | 1.2 | **Critical and high vulnerabilities in production dependencies.** Backend: 2 critical, 17 high. Frontend: 1 critical, 9 high. | The critical ones are `fast-jwt` (authentication tokens), `fast-xml-parser` and `maplibre-gl`. The high ones include `fastify`, `@fastify/static`, `axios`, `vue`, `lodash` and `joi`. All have fixes, except `xlsx`. | Run `npm audit fix` and test, one workspace at a time; give `fastify` and `fast-jwt` priority. `xlsx` has no npm fix: move to the SheetJS CDN build or `exceljs`. |
-| 1.3 | **Inspection photos keep their EXIF metadata.** GPS position, device and time stay in the stored file, and the stored files are served on. | There is no EXIF handling anywhere in `backend/src`; `frontend/src/services/inspectionsService.ts:160` notes "strips EXIF (TODO)". Photos are accepted in `routes/inspections.js` (about line 552) and in the roads-works and development-management uploads. | Strip the metadata on upload (for example `sharp().rotate()` without `withMetadata`). Record the location the council needs in its own columns. |
-| 1.4 | **A mock sign-in controller is still in the repository.** `authControllerSimple.ts` returns a `super_admin` token for any email and password. | `backend/src/controllers/admin/authControllerSimple.ts:24`, imported by `src/admin/auth.ts` and `src/admin/routes/auth.ts`. It is reachable only through `npm run dev:admin`; production runs `server.js`. | Delete the TypeScript admin server (`src/index.ts`, `src/admin/**`, `src/controllers/admin/**` and the duplicated services: 53 `.ts` files), or replace the stub with real authentication. As it stands, one script runs an open admin API. |
+| 1.3 | ~~Inspection photos keep their EXIF metadata.~~ **Withdrawn after review: not a defect.** | Inspectors' photos go through `POST /stage-inspections/:sid/photos` (`routes/development-management.js`). The photo's position and time are recorded on purpose (`taken_lat`, `taken_lng`), so the geofence can show that the inspector was on site. Each file's SHA-256 is stored, and supervisors can flag an inspection for "photos don't match site"; the original file is the evidence for both, and stripping it would change the file. Files are served only to council staff and the applicant who owns the case (`routes/protected-uploads.js`). The "strips EXIF (TODO)" note at `frontend/src/services/inspectionsService.ts:160` belongs to `uploadPhoto` and `POST /inspections/:id/photos`, which no screen calls. | Nothing must be done. Two optional tidy-ups: remove the unused `uploadPhoto` and its route, or correct its comment. If the council ever wants applicants not to see the inspector's device model, give applicants a cleaned copy and keep the original for staff. |
+| 1.4 | **Addressed: the TypeScript admin server is removed.** 39 files are gone: `src/index.ts`, `src/admin/**`, `src/controllers/admin/**`, `src/middleware/admin/auth.ts`, `src/routes/admin/auth.ts`, `src/models/AdminUser.ts`, `src/types/admin.ts` and the `.ts` files in `src/services/admin/`; the `dev:admin` script is removed too. `server.js` loaded none of them, and nothing that runs imported them. The JavaScript QGIS helpers in `src/services/admin/` stay. The frontend had already retired the one screen written for these routes (`/admin/phase2`). Fourteen other `.ts` files remain unused, being earlier copies of routes and middleware that `server.js` loads as `.js`; they hold no sign-in. Original finding: **A mock sign-in controller is still in the repository.** `authControllerSimple.ts` returns a `super_admin` token for any email and password. | `backend/src/controllers/admin/authControllerSimple.ts:24`, imported by `src/admin/auth.ts` and `src/admin/routes/auth.ts`. It is reachable only through `npm run dev:admin`; production runs `server.js`. | Delete the TypeScript admin server (`src/index.ts`, `src/admin/**`, `src/controllers/admin/**` and the duplicated services: 53 `.ts` files), or replace the stub with real authentication. As it stands, one script runs an open admin API. |
 
 ## 2. Test suite: 18 of 104 backend suites fail (89 of 1,265 tests)
 
@@ -98,7 +98,7 @@ The frontend test `rdc-farm-subdivision.spec.ts` rewrites the tracked file `src/
 - **Register of persons:**
   - Merging duplicate persons. For example, a backfilled "Demo Citizen" and an online one; nothing is merged on a name alone.
   - Gates by assurance level for acts of legal weight. These need a council decision first.
-- **Data ingestion (admin):** processing does not start in the background, and there is no validation of KML, GeoJSON or GeoPackage files, and little of CSV files. See `admin/controllers/ingestionController.ts:368,447,510` and `fileUploadService.ts:165-210`. These belong to the TypeScript server in 1.4; decide whether they are kept at all.
+- ~~**Data ingestion (admin)**~~: removed with the TypeScript server in 1.4. It was never mounted.
 - **Plan review:** setback measurement from DXF or PDF drawings is not built (`services/planReview.js:128`).
 - **ERP adapter:** the CSV-over-SFTP fallback is not built (`services/gms/erpAdapter.js:58`).
 - **Earlier plans** (`docs/PROGRESS.md`, "What's left"):
@@ -114,7 +114,8 @@ The frontend test `rdc-farm-subdivision.spec.ts` rewrites the tracked file `src/
 
 1. Deploy `main` (1.1).
 2. Patch the dependencies (1.2).
-3. Strip photo metadata (1.3).
-4. Remove the mock admin server (1.4).
-5. Bring the tests up to date with automatic circulation, and put the acceptance-database run in CI (section 2).
-6. Reconcile the migration path (3.1).
+3. ~~Remove the mock admin server (1.4).~~ Done.
+4. Bring the tests up to date with automatic circulation, and put the acceptance-database run in CI (section 2).
+5. Reconcile the migration path (3.1).
+
+Item 1.3 (photo metadata) was withdrawn; see the table.
