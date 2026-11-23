@@ -89,9 +89,12 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // MapLibre through src/map/maplibre.ts, which locates its web worker (exact name only: the wrapper itself
+      // imports maplibre-gl/dist/…, and the CSS import is left alone).
+      { find: /^maplibre-gl$/, replacement: fileURLToPath(new URL('./src/map/maplibre.ts', import.meta.url)) },
+    ]
   },
   // Vitest: only discover tests under src/. Excludes stale duplicated specs in
   // .claude/worktrees (agent worktrees) that otherwise break `npm test`.

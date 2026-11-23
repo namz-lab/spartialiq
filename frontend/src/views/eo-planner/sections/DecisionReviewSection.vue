@@ -11,7 +11,7 @@
 // the permit's append-only audit trail.
 
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addVunguBasemap, setBasemapLayerVisible } from '@/map/vunguBasemap'
 import { MAP_BACKGROUND } from '@/map/vunguBasemapStyle'
@@ -318,7 +318,7 @@ function initMap(lng: number, lat: number) {
     center: [lng, lat],
     zoom: 16,
     attributionControl: false,
-    preserveDrawingBuffer: true,   // required so the canvas can be exported
+    canvasContextAttributes: { preserveDrawingBuffer: true },   // required so the canvas can be exported
   })
   evMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
   evMap.on('load', () => {

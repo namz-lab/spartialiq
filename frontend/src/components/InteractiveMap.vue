@@ -76,7 +76,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, shallowRef } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useSpatialStore } from '@/stores/spatial'
 import { addVunguBasemap, setBasemapLayerVisible as _setBasemapLayerVisible } from '@/map/vunguBasemap'
@@ -319,7 +319,7 @@ const initializeMap = () => {
     attributionControl: false,
     // Retain the WebGL drawing buffer so MapToolbar's "Export PDF" can read
     // the rendered canvas back with toDataURL() (otherwise it comes out blank).
-    preserveDrawingBuffer: true,
+    canvasContextAttributes: { preserveDrawingBuffer: true },
   })
 
   // Compact attribution: OSM data + a hint at the renderer. Sits in the

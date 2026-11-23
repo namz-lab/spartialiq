@@ -14,7 +14,7 @@
 
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import { escapeHtml } from '@/utils/escapeHtml'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addVunguBasemap, highlightExactPolygon, setBasemapLayerVisible } from '@/map/vunguBasemap'

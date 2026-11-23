@@ -4,7 +4,7 @@
 // on the Dashboard. Public-tier layers populate the Public GIS Portal.
 
 import { ref, computed, onMounted, onBeforeUnmount, shallowRef } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import {
   useGISOfficerWorkspace, LAYER_CATEGORY_LABELS, GIS_COORD_SYSTEMS,

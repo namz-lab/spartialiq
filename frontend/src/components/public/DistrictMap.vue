@@ -129,7 +129,7 @@ onMounted(async () => {
     // Dynamic import: MapLibre and the basemap module are several hundred KB
     // and this is the last thing on the page that has to be ready. The hero
     // renders and is readable before either arrives.
-    const [{ default: maplibregl }, { addVunguBasemap }] = await Promise.all([
+    const [maplibregl, { addVunguBasemap }] = await Promise.all([
       import('maplibre-gl'),
       import('@/map/vunguBasemap'),
     ])

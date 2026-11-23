@@ -5,7 +5,7 @@
 // application touches a constraint.
 
 import { ref, onMounted, onBeforeUnmount, shallowRef } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import { escapeHtml } from '@/utils/escapeHtml'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addVunguBasemap } from '@/map/vunguBasemap'

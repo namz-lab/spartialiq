@@ -23,7 +23,7 @@
  * before it is saved.
  */
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { Check, Crosshair, Info, Search, X } from 'lucide-vue-next'
 import { addVunguBasemap, PLANNER_BASEMAP_DEFAULT, prefersReducedMotion } from '@/map/vunguBasemap'

@@ -27,7 +27,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import { AlertTriangle, Download, ExternalLink, Info, Layers, MapPin, RefreshCw } from 'lucide-vue-next'
 import {
   addVunguBasemap, PLANNER_BASEMAP_DEFAULT, prefersReducedMotion, watchWebglContext,
@@ -534,7 +534,7 @@ function initMap(): void {
     center: [29.95, -19.15], // Vungu RDC district, adjusted when ward bounds arrive
     zoom: 8.4,
     // M6-3: an exported map sheet must not be a blank canvas.
-    preserveDrawingBuffer: true,
+    canvasContextAttributes: { preserveDrawingBuffer: true },
     attributionControl: { compact: true },
   })
   map.on('load', async () => {

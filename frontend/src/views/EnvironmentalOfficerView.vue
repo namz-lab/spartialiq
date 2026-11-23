@@ -48,7 +48,7 @@ import MapToolbar from '@/components/map/MapToolbar.vue'
 import InspectorIdentifyCard from '@/components/inspector/InspectorIdentifyCard.vue'
 import InspectorSiteReport from '@/components/inspector/InspectorSiteReport.vue'
 import UiSheet from '@/components/ui/UiSheet.vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import {
   Leaf, RefreshCw, Layers, MapPin, AlertTriangle, TreePine, Droplets,
@@ -625,7 +625,7 @@ onMounted(() => {
     center: [29.81, -19.49], zoom: 9, minZoom: 1, maxZoom: 22, attributionControl: false,
     // Retain the WebGL drawing buffer so MapToolbar's "Export PDF" can read the
     // rendered canvas back with toDataURL() — otherwise the sheet comes out blank.
-    preserveDrawingBuffer: true,
+    canvasContextAttributes: { preserveDrawingBuffer: true },
   })
   mapInstance.value = map
   map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right')

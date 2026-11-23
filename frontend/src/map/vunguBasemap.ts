@@ -1,7 +1,7 @@
 // src/map/vunguBasemap.ts
 // Adds the PostGIS vector-tile basemap layers to any MapLibre map.
 // One call per map, after the map's 'load' event. Idempotent.
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import area from '@turf/area'
 import { tileUrlTemplate, getTileLayerCatalog, getFeature, type TileLayerMeta } from '@/services/vectorTiles'
 import { absoluteApiUrl } from '@/services/runtimeOrigin'

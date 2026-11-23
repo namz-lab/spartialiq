@@ -13,7 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 // @ts-ignore — turf has no separate @types package in this project
 import * as turf from '@turf/turf'
 import { usePlanningTools } from '@/planning/usePlanningTools'

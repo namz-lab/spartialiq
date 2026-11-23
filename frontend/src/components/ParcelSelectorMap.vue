@@ -141,7 +141,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { ogcService } from '../services/ogc'
 import { addVunguBasemap } from '@/map/vunguBasemap'

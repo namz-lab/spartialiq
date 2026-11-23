@@ -15,7 +15,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ArrowLeft, Check, Circle, Info, TriangleAlert } from 'lucide-vue-next'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addVunguBasemap, setBasemapLayerVisible } from '@/map/vunguBasemap'
 import { executiveApi, type MasterPlan, type MasterPlanZone } from '@/services/executiveOverview'

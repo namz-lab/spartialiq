@@ -1216,7 +1216,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import OpenLayersEditorMap from '@/components/OpenLayersEditorMap.vue'
 import { escapeHtml } from '@/utils/escapeHtml'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -3741,7 +3741,7 @@ onMounted(async () => {
     minZoom: 1,
     maxZoom: 22,
     attributionControl: false,
-    preserveDrawingBuffer: true,  // needed for PNG/PDF map capture (snapshot, plan PDF)
+    canvasContextAttributes: { preserveDrawingBuffer: true },  // needed for PNG/PDF map capture (snapshot, plan PDF)
   })
 
   // @ts-ignore — MapLibre types cause deep-instantiation TS2589 here

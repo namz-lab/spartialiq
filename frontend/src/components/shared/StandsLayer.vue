@@ -16,7 +16,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, watch, type PropType } from 'vue'
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import type { Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl'
 import { standsService, type StandFeature, type StandStatus } from '../../services/standsService'
 

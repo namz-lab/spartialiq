@@ -768,7 +768,7 @@ import { addVunguBasemap, setBasemapLayerVisible, DEFAULT_VISIBLE, prefersReduce
 import { chipColorFor } from '@/map/vunguBasemapStyle'
 import { escapeHtml } from '@/utils/escapeHtml'
 import { surveyorApi } from '@/services/surveyor'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import {
   Shield, Calendar, Clock, AlertTriangle, TrendingUp, TrendingDown, Minus,

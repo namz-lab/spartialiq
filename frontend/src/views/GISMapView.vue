@@ -274,7 +274,7 @@ import {
   ArrowLeft, Map as MapIcon, Search, MapPin, Compass, Flag, X, Layers, Star,
   SlidersHorizontal, ChevronDown,
 } from 'lucide-vue-next'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { addVunguBasemap, highlightExactPolygon } from '@/map/vunguBasemap'
 import { useBreakpoint } from '@/composables/useBreakpoint'

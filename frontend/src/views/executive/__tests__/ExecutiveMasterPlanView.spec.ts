@@ -31,7 +31,8 @@ vi.mock('maplibre-gl', () => {
     resize() {}
     remove() {}
   }
-  return { default: { Map, AttributionControl: class {}, NavigationControl: class {} } }
+  const m = { Map, AttributionControl: class {}, NavigationControl: class {} }
+  return { default: m, ...m }
 })
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}))
 vi.mock('@/map/vunguBasemap', () => ({ addVunguBasemap: vi.fn(async () => ({ layerCount: 30 })), setBasemapLayerVisible: mapCalls.visible }))

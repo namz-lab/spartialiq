@@ -8,7 +8,7 @@
 // coordinates, zoom, scale, timestamp), an optional legend, and the data
 // attribution — the standard municipal map-sheet furniture.
 //
-// REQUIRES the map to be created with `preserveDrawingBuffer: true`; otherwise
+// REQUIRES the map to be created with `canvasContextAttributes: { preserveDrawingBuffer: true }`; otherwise
 // the WebGL drawing buffer is cleared after each frame and toDataURL() returns
 // a blank image. The shared InteractiveMap sets this (see its map options).
 // ─────────────────────────────────────────────────────────────────────────

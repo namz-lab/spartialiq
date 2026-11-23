@@ -8,7 +8,7 @@
 // or the CAD/draw sources already on the planner map.
 // ─────────────────────────────────────────────────────────────────────────
 
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 import {
   mpColor,
   LOT_USE_COLORS,

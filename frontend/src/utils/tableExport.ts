@@ -69,15 +69,20 @@ export function downloadCsv(t: ExportTable, base: string) {
   save(new Blob([toCsv(t)], { type: 'text/csv;charset=utf-8' }), `${stamped(base)}.csv`)
 }
 
+/** An Excel sheet name: at most 31 characters, none of \ / ? * [ ] : */
+export const sheetName = (title: string): string => title.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Table'
+
 /** Excel (.xlsx). The library is loaded on demand: it is large and most pages never export. */
 export async function downloadExcel(t: ExportTable, base: string) {
-  const XLSX = await import('xlsx')
-  const rows = toRows(t)
-  const ws = XLSX.utils.aoa_to_sheet(rows)
+  // exceljs, not SheetJS: the npm `xlsx` package stopped at 0.18.5, which carries unfixed advisories.
+  // A CommonJS package: the bundler hands it over as `default`, while its types declare named exports.
+  const mod = await import('exceljs')
+  const { Workbook } = (mod as unknown as { default?: typeof mod }).default ?? mod
+  const wb = new Workbook()
+  const ws = wb.addWorksheet(sheetName(t.title))
+  ws.addRows(toRows(t))
   // the title row wide enough to read, the first column wide for the names
-  ws['!cols'] = [{ wch: 34 }, ...t.columns.slice(1).map(() => ({ wch: 18 }))]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, t.title.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Table')
-  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
+  ws.columns = [{ width: 34 }, ...t.columns.slice(1).map(() => ({ width: 18 }))]
+  const data = await wb.xlsx.writeBuffer()
   save(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${stamped(base)}.xlsx`)
 }

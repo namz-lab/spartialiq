@@ -22,7 +22,7 @@ import { wgs84ToPyx, type ZimZone } from '@/utils/zimZones'
 import ProfileDropdown from '@/components/shared/ProfileDropdown.vue'
 import SurveyorToolsPanel from '@/views/SurveyorToolsPanel.vue'
 import SpecialistReferralsInbox from '@/components/workflow/SpecialistReferralsInbox.vue'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import {
   Compass, Search, RefreshCw, LayoutDashboard, ChevronRight, Layers,
