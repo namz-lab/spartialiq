@@ -773,8 +773,27 @@ const router = createRouter({
         title: 'Unit dashboard - Vungu RDC',
         requiresAuth: true,
         roles: ['accounting_officer', 'eo', 'finance_admin', 'engineer', 'hr_social_officer', 'auditor',
-          'civil_technician', 'roads_foreman', 'water_technician'],
+          'civil_technician', 'roads_foreman', 'water_technician', 'housing_officer', 'housing_clerk'],
       }
+    },
+    {
+      path: '/housing',
+      name: 'housing',
+      component: () => import('@/modules/housing/HousingWorkspace.vue'),
+      meta: {
+        title: 'Housing and Estates - Vungu RDC',
+        requiresAuth: true,
+        roles: ['housing_officer', 'housing_clerk', 'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk', 'admin'],
+      },
+    },
+    {
+      path: '/citizen/housing',
+      name: 'citizen-housing',
+      component: () => import('@/modules/housing/CitizenHousingView.vue'),
+      meta: {
+        title: 'Housing waiting list - Vungu RDC',
+        requiresAuth: true,
+      },
     },
     { path: '/gis-officer', redirect: '/gis-officer-portal' },
     {
@@ -985,6 +1004,8 @@ const ROLE_HOME: Record<Role, string> = {
   civil_technician:   '/units/engineering',
   roads_foreman:      '/units/engineering',
   water_technician:   '/units/engineering',
+  housing_officer:    '/housing',
+  housing_clerk:      '/housing',
   viewer:             '/citizen',
   registered:         '/citizen',
   public:             '/citizen',

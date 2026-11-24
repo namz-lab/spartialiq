@@ -35,7 +35,8 @@ const FINANCE_ROLES = [
 ]
 
 /** Heads of the Executive Arm's other units (migration 216). Each arrives with a unit dashboard at /units/<key>. */
-const UNIT_ROLES = ['engineer', 'hr_social_officer']
+const UNIT_ROLES = ['engineer', 'hr_social_officer', 'housing_officer']
+const HOUSING_ROLES = ['housing_clerk']
 
 /** Migration 250: staff under the District Engineer. Members of the Department of Roads and Works (config/units.js). */
 const ENGINEERING_ROLES = ['civil_technician', 'roads_foreman', 'water_technician']
@@ -46,6 +47,7 @@ const ALL_ROLES = [
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
   ...FINANCE_ROLES,
   ...UNIT_ROLES,
+  ...HOUSING_ROLES,
   ...ENGINEERING_ROLES,
   'viewer', 'registered', 'public',
 ]
@@ -57,6 +59,7 @@ const STAFF_ROLES = [
   'gis_head', 'gis_data', 'gis_dev', 'gis_analyst', 'gis_tech', 'gis_clerk', 'dept_editor', 'dept_viewer',
   ...FINANCE_ROLES,
   ...UNIT_ROLES,
+  ...HOUSING_ROLES,
   ...ENGINEERING_ROLES,
 ]
 
@@ -100,6 +103,8 @@ const ROLE_LABELS = {
   roads_foreman:      { name: 'Roads and Works Foreman/Technician', short: 'Foreman', summary: 'Under the Civil Engineering Technician (grade 8): runs the road gangs and plant on site. Reads the Roads and Works dashboard.' },
   water_technician:   { name: 'Water and Sanitation Technician', short: 'Water Tech', summary: 'Water points, boreholes and sanitation. Reads the Roads and Works dashboard. No post on the 2027 establishment.' },
   hr_social_officer:  { name: 'HR, Social Services & Administration Officer', short: 'HR & Social', summary: 'Heads Human Resources, Social Services and Administration. Reads own unit’s dashboard and ward maps.' },
+  housing_officer:    { name: 'Housing and Estates Officer', short: 'Housing', summary: 'Waiting list, stand allocation, cessions, leases and housing standards on the cadastre.' },
+  housing_clerk:      { name: 'Housing Clerk', short: 'Hsg Clerk', summary: 'Takes waiting-list entries, offer letters and cession files at the housing counter.' },
   viewer:             { name: 'Citizen (legacy account)',    short: 'Citizen',    summary: 'A client account from before self-registration. Same access as a registered citizen.' },
   registered:         { name: 'Registered citizen',          short: 'Citizen',    summary: 'Applies, pays and tracks their own case. Issued on self-registration.' },
   public:             { name: 'Public',                      short: 'Public',     summary: 'Anonymous visitor. The explorer and the public registers only.' },
@@ -196,6 +201,13 @@ const CAPABILITIES = [
   { id: 'admin.landuse',   group: 'Administration', label: 'Configure land-use zones and controls',
     roles: ['admin', 'planner'],
     routes: ['/api/land-use'] },
+
+  { id: 'housing.read',    group: 'Housing', label: 'Open the housing and estates registers',
+    roles: ['admin', 'housing_officer', 'housing_clerk', 'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk'],
+    routes: ['/api/housing'] },
+  { id: 'housing.write',   group: 'Housing', label: 'Allocate stands, issue offers and lodge cessions',
+    roles: ['admin', 'housing_officer', 'housing_clerk'],
+    routes: ['/api/housing'] },
 ]
 
 /**
@@ -219,6 +231,6 @@ function capabilitiesFor(role) {
 }
 
 module.exports = {
-  ALL_ROLES, STAFF_ROLES, FINANCE_ROLES, UNIT_ROLES, CLIENT_ROLES, ASSIGNABLE_ROLES, ROLE_LABELS,
+  ALL_ROLES, STAFF_ROLES, FINANCE_ROLES, UNIT_ROLES, HOUSING_ROLES, CLIENT_ROLES, ASSIGNABLE_ROLES, ROLE_LABELS,
   CAPABILITIES, matrix, capabilitiesFor,
 }

@@ -48,6 +48,8 @@ const VALID_ROLES = new Set([
   'civil_technician',
   'roads_foreman',
   'water_technician',
+  'housing_officer',
+  'housing_clerk',
 ])
 
 const DEFAULT_DEMO_USERS = [
@@ -99,6 +101,8 @@ const DEFAULT_DEMO_USERS = [
   { email: 'demo.roads-foreman@vungu.test', name: 'Demo Roads and Works Foreman', role: 'roads_foreman', department: 'Roads and Works' },
   { email: 'demo.water-tech@vungu.test', name: 'Demo Water and Sanitation Technician', role: 'water_technician', department: 'Roads and Works' },
   { email: 'demo.hr-social@vungu.test', name: 'Demo HR and Social Services Officer', role: 'hr_social_officer', department: 'Human Resources' },
+  { email: 'demo.housing@vungu.test', name: 'Demo Housing and Estates Officer', role: 'housing_officer', department: 'Housing and Estates' },
+  { email: 'demo.housing-clerk@vungu.test', name: 'Demo Housing Clerk', role: 'housing_clerk', department: 'Housing and Estates' },
 ]
 
 function normalizeEnabled(value) {

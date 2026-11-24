@@ -160,7 +160,7 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
     // the API refuses outright, nor leave out one that has a unit.
     expect([...rolesFor('/units/engineering')].sort()).toEqual(
       ['accounting_officer', 'auditor', 'engineer', 'eo', 'finance_admin', 'hr_social_officer',
-        'civil_technician', 'roads_foreman', 'water_technician'].sort())
+        'civil_technician', 'roads_foreman', 'water_technician', 'housing_officer', 'housing_clerk'].sort())
   })
 
   it('never lists a role the backend cannot issue', () => {
@@ -182,6 +182,7 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
       'engineer', 'hr_social_officer',
       // Migration 250: engineering staff under the Engineer.
       'civil_technician', 'roads_foreman', 'water_technician',
+      'housing_officer', 'housing_clerk',
     ]
     for (const r of router.getRoutes()) {
       for (const role of (r.meta?.roles ?? []) as Role[]) {
@@ -218,6 +219,8 @@ describe('roleHome', () => {
       civil_technician:   '/units/engineering',
       roads_foreman:      '/units/engineering',
       water_technician:   '/units/engineering',
+      housing_officer:    '/housing',
+      housing_clerk:      '/housing',
       viewer:             '/citizen',
       registered:         '/citizen',
       public:             '/citizen',

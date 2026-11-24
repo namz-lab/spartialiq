@@ -415,6 +415,7 @@ const MIGRATIONS = [
   '246_planning_fees_in_the_ledger.sql',
   // An inspection fee paid at the cash office releases the applicant's inspection booking (one stage paid, one booking), in either order; cancelling the receipt puts it back. Rollback: migrations/rollback/247_cash_office_inspection_fee_releases_booking.down.sql.
   '247_cash_office_inspection_fee_releases_booking.sql',
+  '259_housing_and_estates.sql',
 ]
 
 function createPool(env = process.env) {

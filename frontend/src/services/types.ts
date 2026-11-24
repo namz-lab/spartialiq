@@ -66,6 +66,8 @@ export type Role =
   | 'civil_technician'
   | 'roads_foreman'
   | 'water_technician'
+  | 'housing_officer'
+  | 'housing_clerk'
   | 'viewer'
   | 'registered'
   | 'public'

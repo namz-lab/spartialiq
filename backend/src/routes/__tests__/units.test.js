@@ -26,7 +26,7 @@ const { createSession } = require('../../middleware/jwtAuth')
 const dbContext = require('../../lib/dbContext')
 const { UNITS, canSeeUnit, unitOfRole } = require('../../config/units')
 
-const HEADS = { eo: 'planning', finance_admin: 'finance', engineer: 'engineering', hr_social_officer: 'social_admin', auditor: 'audit' }
+const HEADS = { eo: 'planning', finance_admin: 'finance', engineer: 'engineering', hr_social_officer: 'social_admin', housing_officer: 'housing', auditor: 'audit' }
 const ROLES = ['accounting_officer', ...Object.keys(HEADS), 'planner', 'admin']
 const people = Object.fromEntries(ROLES.map((role) => [role, { id: randomUUID(), role }]))
 const sessions = []
@@ -68,8 +68,8 @@ afterAll(async () => {
 }, 60000)
 
 describe('the unit access rule', () => {
-  test('is the same in the config and in the routes: five units, each headed by its role', () => {
-    expect(UNITS.map((u) => u.key).sort()).toEqual(['audit', 'engineering', 'finance', 'planning', 'social_admin'])
+  test('is the same in the config and in the routes: the Executive Arm units, each headed by its role', () => {
+    expect(UNITS.map((u) => u.key).sort()).toEqual(['audit', 'engineering', 'finance', 'housing', 'planning', 'social_admin'])
     for (const [role, key] of Object.entries(HEADS)) expect(unitOfRole(role)).toBe(key)
     expect(canSeeUnit({ role: 'accounting_officer' }, 'audit')).toBe(true)
     expect(canSeeUnit({ role: 'engineer' }, 'planning')).toBe(false)
@@ -90,7 +90,7 @@ describe('GET /api/units', () => {
   test('offers the Chief Executive all five units', async () => {
     const res = await get('/api/units', 'accounting_officer')
     expect(res.statusCode).toBe(200)
-    expect(res.json().data.map((u) => u.key).sort()).toEqual(['audit', 'engineering', 'finance', 'planning', 'social_admin'])
+    expect(res.json().data.map((u) => u.key).sort()).toEqual(['audit', 'engineering', 'finance', 'housing', 'planning', 'social_admin'])
   })
 
   test.each(Object.entries(HEADS))('offers the %s role only its own unit', async (role, key) => {

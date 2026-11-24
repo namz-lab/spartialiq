@@ -66,6 +66,7 @@ const isChief = computed(() => auth.user?.role === 'accounting_officer')
 // A unit's members (migration 250) are named by their own post, not the head's.
 const MEMBER_LABEL: Record<string, string> = {
   civil_technician: 'Civil Engineering Technician', roads_foreman: 'Roads and Works Foreman/Technician', water_technician: 'Water and Sanitation Technician',
+  housing_clerk: 'Housing Clerk',
 }
 const roleLabel = computed(() => (isChief.value ? 'Chief Executive'
   : MEMBER_LABEL[auth.user?.role ?? ''] ?? (dash.value?.unit.post ?? 'Unit head')))
@@ -76,7 +77,7 @@ function handleLogout() {
 }
 
 const ICONS: Record<UnitKey, Component> = {
-  finance: Banknote, planning: Building2, engineering: HardHat, social_admin: HeartPulse, audit: ShieldCheck,
+  finance: Banknote, planning: Building2, engineering: HardHat, social_admin: HeartPulse, housing: Building2, audit: ShieldCheck,
 }
 const icon = computed(() => ICONS[props.unit as UnitKey] ?? Building2)
 const title = computed(() => dash.value?.unit.label ?? UNIT_LABEL[props.unit as UnitKey] ?? 'Unit')

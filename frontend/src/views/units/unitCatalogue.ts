@@ -11,6 +11,8 @@ export const UNIT_OF_ROLE: Record<string, UnitKey | undefined> = {
   roads_foreman: 'engineering',
   water_technician: 'engineering',
   hr_social_officer: 'social_admin',
+  housing_officer: 'housing',
+  housing_clerk: 'housing',
   auditor: 'audit',
 }
 
@@ -19,6 +21,7 @@ export const UNIT_LABEL: Record<UnitKey, string> = {
   planning: 'Planning and Environment',
   engineering: 'Roads and Works',
   social_admin: 'Human Resources, Social Services and Administration',
+  housing: 'Housing and Estates',
   audit: 'Internal Audit',
 }
 

@@ -7,9 +7,9 @@ import type {
 } from './executiveOverview'
 import type { MapsIndex, WardMap, WardTable } from './spatialEngine'
 
-export type UnitKey = 'planning' | 'finance' | 'engineering' | 'social_admin' | 'audit'
+export type UnitKey = 'planning' | 'finance' | 'engineering' | 'social_admin' | 'housing' | 'audit'
 
-export const UNIT_KEYS: UnitKey[] = ['finance', 'planning', 'engineering', 'social_admin', 'audit']
+export const UNIT_KEYS: UnitKey[] = ['finance', 'planning', 'engineering', 'social_admin', 'housing', 'audit']
 
 export interface UnitDesk { label: string; path: string }
 
