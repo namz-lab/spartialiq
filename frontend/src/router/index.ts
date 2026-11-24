@@ -784,7 +784,7 @@ const router = createRouter({
         title: 'Housing and Estates - Vungu RDC',
         requiresAuth: true,
         roles: ['housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee',
-          'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk', 'admin', 'auditor', 'engineer'],
+          'accounting_officer', 'admin', 'auditor', 'engineer'],
       },
       children: [
         { path: '', name: 'housing', component: () => import('@/modules/housing/pages/HousingHome.vue') },

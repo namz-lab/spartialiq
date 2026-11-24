@@ -96,6 +96,7 @@ function checkPassword() {
 }
 
 const canSubmit = computed(() => !submitting.value && failure.value?.retryable !== false)
+const preferRoleHome = ref(false)
 
 async function focusBanner() {
   await nextTick()
@@ -213,7 +214,21 @@ async function goHome() {
     await router.push('/residency')
     return
   }
-  await router.push(redirectTo.value || roleHome(u?.role ?? ''))
+  const home = roleHome(u?.role ?? '')
+  if (preferRoleHome.value) {
+    preferRoleHome.value = false
+    await router.push(home)
+    return
+  }
+  const dest = redirectTo.value
+  if (dest) {
+    const allowed = router.resolve(dest).meta?.roles
+    if (!allowed || (u?.role && allowed.includes(u.role))) {
+      await router.push(dest)
+      return
+    }
+  }
+  await router.push(home)
 }
 
 // ── Demo accounts (local dev, and the hosted demo when the flag is on) ─
@@ -280,16 +295,29 @@ const housingDemoAccounts: DemoAccount[] = showDemoLogins
     ]
   : []
 
-function fillDemo(account: DemoAccount) {
+const demoTab = ref<'planning' | 'finance' | 'housing' | 'works' | 'hr'>('planning')
+const demoGroups = computed(() => ([
+  { id: 'planning' as const, label: 'Planning', accounts: demoAccounts },
+  { id: 'finance' as const, label: 'Finance', accounts: financeDemoAccounts },
+  { id: 'housing' as const, label: 'Housing', accounts: housingDemoAccounts },
+  { id: 'works' as const, label: 'Roads & Works', accounts: engineeringDemoAccounts },
+  { id: 'hr' as const, label: 'HR & Social', accounts: socialDemoAccounts },
+]))
+const visibleDemo = computed(() => demoGroups.value.find((g) => g.id === demoTab.value)?.accounts ?? [])
+
+async function fillDemo(account: DemoAccount) {
   email.value = account.email
   password.value = account.password
   errors.value = {}
   failure.value = null
+  preferRoleHome.value = true
+  await handleSubmit()
 }
 </script>
 
 <template>
   <AuthShell
+    :wide="showDemoLogins"
     lede="Sign in to the council's planning record."
     copy="Development applications, building inspections, statutory registers and the district spatial data, in one place."
     :points="[
@@ -382,54 +410,26 @@ function fillDemo(account: DemoAccount) {
       </p>
 
       <div v-if="showDemoLogins" class="auth-demo">
-        <p class="auth-demo-title">Demo accounts</p>
-        <p class="auth-demo-group">Planning &amp; operations</p>
-        <div class="auth-demo-grid">
+        <p class="auth-demo-title">Demo accounts — pick a department, then a post. Each signs in to its own desk.</p>
+        <div class="auth-demo-tabs" role="tablist" aria-label="Demo departments">
           <button
-            v-for="d in demoAccounts"
-            :key="d.email"
+            v-for="g in demoGroups"
+            :key="g.id"
             type="button"
-            class="auth-demo-pill"
-            @click="fillDemo(d)"
-          >{{ d.label }}</button>
+            class="auth-demo-tab"
+            :class="{ on: demoTab === g.id }"
+            role="tab"
+            :aria-selected="demoTab === g.id"
+            @click="demoTab = g.id"
+          >{{ g.label }}</button>
         </div>
-        <p class="auth-demo-group">Budget &amp; finance</p>
         <div class="auth-demo-grid">
           <button
-            v-for="d in financeDemoAccounts"
+            v-for="d in visibleDemo"
             :key="d.email"
             type="button"
             class="auth-demo-pill"
-            @click="fillDemo(d)"
-          >{{ d.label }}</button>
-        </div>
-        <p class="auth-demo-group">Housing and Estates</p>
-        <div class="auth-demo-grid">
-          <button
-            v-for="d in housingDemoAccounts"
-            :key="d.email"
-            type="button"
-            class="auth-demo-pill"
-            @click="fillDemo(d)"
-          >{{ d.label }}</button>
-        </div>
-        <p class="auth-demo-group">Roads and Works</p>
-        <div class="auth-demo-grid">
-          <button
-            v-for="d in engineeringDemoAccounts"
-            :key="d.email"
-            type="button"
-            class="auth-demo-pill"
-            @click="fillDemo(d)"
-          >{{ d.label }}</button>
-        </div>
-        <p class="auth-demo-group">HR, Social &amp; Administration</p>
-        <div class="auth-demo-grid">
-          <button
-            v-for="d in socialDemoAccounts"
-            :key="d.email"
-            type="button"
-            class="auth-demo-pill"
+            :disabled="submitting"
             @click="fillDemo(d)"
           >{{ d.label }}</button>
         </div>
