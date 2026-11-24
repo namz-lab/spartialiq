@@ -160,7 +160,8 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
     // the API refuses outright, nor leave out one that has a unit.
     expect([...rolesFor('/units/engineering')].sort()).toEqual(
       ['accounting_officer', 'auditor', 'engineer', 'eo', 'finance_admin', 'hr_social_officer',
-        'civil_technician', 'roads_foreman', 'water_technician', 'housing_officer', 'housing_clerk'].sort())
+        'civil_technician', 'roads_foreman', 'water_technician', 'housing_officer', 'housing_clerk',
+        'housing_research', 'housing_area', 'housing_legal', 'housing_committee'].sort())
   })
 
   it('never lists a role the backend cannot issue', () => {
@@ -183,6 +184,7 @@ describe('route role allow-lists (pre-M0.2 behaviour preserved)', () => {
       // Migration 250: engineering staff under the Engineer.
       'civil_technician', 'roads_foreman', 'water_technician',
       'housing_officer', 'housing_clerk',
+      'housing_research', 'housing_area', 'housing_legal', 'housing_committee',
     ]
     for (const r of router.getRoutes()) {
       for (const role of (r.meta?.roles ?? []) as Role[]) {
@@ -221,6 +223,10 @@ describe('roleHome', () => {
       water_technician:   '/units/engineering',
       housing_officer:    '/housing',
       housing_clerk:      '/housing',
+      housing_research:   '/housing',
+      housing_area:       '/housing',
+      housing_legal:      '/housing',
+      housing_committee:  '/housing',
       viewer:             '/citizen',
       registered:         '/citizen',
       public:             '/citizen',

@@ -445,6 +445,15 @@ async function financePropertyRoutes(fastify) {
           WHERE p.status = 'current' AND p.allocation_status = 'allocated'
             AND NOT EXISTS (SELECT 1 FROM public.stand_allocation a WHERE a.stand_id = p.parcel_id AND a.deleted_at IS NULL)
             AND NOT EXISTS (SELECT 1 FROM land.stand_offer o WHERE o.parcel_id = p.parcel_id AND o.status = 'allocated')
+         UNION ALL
+         -- Housing and Estates allocations (migration 260): a reserved or sold stand is the same parcel Finance bills.
+         SELECT 'StandAllocated', 'housing:' || h.id::text, h.parcel_id,
+                jsonb_build_object('allottee_name', h.allottee_name, 'allocated_at', h.allocated_on,
+                                   'stand_no', p.stand_no, 'township', p.township_code,
+                                   'price_usd', h.purchase_price, 'source', 'housing.allocation')
+           FROM housing.allocation h
+           JOIN land.parcel p ON p.parcel_id = h.parcel_id
+          WHERE h.ended_at IS NULL AND h.status NOT IN ('cancelled', 'repossessed')
        )
        INSERT INTO finance.property_integration_event (event_type, source_ref, dedupe_key, parcel_id, payload, run_id)
        SELECT event_type, source_ref, event_type || ':' || source_ref, parcel_id, payload, $1 FROM found

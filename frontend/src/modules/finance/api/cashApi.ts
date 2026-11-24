@@ -14,7 +14,7 @@ import api from '../../../services/api'
 import type { Currency } from '../models/types'
 import type {
   BankDeposit, CashAssignment, CashDesk, CashDrawer, CashMethod, CashReceipt, CashierDashboard, CashierSession,
-  CashierSessionDetail, PaymentChannel, PlanningApplicationHit, PlanningFeeKind, PlanningReceiptBody, PrintableReceipt,
+  CashierSessionDetail, HousingAllocationHit, HousingReceiptBody, PaymentChannel, PlanningApplicationHit, PlanningFeeKind, PlanningReceiptBody, PrintableReceipt,
   QueueTicket, RatesCounterReceiptBody, SessionEvent, SessionStatus, SetupAccounts, StaffOption, SundryReceiptBody,
 } from '../models/cashTypes'
 
@@ -134,6 +134,14 @@ export const cashApi = {
 
   async planningApplications(q: string): Promise<{ applications: PlanningApplicationHit[] }> {
     return unwrap(await api.get('/finance/cash/planning-applications', { params: { q } }))
+  },
+
+  async issueHousingReceipt(body: HousingReceiptBody): Promise<{ receipt: CashReceipt; allocation: HousingAllocationHit | null }> {
+    return unwrap(await api.post('/finance/cash/receipts/housing', body))
+  },
+
+  async housingAllocations(q: string): Promise<{ allocations: HousingAllocationHit[] }> {
+    return unwrap(await api.get('/finance/cash/housing-allocations', { params: { q } }))
   },
 
   async issueRatesReceipt(body: RatesCounterReceiptBody): Promise<{ receipt: CashReceipt }> {

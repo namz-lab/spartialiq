@@ -258,6 +258,10 @@ const financeDemoAccounts: DemoAccount[] = showDemoLogins
       { label: 'HR & Social',   email: 'demo.hr-social@vungu.test',       password: 'demo1234', role: 'hr_social_officer' },
       { label: 'Housing',       email: 'demo.housing@vungu.test',         password: 'demo1234', role: 'housing_officer' },
       { label: 'Housing clerk', email: 'demo.housing-clerk@vungu.test',   password: 'demo1234', role: 'housing_clerk' },
+      { label: 'Hsg research',  email: 'demo.housing-research@vungu.test', password: 'demo1234', role: 'housing_research' },
+      { label: 'Area housing',  email: 'demo.housing-area@vungu.test',    password: 'demo1234', role: 'housing_area' },
+      { label: 'Hsg legal',     email: 'demo.housing-legal@vungu.test',   password: 'demo1234', role: 'housing_legal' },
+      { label: 'Alloc. ctte',   email: 'demo.housing-committee@vungu.test', password: 'demo1234', role: 'housing_committee' },
     ]
   : []
 

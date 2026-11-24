@@ -16,7 +16,7 @@ import { cashApi } from '../../../api/cashApi'
 import { messageOf, useFinanceStore } from '../../../stores/finance'
 import { formatMoney, type Currency } from '../../../composables/useMoney'
 import { centsToText, lineCents, toCents } from '../../../composables/cashMath'
-import { chargeIn, planningFeeLabel, receiptableIn, type CashMethod, type CashReceipt, type PlanningApplicationHit } from '../../../models/cashTypes'
+import { chargeIn, planningFeeLabel, receiptableIn, type CashMethod, type CashReceipt, type HousingAllocationHit, type PlanningApplicationHit } from '../../../models/cashTypes'
 import { useCashier } from '../useCashier'
 import { tenderNarration, viewOfPrintable, type ReceiptView } from '../receipt'
 import MethodTiles from '../components/MethodTiles.vue'
@@ -84,8 +84,13 @@ const totalCents = computed<bigint | null>(() => {
 })
 // ── A planning fee names its application (migration 246) ─────────────────────────────────────
 const kindOf = (l: Line) => codeById.value.get(l.income_code_id)?.planning_fee_kind ?? null
+const housingKindOf = (l: Line) => codeById.value.get(l.income_code_id)?.housing_fee_kind ?? null
 const isPlanning = computed(() => lines.value.some((l) => kindOf(l)))
-const mixed = computed(() => isPlanning.value && lines.value.some((l) => l.income_code_id && !kindOf(l)))
+const isHousing = computed(() => lines.value.some((l) => housingKindOf(l)))
+const mixed = computed(() =>
+  (isPlanning.value && lines.value.some((l) => l.income_code_id && !kindOf(l)))
+  || (isHousing.value && lines.value.some((l) => l.income_code_id && !housingKindOf(l)))
+  || (isPlanning.value && isHousing.value))
 const paysApplicationFee = computed(() => lines.value.some((l) => kindOf(l) === 'application'))
 const application = ref<PlanningApplicationHit | null>(null)
 const appQuery = ref('')
@@ -117,6 +122,35 @@ function chooseApplication(a: PlanningApplicationHit): void {
 }
 const appLabel = (a: PlanningApplicationHit) => a.tpd_reference || a.dev_register_no || (a.stand_number ? `Stand ${a.stand_number}` : 'Application')
 const issuedApplication = ref<PlanningApplicationHit | null>(null)
+const allocation = ref<HousingAllocationHit | null>(null)
+const allocQuery = ref('')
+const allocHits = ref<HousingAllocationHit[]>([])
+const allocSearching = ref(false)
+const allocSearched = ref(false)
+let allocTimer: ReturnType<typeof setTimeout> | undefined
+watch(allocQuery, (q) => {
+  clearTimeout(allocTimer)
+  allocSearched.value = false
+  if (q.trim().length < 2) { allocHits.value = []; return }
+  allocTimer = setTimeout(async () => {
+    allocSearching.value = true
+    try {
+      allocHits.value = (await cashApi.housingAllocations(q.trim())).allocations
+    } catch (err) {
+      error.value = messageOf(err, 'Housing allocations could not be searched.')
+    } finally {
+      allocSearching.value = false
+      allocSearched.value = true
+    }
+  }, 250)
+})
+function chooseAllocation(a: HousingAllocationHit): void {
+  allocation.value = a
+  allocQuery.value = ''
+  allocHits.value = []
+  if (payer.value.trim().length < 2 && a.allottee_name) payer.value = a.allottee_name
+}
+const issuedAllocation = ref<HousingAllocationHit | null>(null)
 
 const tenderedCents = computed(() => (isCash.value ? toCents(tendered.value.replace(/,/g, '')) : totalCents.value))
 const changeCents = computed(() => (isCash.value && tenderedCents.value !== null && totalCents.value !== null ? tenderedCents.value - totalCents.value : null))
@@ -126,8 +160,9 @@ const problem = computed<string | null>(() => {
   if (payer.value.trim().length < 2) return 'Enter who is paying.'
   if (lines.value.some((l) => !l.income_code_id)) return 'Choose what each line is for.'
   if (!totalCents.value) return 'Enter an amount for each line.'
-  if (mixed.value) return 'A planning fee goes on a receipt of its own. Take the other services on a separate receipt.'
+  if (mixed.value) return 'A planning fee or a housing fee goes on a receipt of its own. Take the other services on a separate receipt.'
   if (isPlanning.value && !application.value) return 'Find the planning application this fee is for.'
+  if (isHousing.value && !allocation.value) return 'Find the housing allocation this fee is for.'
   if (!isCash.value) {
     if (!depositAccount.value) return 'Choose the bank or wallet account this payment was made into.'
     if (reference.value.trim().length < 3) return 'Enter the transaction reference.'
@@ -170,9 +205,16 @@ async function issue(): Promise<void> {
       const planned = await cashApi.issuePlanningReceipt({ ...body, permit_application_id: application.value.id })
       receipt = planned.receipt
       issuedApplication.value = planned.application
+      issuedAllocation.value = null
+    } else if (isHousing.value && allocation.value) {
+      const housed = await cashApi.issueHousingReceipt({ ...body, allocation_id: allocation.value.id })
+      receipt = housed.receipt
+      issuedAllocation.value = housed.allocation
+      issuedApplication.value = null
     } else {
       receipt = (await cashApi.issueReceipt(body)).receipt
       issuedApplication.value = null
+      issuedAllocation.value = null
     }
     const result = { receipt }
     issued.value = result.receipt
@@ -285,7 +327,7 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
                 <td style="min-width: 220px">
                   <select v-model="l.income_code_id" class="cw-select" :aria-label="'Service'" :class="{ 'is-invalid': attempted && !l.income_code_id }">
                     <option value="" disabled>Choose a service</option>
-                    <option v-for="c in codes" :key="c.id" :value="c.id">{{ c.name }}{{ c.planning_fee_kind ? ' · planning fee' : '' }}</option>
+                    <option v-for="c in codes" :key="c.id" :value="c.id">{{ c.name }}{{ c.planning_fee_kind ? ' · planning fee' : c.housing_fee_kind ? ' · housing fee' : '' }}</option>
                   </select>
                 </td>
                 <td class="r" style="width: 96px"><input v-model="l.quantity" class="cw-input num" inputmode="decimal" aria-label="Quantity" style="text-align: right" /></td>
@@ -300,7 +342,7 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
             <tfoot><tr><th colspan="3">Total</th><td colspan="2">{{ money(totalCents) }}</td></tr></tfoot>
           </table>
           <p v-if="mixed" class="cw-banner-msg cw-banner-msg--neg" role="alert" style="margin-top: 12px">
-            <AlertTriangle :size="18" aria-hidden="true" />A planning fee goes on a receipt of its own. Take the other services on a separate receipt.
+            <AlertTriangle :size="18" aria-hidden="true" />A planning fee or a housing fee goes on a receipt of its own. Take the other services on a separate receipt.
           </p>
         </div>
       </section>
@@ -347,6 +389,45 @@ const money = (c: bigint | null) => formatMoney(c === null ? null : centsToText(
           <p class="cw-muted ir-kinds">
             Paying for: {{ [...new Set(lines.map(kindOf).filter(Boolean))].map(planningFeeLabel).join(', ') }}
           </p>
+        </div>
+      </section>
+
+      <section v-if="isHousing" class="cw-card" aria-labelledby="ir-h" data-testid="ir-allocation">
+        <div class="cw-card-head"><h3 id="ir-h"><Landmark :size="26" class="cw-head-icon" aria-hidden="true" /> Housing allocation</h3></div>
+        <div class="cw-card-body ir-stack">
+          <div v-if="allocation" class="ir-app">
+            <div>
+              <strong>{{ allocation.stand_no || allocation.parcel_id }}</strong>
+              <span class="ir-app-sub">
+                {{ allocation.allottee_name }} · {{ allocation.status.replace(/_/g, ' ') }}
+                <template v-if="allocation.list_no"> · {{ allocation.list_no }}</template>
+              </span>
+              <span v-if="allocation.deposit_paid" class="ir-app-warn" role="status">A deposit is already on this allocation.</span>
+            </div>
+            <button type="button" class="cw-btn cw-btn--small" @click="allocation = null">Change</button>
+          </div>
+          <template v-else>
+            <label class="cw-field">
+              <span class="cw-label">Find the allocation <span class="req">*</span></span>
+              <span class="ir-search">
+                <Search :size="16" aria-hidden="true" />
+                <input v-model="allocQuery" class="cw-input" autocomplete="off" maxlength="80"
+                       placeholder="Allottee, stand number or waiting-list number"
+                       :class="{ 'is-invalid': attempted && !allocation }" />
+              </span>
+            </label>
+            <p v-if="allocSearching" class="cw-muted">Searching…</p>
+            <ul v-else-if="allocHits.length" class="ir-hits" aria-label="Matching allocations">
+              <li v-for="a in allocHits" :key="a.id">
+                <button type="button" class="ir-hit" @click="chooseAllocation(a)">
+                  <strong>{{ a.stand_no || a.parcel_id }}</strong>
+                  <span>{{ a.allottee_name }}<template v-if="a.list_no"> · {{ a.list_no }}</template></span>
+                  <span class="ir-hit-tag" :class="{ 'is-paid': a.deposit_paid }">{{ a.deposit_paid ? 'Deposit paid' : 'Deposit not paid' }}</span>
+                </button>
+              </li>
+            </ul>
+            <p v-else-if="allocSearched" class="cw-muted">No housing allocation matches. Check the stand with Housing.</p>
+          </template>
         </div>
       </section>
     </div>

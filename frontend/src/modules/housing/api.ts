@@ -5,6 +5,12 @@ async function data<T>(p: Promise<{ data: { success: boolean; data: T } }>): Pro
 }
 
 export const housingApi = {
+  desk: () => data(api.get('/housing/desk')),
+  cross: (parcelId: string) => data(api.get(`/housing/cross/${encodeURIComponent(parcelId)}`)),
+  dualOwnership: (q: string) => data(api.get('/housing/dual-ownership', { params: { q } })),
+  committee: () => data(api.get('/housing/committee')),
+  openSitting: (body: Record<string, unknown>) => data(api.post('/housing/committee', body)),
+  addCommitteeItem: (id: string, body: Record<string, unknown>) => data(api.post(`/housing/committee/${id}/items`, body)),
   overview: () => data(api.get('/housing/overview')),
   schemes: () => data(api.get('/housing/schemes')),
   stands: (params: Record<string, string | number | undefined> = {}) => data(api.get('/housing/stands', { params })),

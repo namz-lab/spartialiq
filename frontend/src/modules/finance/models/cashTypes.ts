@@ -55,6 +55,8 @@ export interface IncomeCode {
   status: 'active' | 'inactive'
   /** Migration 246: set when this income is a planning fee, so its receipt names the application. */
   planning_fee_kind?: PlanningFeeKind | null
+  /** Migration 260: set when this income is a housing fee, so its receipt names the allocation. */
+  housing_fee_kind?: HousingFeeKind | null
 }
 
 /** The kinds of planning fee (migration 246), the planning clerk register's own. */
@@ -76,6 +78,30 @@ export const PLANNING_FEE_KINDS: { value: PlanningFeeKind; label: string }[] = [
 
 export const planningFeeLabel = (kind: string | null | undefined): string =>
   PLANNING_FEE_KINDS.find((k) => k.value === kind)?.label ?? (kind ? kind.replace(/_/g, ' ') : '')
+
+export type HousingFeeKind =
+  | 'stand_deposit' | 'stand_balance' | 'lease_rent' | 'cession_fee' | 'occupation_fee' | 'other'
+
+export const HOUSING_FEE_KINDS: { value: HousingFeeKind; label: string }[] = [
+  { value: 'stand_deposit', label: 'Stand deposit' },
+  { value: 'stand_balance', label: 'Stand balance' },
+  { value: 'lease_rent', label: 'Lease rent' },
+  { value: 'cession_fee', label: 'Cession fee' },
+  { value: 'occupation_fee', label: 'Occupation certificate' },
+  { value: 'other', label: 'Other housing fee' },
+]
+
+export interface HousingAllocationHit {
+  id: string
+  allottee_name: string
+  status: string
+  parcel_id: string
+  stand_no: string | null
+  township_code: string | null
+  deposit_due: string | null
+  deposit_paid: boolean
+  list_no: string | null
+}
 
 /** A planning application as the cashier picks it (GET /finance/cash/planning-applications). */
 export interface PlanningApplicationHit {
@@ -430,6 +456,10 @@ export interface SundryReceiptBody {
 /** A planning fee at the counter: the same receipt, every line a planning fee, naming the application. */
 export interface PlanningReceiptBody extends SundryReceiptBody {
   permit_application_id: string
+}
+
+export interface HousingReceiptBody extends SundryReceiptBody {
+  allocation_id: string
 }
 
 export interface RatesCounterReceiptBody {

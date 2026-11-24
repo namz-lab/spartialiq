@@ -45,6 +45,7 @@ const METHODS = ['cash', 'cheque', 'mobile_money', 'card', 'bank_transfer']
 /** The kinds of planning fee (migration 246), the clerk register's own (128). */
 const PLANNING_FEE_KINDS = ['application', 'plan_scrutiny', 'public_notice', 'inspection', 'occupation',
   'appeal', 'search', 'copies', 'other']
+const HOUSING_FEE_KINDS = ['stand_deposit', 'stand_balance', 'lease_rent', 'cession_fee', 'occupation_fee', 'other']
 /** public.payments.driver (064): the online providers a payment channel names. */
 const PAYMENT_DRIVERS = ['manual', 'paynow', 'stripe', 'ecocash', 'onemoney']
 const SESSION_STATUSES = ['open', 'suspended', 'abandoned', 'closed', 'verified']
@@ -418,7 +419,7 @@ async function financeCashRoutes(fastify) {
             WHERE cp.deleted_at IS NULL ORDER BY cp.code`, [request.user.id]),
         pg.query(
           `SELECT i.id, i.code, i.name, i.pricing, i.unit_amount_usd::text AS unit_amount_usd,
-                  i.unit_amount_zwg::text AS unit_amount_zwg, i.status, i.planning_fee_kind
+                  i.unit_amount_zwg::text AS unit_amount_zwg, i.status, i.planning_fee_kind, i.housing_fee_kind
              FROM finance.income_code i WHERE i.deleted_at IS NULL ORDER BY i.name`),
         pg.query(
           `SELECT id, code, name FROM finance.ledger_account
@@ -1458,6 +1459,99 @@ async function financeCashRoutes(fastify) {
       return ok(reply, { receipt: rows[0], application: app[0] || null }, 201)
     } catch (err) {
       return refuse(reply, err, 'The receipt could not be issued.')
+    }
+  })
+
+  /**
+   * A housing fee at the counter (migration 260). Each line is a housing income code and the
+   * allocation is named so the deposit clock and the agreement of sale can see the receipt.
+   */
+  fastify.post('/finance/cash/receipts/housing', {
+    ...canReceipt,
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false,
+        required: ['session_id', 'allocation_id', 'payer_name', 'currency', 'method', 'lines'],
+        properties: {
+          ...receiptCommon,
+          allocation_id: uuid,
+          payer_name: { type: 'string', minLength: 2, maxLength: 160 },
+          party_id: uuid,
+          payer_person_id: uuid,
+          lines: {
+            type: 'array', minItems: 1, maxItems: 20,
+            items: {
+              type: 'object', additionalProperties: false, required: ['income_code_id'],
+              properties: {
+                income_code_id: uuid,
+                quantity: { anyOf: [{ type: 'string', maxLength: 16 }, { type: 'number' }] },
+                unit_amount: money,
+                narration: { type: 'string', maxLength: 300 },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const b = request.body
+    const checked = normaliseLines(b.lines)
+    if (!checked.ok) return fail(reply, 400, 'lines_invalid', checked.message)
+    try {
+      const id = await transact(async (client) => {
+        const { rows } = await client.query(
+          'SELECT finance.record_housing_fee_receipt($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11) AS id',
+          [b.session_id, request.user.id, b.allocation_id, b.payer_name, b.currency, b.method,
+            JSON.stringify(checked.lines), b.deposit_account_id || null, b.party_id || null,
+            b.method_reference || null, b.narration || null])
+        if (b.payer_person_id) await linkPayer(client, rows[0].id, b.payer_person_id, request.user.id)
+        return rows[0].id
+      })
+      const [{ rows }, { rows: alloc }] = await Promise.all([
+        pg.query(`${RECEIPT_SELECT} WHERE r.receipt_id = $1`, [id]),
+        pg.query(
+          `SELECT a.id, a.parcel_id, a.allottee_name, a.status, p.stand_no, a.deposit_receipt_id
+             FROM housing.allocation a JOIN land.parcel p ON p.parcel_id = a.parcel_id
+            WHERE a.id = $1`, [b.allocation_id]),
+      ])
+      request.auditDetails = {
+        action: 'housing_fee_receipt_issued', receipt_id: id, receipt_no: rows[0].receipt_no,
+        allocation_id: b.allocation_id, amount: rows[0].amount, currency: rows[0].currency,
+        method: rows[0].method, lines: checked.lines.length,
+      }
+      return ok(reply, { receipt: rows[0], allocation: alloc[0] || null }, 201)
+    } catch (err) {
+      return refuse(reply, err, 'The receipt could not be issued.')
+    }
+  })
+
+  fastify.get('/finance/cash/housing-allocations', {
+    ...canReceipt,
+    schema: {
+      querystring: {
+        type: 'object', additionalProperties: false, required: ['q'],
+        properties: { q: { type: 'string', minLength: 2, maxLength: 80 } },
+      },
+    },
+  }, async (request, reply) => {
+    const like = `%${request.query.q.trim().replace(/[%_\\]/g, '\\$&')}%`
+    try {
+      const { rows } = await pg.query(
+        `SELECT a.id, a.allottee_name, a.status, a.parcel_id, p.stand_no, p.township_code,
+                a.deposit_due::text AS deposit_due, a.deposit_receipt_id IS NOT NULL AS deposit_paid,
+                w.list_no
+           FROM housing.allocation a
+           JOIN land.parcel p ON p.parcel_id = a.parcel_id
+           LEFT JOIN housing.waiting_list w ON w.id = a.waiting_list_id
+          WHERE a.ended_at IS NULL
+            AND (a.allottee_name ILIKE $1 OR a.parcel_id ILIKE $1 OR p.stand_no ILIKE $1
+                 OR COALESCE(w.list_no,'') ILIKE $1)
+          ORDER BY a.allocated_on DESC NULLS LAST
+          LIMIT 20`, [like])
+      return ok(reply, { allocations: rows })
+    } catch (err) {
+      request.log.error({ err }, 'housing allocations search failed')
+      return fail(reply, 500, 'failed', 'Housing allocations could not be searched.')
     }
   })
 

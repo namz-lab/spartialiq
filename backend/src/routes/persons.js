@@ -39,7 +39,7 @@ const registrarGeneral = require('../services/registrarGeneral')
 const { VERIFIERS } = assurance
 
 const REGISTRARS = ['planning_clerk', 'planner', 'eo', 'cashier', 'cash_supervisor', 'revenue_officer', 'finance_officer', 'admin']
-const READERS = [...REGISTRARS, 'accounting_officer', 'engineer', 'civil_technician', 'finance_admin', 'housing_officer', 'housing_clerk']
+const READERS = [...REGISTRARS, 'accounting_officer', 'engineer', 'civil_technician', 'finance_admin', 'housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee']
 const REVEALERS = ['planning_clerk', 'eo', 'cashier', 'cash_supervisor', 'revenue_officer', 'admin']
 const LINKERS = ['planning_clerk', 'planner', 'eo', 'admin']
 

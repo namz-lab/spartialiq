@@ -36,7 +36,7 @@ const FINANCE_ROLES = [
 
 /** Heads of the Executive Arm's other units (migration 216). Each arrives with a unit dashboard at /units/<key>. */
 const UNIT_ROLES = ['engineer', 'hr_social_officer', 'housing_officer']
-const HOUSING_ROLES = ['housing_clerk']
+const HOUSING_ROLES = ['housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee']
 
 /** Migration 250: staff under the District Engineer. Members of the Department of Roads and Works (config/units.js). */
 const ENGINEERING_ROLES = ['civil_technician', 'roads_foreman', 'water_technician']
@@ -105,6 +105,10 @@ const ROLE_LABELS = {
   hr_social_officer:  { name: 'HR, Social Services & Administration Officer', short: 'HR & Social', summary: 'Heads Human Resources, Social Services and Administration. Reads own unit’s dashboard and ward maps.' },
   housing_officer:    { name: 'Housing and Estates Officer', short: 'Housing', summary: 'Waiting list, stand allocation, cessions, leases and housing standards on the cadastre.' },
   housing_clerk:      { name: 'Housing Clerk', short: 'Hsg Clerk', summary: 'Takes waiting-list entries, offer letters and cession files at the housing counter.' },
+  housing_research:   { name: 'Housing Research Officer', short: 'Hsg Research', summary: 'Fact paper, dual-ownership search, interviews and recommendations to the allocations committee.' },
+  housing_area:       { name: 'Area Housing Officer', short: 'Area Housing', summary: 'Servicing, leases, occupation and Housing Standards Control Act orders on the stands in their area.' },
+  housing_legal:      { name: 'Housing Legal Officer', short: 'Hsg Legal', summary: 'Agreements of sale, cessions and title after Treasurer clearance.' },
+  housing_committee:  { name: 'Allocations Committee', short: 'Alloc. Ctte', summary: 'Minutes and recommendations: who may be offered a stand from the waiting list.' },
   viewer:             { name: 'Citizen (legacy account)',    short: 'Citizen',    summary: 'A client account from before self-registration. Same access as a registered citizen.' },
   registered:         { name: 'Registered citizen',          short: 'Citizen',    summary: 'Applies, pays and tracks their own case. Issued on self-registration.' },
   public:             { name: 'Public',                      short: 'Public',     summary: 'Anonymous visitor. The explorer and the public registers only.' },
@@ -203,10 +207,10 @@ const CAPABILITIES = [
     routes: ['/api/land-use'] },
 
   { id: 'housing.read',    group: 'Housing', label: 'Open the housing and estates registers',
-    roles: ['admin', 'housing_officer', 'housing_clerk', 'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk'],
+    roles: ['admin', 'housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee', 'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk', 'auditor', 'engineer'],
     routes: ['/api/housing'] },
   { id: 'housing.write',   group: 'Housing', label: 'Allocate stands, issue offers and lodge cessions',
-    roles: ['admin', 'housing_officer', 'housing_clerk'],
+    roles: ['admin', 'housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee'],
     routes: ['/api/housing'] },
 ]
 

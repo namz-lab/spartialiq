@@ -24,7 +24,7 @@ const UNITS = [
   { key: 'social_admin', label: 'Human Resources, Social Services and Administration', post: 'Human Resources, Social Services & Administration Officer',
     headRole: 'hr_social_officer', section: 'social_services', sections: ['social_services', 'hr'], desks: [] },
   { key: 'housing', label: 'Housing and Estates', post: 'Housing and Estates Officer',
-    headRole: 'housing_officer', memberRoles: ['housing_clerk'], section: 'housing', sections: ['housing'],
+    headRole: 'housing_officer', memberRoles: ['housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee'], section: 'housing', sections: ['housing'],
     desks: [{ label: 'Housing desk', path: '/housing' }] },
   { key: 'audit', label: 'Internal Audit', post: 'Internal Auditor', headRole: 'auditor', section: 'audit', sections: ['audit'],
     desks: [{ label: 'Audit workspace', path: '/finance' }] },

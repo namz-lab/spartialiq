@@ -13,6 +13,10 @@ export const UNIT_OF_ROLE: Record<string, UnitKey | undefined> = {
   hr_social_officer: 'social_admin',
   housing_officer: 'housing',
   housing_clerk: 'housing',
+  housing_research: 'housing',
+  housing_area: 'housing',
+  housing_legal: 'housing',
+  housing_committee: 'housing',
   auditor: 'audit',
 }
 

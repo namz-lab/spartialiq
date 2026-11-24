@@ -50,6 +50,10 @@ const VALID_ROLES = new Set([
   'water_technician',
   'housing_officer',
   'housing_clerk',
+  'housing_research',
+  'housing_area',
+  'housing_legal',
+  'housing_committee',
 ])
 
 const DEFAULT_DEMO_USERS = [
@@ -103,6 +107,10 @@ const DEFAULT_DEMO_USERS = [
   { email: 'demo.hr-social@vungu.test', name: 'Demo HR and Social Services Officer', role: 'hr_social_officer', department: 'Human Resources' },
   { email: 'demo.housing@vungu.test', name: 'Demo Housing and Estates Officer', role: 'housing_officer', department: 'Housing and Estates' },
   { email: 'demo.housing-clerk@vungu.test', name: 'Demo Housing Clerk', role: 'housing_clerk', department: 'Housing and Estates' },
+  { email: 'demo.housing-research@vungu.test', name: 'Demo Housing Research Officer', role: 'housing_research', department: 'Housing and Estates' },
+  { email: 'demo.housing-area@vungu.test', name: 'Demo Area Housing Officer', role: 'housing_area', department: 'Housing and Estates' },
+  { email: 'demo.housing-legal@vungu.test', name: 'Demo Housing Legal Officer', role: 'housing_legal', department: 'Housing and Estates' },
+  { email: 'demo.housing-committee@vungu.test', name: 'Demo Allocations Committee Member', role: 'housing_committee', department: 'Housing and Estates' },
 ]
 
 function normalizeEnabled(value) {

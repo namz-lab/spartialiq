@@ -38,10 +38,59 @@
 const { requireAuth, requireRole } = require('../middleware/jwtAuth')
 
 const STAFF = [
-  'housing_officer', 'housing_clerk', 'admin', 'accounting_officer',
-  'eo', 'planner', 'hr_social_officer', 'planning_clerk',
+  'housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee',
+  'admin', 'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk', 'auditor', 'engineer',
 ]
-const WRITERS = ['housing_officer', 'housing_clerk', 'admin']
+const HOUSING_POSTS = ['housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee']
+const ALL_SECTIONS = ['overview', 'map', 'waiting', 'interviews', 'allocations', 'cessions', 'estates', 'standards', 'announce']
+const DESKS = {
+  housing_officer: {
+    title: 'Housing and Estates Officer',
+    sections: ALL_SECTIONS,
+    can: { waiting: true, interview: true, recommend: true, allocate: true, offer: true, agreement: true, cession_lodge: true, cession_decide: true, lease: true, servicing: true, standards: true, occupation: true, title: true, repossess: true, announce: true, committee: true },
+  },
+  housing_clerk: {
+    title: 'Housing counter',
+    sections: ['overview', 'waiting', 'allocations', 'cessions', 'announce'],
+    can: { waiting: true, interview: false, recommend: false, allocate: false, offer: true, agreement: false, cession_lodge: true, cession_decide: false, lease: false, servicing: false, standards: false, occupation: false, title: false, repossess: false, announce: true, committee: false },
+  },
+  housing_research: {
+    title: 'Research and allocations',
+    sections: ['overview', 'map', 'waiting', 'interviews', 'allocations'],
+    can: { waiting: true, interview: true, recommend: true, allocate: false, offer: false, agreement: false, cession_lodge: false, cession_decide: false, lease: false, servicing: false, standards: false, occupation: false, title: false, repossess: false, announce: false, committee: false },
+  },
+  housing_area: {
+    title: 'Area housing officer',
+    sections: ['overview', 'map', 'estates', 'standards'],
+    can: { waiting: false, interview: false, recommend: false, allocate: false, offer: false, agreement: false, cession_lodge: false, cession_decide: false, lease: true, servicing: true, standards: true, occupation: true, title: false, repossess: false, announce: false, committee: false },
+  },
+  housing_legal: {
+    title: 'Housing legal / conveyancing',
+    sections: ['overview', 'cessions', 'allocations'],
+    can: { waiting: false, interview: false, recommend: false, allocate: false, offer: false, agreement: true, cession_lodge: true, cession_decide: true, lease: false, servicing: false, standards: false, occupation: false, title: true, repossess: false, announce: false, committee: false },
+  },
+  housing_committee: {
+    title: 'Allocations committee',
+    sections: ['overview', 'waiting', 'allocations'],
+    can: { waiting: false, interview: false, recommend: true, allocate: false, offer: false, agreement: false, cession_lodge: false, cession_decide: false, lease: false, servicing: false, standards: false, occupation: false, title: false, repossess: false, announce: false, committee: true },
+  },
+}
+function deskOf(role) {
+  if (DESKS[role]) return { role, ...DESKS[role] }
+  return {
+    role,
+    title: 'Housing registers (read only)',
+    sections: ALL_SECTIONS,
+    can: Object.fromEntries(Object.keys(DESKS.housing_officer.can).map((k) => [k, false])),
+  }
+}
+function writers(...actions) {
+  const roles = new Set(['admin'])
+  for (const [role, desk] of Object.entries(DESKS)) {
+    if (actions.some((a) => desk.can[a])) roles.add(role)
+  }
+  return [...roles]
+}
 const isUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ').slice(0, max) : null)
 const money = (v) => {
@@ -67,8 +116,117 @@ function refuse(reply, err, fallback) {
 async function housingRoutes(fastify) {
   const pg = fastify.pg
   const canRead = { preHandler: requireRole(fastify, STAFF) }
-  const canWrite = { preHandler: requireRole(fastify, WRITERS) }
+  const write = (...actions) => ({ preHandler: requireRole(fastify, writers(...actions)) })
   const signedIn = { preHandler: requireAuth(fastify) }
+
+  fastify.get('/housing/desk', canRead, async (request, reply) => {
+    const desk = deskOf(request.user.role)
+    try {
+      const { rows: [q] } = await pg.query(`
+        SELECT
+          (SELECT count(*)::int FROM housing.waiting_list WHERE status IN ('active','invited','interviewed','recommended')) AS waiting,
+          (SELECT count(*)::int FROM housing.waiting_list WHERE lapses_on < CURRENT_DATE AND status = 'active') AS due_renewal,
+          (SELECT count(*)::int FROM housing.waiting_list WHERE status = 'recommended') AS recommended,
+          (SELECT count(*)::int FROM housing.cession WHERE status = 'lodged') AS cessions_lodged,
+          (SELECT count(*)::int FROM housing.standard_order WHERE status = 'open') AS orders_open,
+          (SELECT count(*)::int FROM housing.allocation WHERE ended_at IS NULL AND deposit_due > 0 AND deposit_receipt_id IS NULL) AS deposits_outstanding
+      `)
+      return ok(reply, { ...desk, queues: q, posts: HOUSING_POSTS })
+    } catch (err) {
+      request.log.error({ err }, 'housing desk failed')
+      return ok(reply, { ...desk, queues: {}, posts: HOUSING_POSTS })
+    }
+  })
+
+  fastify.get('/housing/cross/:parcelId', canRead, async (request, reply) => {
+    const id = request.params.parcelId
+    try {
+      const { rows } = await pg.query(
+        `SELECT * FROM housing.v_cross_file WHERE parcel_id = $1`, [id])
+      if (!rows.length) return fail(reply, 404, 'not_found', 'That stand is not on the housing map.')
+      const file = rows[0]
+      const { rows: permits } = await pg.query(
+        `SELECT id, tpd_reference, dev_register_no, stand_number, applicant_name, development_type, status
+           FROM spatial_planning.permit_application
+          WHERE parcel_id = $1 OR stand_number = $2
+          ORDER BY received_at DESC NULLS LAST LIMIT 20`, [id, file.stand_no])
+      const { rows: fees } = await pg.query(
+        `SELECT f.fee_kind, f.amount::text AS amount, f.currency, f.received_on::text AS received_on, r.receipt_no
+           FROM finance.housing_fee f JOIN finance.cash_receipt r ON r.id = f.cash_receipt_id
+          WHERE f.allocation_id = $1 ORDER BY f.received_on DESC LIMIT 20`, [file.allocation_id]).catch(() => ({ rows: [] }))
+      return ok(reply, { file, permits, housing_fees: fees })
+    } catch (err) {
+      request.log.error({ err }, 'housing cross file failed')
+      return fail(reply, 500, 'failed', 'The shared stand file could not be read.')
+    }
+  })
+
+  fastify.get('/housing/dual-ownership', canRead, async (request, reply) => {
+    const q = typeof request.query.q === 'string' ? request.query.q.trim() : ''
+    if (q.length < 2) return fail(reply, 400, 'invalid', 'Name the person or national identity number to search.')
+    const like = `%${q.replace(/[%_\\]/g, '\\$&')}%`
+    const { rows } = await pg.query(
+      `SELECT p.id AS person_id, p.display_name,
+              (SELECT json_agg(jsonb_build_object('list_no', w.list_no, 'status', w.status, 'sought', w.sought))
+                 FROM housing.waiting_list w WHERE w.person_id = p.id) AS waiting_list,
+              (SELECT json_agg(jsonb_build_object('parcel_id', a.parcel_id, 'status', a.status, 'allottee_name', a.allottee_name))
+                 FROM housing.allocation a WHERE a.person_id = p.id AND a.ended_at IS NULL) AS allocations
+         FROM registry.person p
+        WHERE p.display_name ILIKE $1
+           OR CAST(p.id AS text) ILIKE $1
+        ORDER BY p.display_name
+        LIMIT 20`, [like])
+    return ok(reply, { matches: rows, dual: rows.some((r) => (r.allocations || []).length > 0) })
+  })
+
+  fastify.get('/housing/committee', canRead, async (request, reply) => {
+    try {
+      const { rows: sittings } = await pg.query(
+        `SELECT s.*, (SELECT count(*)::int FROM housing.committee_item i WHERE i.sitting_id = s.id) AS items
+           FROM housing.committee_sitting s ORDER BY s.sitting_on DESC LIMIT 50`)
+      const { rows: items } = await pg.query(
+        `SELECT i.*, w.list_no, w.applicant_name, p.stand_no
+           FROM housing.committee_item i
+           JOIN housing.waiting_list w ON w.id = i.waiting_list_id
+           LEFT JOIN land.parcel p ON p.parcel_id = i.parcel_id
+          ORDER BY i.created_at DESC LIMIT 200`)
+      return ok(reply, { sittings, items })
+    } catch (err) {
+      request.log.error({ err }, 'housing committee read failed')
+      return ok(reply, { sittings: [], items: [] })
+    }
+  })
+
+  fastify.post('/housing/committee', write('committee'), async (request, reply) => {
+    const b = request.body || {}
+    const { rows } = await pg.query(
+      `INSERT INTO housing.committee_sitting (sitting_on, minute_ref, scheme_id, notes, created_by)
+       VALUES (COALESCE($1::date, CURRENT_DATE), $2, $3, $4, $5) RETURNING *`,
+      [b.sitting_on || null, text(b.minute_ref, 80), b.scheme_id || null, text(b.notes, 2000), request.user.id])
+    return ok(reply, { sitting: rows[0] }, 201)
+  })
+
+  fastify.post('/housing/committee/:id/items', write('committee', 'recommend'), async (request, reply) => {
+    const b = request.body || {}
+    if (!isUuid(b.waiting_list_id) || !['allocate', 'defer', 'refuse'].includes(b.recommendation)) {
+      return fail(reply, 400, 'invalid', 'Name the waiting-list entry and whether to allocate, defer or refuse.')
+    }
+    try {
+      const { rows } = await pg.query(
+        `INSERT INTO housing.committee_item (sitting_id, waiting_list_id, parcel_id, recommendation, decided_by)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [request.params.id, b.waiting_list_id, b.parcel_id || null, b.recommendation, request.user.id])
+      if (b.recommendation === 'allocate') {
+        await pg.query(`UPDATE housing.waiting_list SET status = 'recommended', updated_at = now() WHERE id = $1`, [b.waiting_list_id])
+      } else if (b.recommendation === 'refuse') {
+        await pg.query(`UPDATE housing.waiting_list SET status = 'ineligible', ineligible_reason = 'Refused by allocations committee', updated_at = now() WHERE id = $1`,
+          [b.waiting_list_id])
+      }
+      return ok(reply, { item: rows[0] }, 201)
+    } catch (err) {
+      return refuse(reply, err, 'The committee item could not be written.')
+    }
+  })
 
   fastify.get('/housing/overview', canRead, async (request, reply) => {
     try {
@@ -179,13 +337,22 @@ async function housingRoutes(fastify) {
     if (!rows.length) return fail(reply, 404, 'not_found', 'That stand is not on the housing map.')
     const stand = rows[0]
     delete stand.geom_wgs84
-    const [alloc, orders, occ, lease] = await Promise.all([
+    const [alloc, orders, occ, lease, permits, cross] = await Promise.all([
       pg.query(`SELECT * FROM housing.allocation WHERE parcel_id = $1 ORDER BY created_at DESC LIMIT 8`, [id]),
       pg.query(`SELECT * FROM housing.standard_order WHERE parcel_id = $1 ORDER BY created_at DESC LIMIT 8`, [id]),
       pg.query(`SELECT * FROM housing.occupation WHERE parcel_id = $1 ORDER BY created_at DESC LIMIT 8`, [id]),
       pg.query(`SELECT * FROM housing.lease WHERE parcel_id = $1 ORDER BY created_at DESC LIMIT 8`, [id]),
+      pg.query(
+        `SELECT id, tpd_reference, stand_number, applicant_name, development_type, status
+           FROM spatial_planning.permit_application
+          WHERE parcel_id = $1 OR stand_number = $2 ORDER BY received_at DESC NULLS LAST LIMIT 12`,
+        [id, stand.stand_no]),
+      pg.query(`SELECT * FROM housing.v_cross_file WHERE parcel_id = $1`, [id]).catch(() => ({ rows: [] })),
     ])
-    return ok(reply, { stand, allocations: alloc.rows, orders: orders.rows, occupation: occ.rows, leases: lease.rows })
+    return ok(reply, {
+      stand, allocations: alloc.rows, orders: orders.rows, occupation: occ.rows, leases: lease.rows,
+      permits: permits.rows, cross: cross.rows[0] || null,
+    })
   })
 
   fastify.get('/housing/waiting-list', canRead, async (request, reply) => {
@@ -209,7 +376,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { entries: rows })
   })
 
-  fastify.post('/housing/waiting-list', canWrite, async (request, reply) => {
+  fastify.post('/housing/waiting-list', write('waiting'), async (request, reply) => {
     const b = request.body || {}
     const name = text(b.applicant_name, 200)
     const sought = b.sought || 'stand'
@@ -238,7 +405,7 @@ async function housingRoutes(fastify) {
     }
   })
 
-  fastify.post('/housing/waiting-list/:id/renew', canWrite, async (request, reply) => {
+  fastify.post('/housing/waiting-list/:id/renew', write('waiting'), async (request, reply) => {
     if (!isUuid(request.params.id)) return fail(reply, 400, 'bad_id', 'That is not a waiting-list entry.')
     const { rows } = await pg.query(
       `UPDATE housing.waiting_list SET renewed_on = CURRENT_DATE, lapses_on = CURRENT_DATE + interval '1 year',
@@ -248,13 +415,13 @@ async function housingRoutes(fastify) {
     return ok(reply, { entry: rows[0] })
   })
 
-  fastify.post('/housing/waiting-list/:id/score', canWrite, async (request, reply) => {
+  fastify.post('/housing/waiting-list/:id/score', write('interview'), async (request, reply) => {
     if (!isUuid(request.params.id)) return fail(reply, 400, 'bad_id', 'That is not a waiting-list entry.')
     const { rows } = await pg.query('SELECT housing.score_entry($1) AS score', [request.params.id])
     return ok(reply, { score: rows[0].score })
   })
 
-  fastify.post('/housing/waiting-list/:id/status', canWrite, async (request, reply) => {
+  fastify.post('/housing/waiting-list/:id/status', write('recommend', 'waiting'), async (request, reply) => {
     const status = request.body?.status
     const allowed = ['active', 'invited', 'interviewed', 'recommended', 'lapsed', 'withdrawn', 'ineligible']
     if (!allowed.includes(status)) return fail(reply, 400, 'invalid', 'That is not a waiting-list status Housing can set.')
@@ -274,7 +441,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { interviews: rows })
   })
 
-  fastify.post('/housing/interviews', canWrite, async (request, reply) => {
+  fastify.post('/housing/interviews', write('interview'), async (request, reply) => {
     const b = request.body || {}
     if (!isUuid(b.waiting_list_id)) return fail(reply, 400, 'invalid', 'Name the waiting-list entry being interviewed.')
     try {
@@ -317,16 +484,16 @@ async function housingRoutes(fastify) {
     return ok(reply, { allocations: rows })
   })
 
-  fastify.post('/housing/allocations', canWrite, async (request, reply) => {
+  fastify.post('/housing/allocations', write('allocate'), async (request, reply) => {
     const b = request.body || {}
     if (!isUuid(b.waiting_list_id) || !b.parcel_id) {
       return fail(reply, 400, 'invalid', 'Name the waiting-list entry and the stand.')
     }
     try {
       const { rows } = await pg.query(
-        'SELECT housing.allocate_stand($1,$2,$3,$4,$5,$6) AS id',
+        'SELECT housing.allocate_stand($1,$2,$3,$4,$5,$6,$7) AS id',
         [b.waiting_list_id, b.parcel_id, request.user.id, text(b.committee_minute, 200),
-          money(b.purchase_price), money(b.deposit_due)])
+          money(b.purchase_price), money(b.deposit_due), text(b.waiver_reason, 400)])
       const { rows: all } = await pg.query('SELECT * FROM housing.allocation WHERE id = $1', [rows[0].id])
       return ok(reply, { allocation: all[0] }, 201)
     } catch (err) {
@@ -334,7 +501,7 @@ async function housingRoutes(fastify) {
     }
   })
 
-  fastify.post('/housing/offers', canWrite, async (request, reply) => {
+  fastify.post('/housing/offers', write('offer'), async (request, reply) => {
     const b = request.body || {}
     if (!isUuid(b.allocation_id)) return fail(reply, 400, 'invalid', 'Name the allocation this offer is for.')
     const days = Math.min(90, Math.max(7, Number(b.days) || 30))
@@ -358,9 +525,9 @@ async function housingRoutes(fastify) {
     return ok(reply, { offer: rows[0] })
   }
 
-  fastify.post('/housing/offers/:id/accept', canWrite, (req, reply) => closeOffer(req, reply, 'accepted_on'))
-  fastify.post('/housing/offers/:id/decline', canWrite, (req, reply) => closeOffer(req, reply, 'declined_on'))
-  fastify.post('/housing/offers/:id/withdraw', canWrite, async (request, reply) => {
+  fastify.post('/housing/offers/:id/accept', write('offer'), (req, reply) => closeOffer(req, reply, 'accepted_on'))
+  fastify.post('/housing/offers/:id/decline', write('offer'), (req, reply) => closeOffer(req, reply, 'declined_on'))
+  fastify.post('/housing/offers/:id/withdraw', write('allocate'), async (request, reply) => {
     const reason = text(request.body?.reason, 400) || 'Offer withdrawn.'
     const { rows } = await pg.query(
       `UPDATE housing.offer SET withdrawn_on = CURRENT_DATE, withdraw_reason = $2 WHERE id = $1 RETURNING *`,
@@ -382,9 +549,15 @@ async function housingRoutes(fastify) {
     return ok(reply, { offers: rows })
   })
 
-  fastify.post('/housing/agreements', canWrite, async (request, reply) => {
+  fastify.post('/housing/agreements', write('agreement'), async (request, reply) => {
     const b = request.body || {}
     if (!isUuid(b.allocation_id)) return fail(reply, 400, 'invalid', 'Name the allocation this agreement is for.')
+    const { rows: owed } = await pg.query(
+      `SELECT deposit_due, deposit_receipt_id FROM housing.allocation WHERE id = $1`, [b.allocation_id])
+    if (!owed.length) return fail(reply, 404, 'not_found', 'That allocation is not on file.')
+    if (Number(owed[0].deposit_due) > 0 && !owed[0].deposit_receipt_id) {
+      return fail(reply, 400, 'invalid', 'The cash office must receipt the stand deposit before Housing signs the agreement of sale.')
+    }
     try {
       const { rows } = await pg.query(
         `INSERT INTO housing.agreement (agreement_no, allocation_id, balance_due, created_by)
@@ -410,7 +583,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { cessions: rows })
   })
 
-  fastify.post('/housing/cessions', canWrite, async (request, reply) => {
+  fastify.post('/housing/cessions', write('cession_lodge'), async (request, reply) => {
     const b = request.body || {}
     if (!isUuid(b.allocation_id) || !text(b.from_name, 200) || !text(b.to_name, 200)) {
       return fail(reply, 400, 'invalid', 'Name the allocation, the cedent and the cessionary.')
@@ -418,6 +591,9 @@ async function housingRoutes(fastify) {
     const kind = b.kind || 'ordinary'
     if (!['ordinary', 'deceased_estate', 'court_order'].includes(kind)) {
       return fail(reply, 400, 'invalid', 'A cession is ordinary, a deceased estate or a court order.')
+    }
+    if (kind === 'ordinary' && !isUuid(b.to_waiting_list_id)) {
+      return fail(reply, 400, 'invalid', 'An ordinary cessionary must already be on the waiting list.')
     }
     try {
       const { rows } = await pg.query(
@@ -435,7 +611,7 @@ async function housingRoutes(fastify) {
     }
   })
 
-  fastify.post('/housing/cessions/:id/decide', canWrite, async (request, reply) => {
+  fastify.post('/housing/cessions/:id/decide', write('cession_decide'), async (request, reply) => {
     const status = request.body?.status
     if (!['approved', 'refused', 'completed'].includes(status)) {
       return fail(reply, 400, 'invalid', 'A cession is approved, refused or completed.')
@@ -459,7 +635,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { leases: rows })
   })
 
-  fastify.post('/housing/leases', canWrite, async (request, reply) => {
+  fastify.post('/housing/leases', write('lease'), async (request, reply) => {
     const b = request.body || {}
     const name = text(b.tenant_name, 200)
     if (!b.parcel_id || !name) return fail(reply, 400, 'invalid', 'Name the stand and the tenant.')
@@ -487,7 +663,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { cooperatives: rows })
   })
 
-  fastify.post('/housing/cooperatives', canWrite, async (request, reply) => {
+  fastify.post('/housing/cooperatives', write('lease'), async (request, reply) => {
     const b = request.body || {}
     const name = text(b.name, 200)
     if (!name) return fail(reply, 400, 'invalid', 'Name the cooperative.')
@@ -499,7 +675,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { cooperative: rows[0] }, 201)
   })
 
-  fastify.post('/housing/cooperatives/:id/members', canWrite, async (request, reply) => {
+  fastify.post('/housing/cooperatives/:id/members', write('lease'), async (request, reply) => {
     const name = text(request.body?.member_name, 200)
     if (!name) return fail(reply, 400, 'invalid', 'Name the member.')
     const { rows } = await pg.query(
@@ -509,7 +685,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { member: rows[0] }, 201)
   })
 
-  fastify.put('/housing/servicing/:parcelId', canWrite, async (request, reply) => {
+  fastify.put('/housing/servicing/:parcelId', write('servicing'), async (request, reply) => {
     const b = request.body || {}
     const { rows } = await pg.query(
       `INSERT INTO housing.servicing (parcel_id, water, sewer, road, electricity, notes, updated_by)
@@ -529,7 +705,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { orders: rows })
   })
 
-  fastify.post('/housing/orders', canWrite, async (request, reply) => {
+  fastify.post('/housing/orders', write('standards'), async (request, reply) => {
     const b = request.body || {}
     if (!b.parcel_id || !text(b.reason, 400) || !['repair', 'demolition', 'closure', 'clearance'].includes(b.kind)) {
       return fail(reply, 400, 'invalid', 'Name the stand, the kind of order and the reason.')
@@ -546,7 +722,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { notices: rows })
   })
 
-  fastify.post('/housing/overcrowding', canWrite, async (request, reply) => {
+  fastify.post('/housing/overcrowding', write('standards'), async (request, reply) => {
     const b = request.body || {}
     if (!b.parcel_id || !(Number(b.occupants) >= 1)) return fail(reply, 400, 'invalid', 'Name the stand and how many people occupy it.')
     const { rows } = await pg.query(
@@ -561,7 +737,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { certificates: rows })
   })
 
-  fastify.post('/housing/occupation', canWrite, async (request, reply) => {
+  fastify.post('/housing/occupation', write('occupation'), async (request, reply) => {
     const b = request.body || {}
     if (!b.parcel_id) return fail(reply, 400, 'invalid', 'Name the stand.')
     const { rows } = await pg.query(
@@ -581,9 +757,16 @@ async function housingRoutes(fastify) {
     return ok(reply, { requests: rows })
   })
 
-  fastify.post('/housing/title', canWrite, async (request, reply) => {
+  fastify.post('/housing/title', write('title'), async (request, reply) => {
     const b = request.body || {}
     if (!isUuid(b.allocation_id)) return fail(reply, 400, 'invalid', 'Name the allocation title is being sought for.')
+    const { rows: a } = await pg.query(`SELECT parcel_id FROM housing.allocation WHERE id = $1`, [b.allocation_id])
+    if (!a.length) return fail(reply, 404, 'not_found', 'That allocation is not on file.')
+    const { rows: rates } = await pg.query(
+      `SELECT usd_balance FROM finance.v_property_finance WHERE parcel_id = $1`, [a[0].parcel_id]).catch(() => ({ rows: [] }))
+    if (rates[0] && Number(rates[0].usd_balance) > 0) {
+      return fail(reply, 400, 'invalid', 'Treasurer clearance is required: this stand still has rates outstanding.')
+    }
     const { rows } = await pg.query(
       `INSERT INTO housing.title_request (allocation_id, conveyancer, notes, created_by)
        VALUES ($1,$2,$3,$4) RETURNING *`,
@@ -591,7 +774,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { request: rows[0] }, 201)
   })
 
-  fastify.post('/housing/title/:id/status', canWrite, async (request, reply) => {
+  fastify.post('/housing/title/:id/status', write('title'), async (request, reply) => {
     const status = request.body?.status
     if (!['lodged', 'at_deeds', 'issued', 'refused'].includes(status)) {
       return fail(reply, 400, 'invalid', 'That is not a title status.')
@@ -610,7 +793,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { repossessions: rows })
   })
 
-  fastify.post('/housing/repossessions', canWrite, async (request, reply) => {
+  fastify.post('/housing/repossessions', write('repossess'), async (request, reply) => {
     const b = request.body || {}
     if (!isUuid(b.allocation_id) || !['non_payment', 'non_development', 'fraud', 'other'].includes(b.reason)) {
       return fail(reply, 400, 'invalid', 'Name the allocation and the reason.')
@@ -622,7 +805,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { repossession: rows[0] }, 201)
   })
 
-  fastify.post('/housing/repossessions/:id/complete', canWrite, async (request, reply) => {
+  fastify.post('/housing/repossessions/:id/complete', write('repossess'), async (request, reply) => {
     const { rows } = await pg.query(
       `UPDATE housing.repossession SET status = 'completed', effective_on = CURRENT_DATE WHERE id = $1 RETURNING *`,
       [request.params.id])
@@ -641,7 +824,7 @@ async function housingRoutes(fastify) {
     return ok(reply, { announcements: rows })
   })
 
-  fastify.post('/housing/announcements', canWrite, async (request, reply) => {
+  fastify.post('/housing/announcements', write('announce'), async (request, reply) => {
     const title = text(request.body?.title, 200)
     const body = text(request.body?.body, 4000)
     if (!title || !body) return fail(reply, 400, 'invalid', 'Give the announcement a title and the text that will be read.')

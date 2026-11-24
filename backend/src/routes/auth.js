@@ -96,8 +96,8 @@ const INVITABLE_ROLES = new Set([
   'engineer', 'hr_social_officer',
   // Migration 250: engineering staff under the Engineer.
   'civil_technician', 'roads_foreman', 'water_technician',
-  // Migration 259: Housing and Estates.
-  'housing_officer', 'housing_clerk',
+  // Migration 259–260: Housing and Estates desks.
+  'housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee',
 ])
 
 const VALID_USER_ROLES = new Set([
@@ -115,8 +115,8 @@ const VALID_USER_ROLES = new Set([
   'engineer', 'hr_social_officer',
   // Migration 250: engineering staff under the Engineer.
   'civil_technician', 'roads_foreman', 'water_technician',
-  // Migration 259: Housing and Estates.
-  'housing_officer', 'housing_clerk',
+  // Migration 259–260: Housing and Estates desks.
+  'housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee',
 ])
 
 // Council staff = employees. Identical to INVITABLE_ROLES today, but named

@@ -25,7 +25,16 @@ const SECTIONS: { id: Section; label: string; icon: any }[] = [
 
 const route = useRoute()
 const router = useRouter()
-const section = computed<Section>(() => (SECTIONS.some((s) => s.id === route.query.section) ? route.query.section as Section : 'overview'))
+const desk = ref<any>(null)
+const can = computed(() => desk.value?.can || {})
+const visibleSections = computed(() => {
+  const allowed = desk.value?.sections as Section[] | undefined
+  return allowed ? SECTIONS.filter((s) => allowed.includes(s.id)) : SECTIONS
+})
+const section = computed<Section>(() => {
+  const id = route.query.section as Section
+  return visibleSections.value.some((s) => s.id === id) ? id : (visibleSections.value[0]?.id || 'overview')
+})
 function go(id: Section) { router.replace({ path: '/housing', query: { section: id, parcel: route.query.parcel } }) }
 
 const overview = ref<any>(null)
@@ -51,8 +60,11 @@ const stand = ref<any>(null)
 const township = ref('HERTS')
 
 const waitForm = reactive({ applicant_name: '', sought: 'stand', density: 'any', preferred_ward: '9', household_size: '4', monthly_income: '', special_needs: '', resident: true })
-const allocForm = reactive({ waiting_list_id: '', parcel_id: '', committee_minute: '', purchase_price: '', deposit_due: '' })
-const cessionForm = reactive({ allocation_id: '', kind: 'ordinary', from_name: '', to_name: '', spouse_consent: true })
+const allocForm = reactive({ waiting_list_id: '', parcel_id: '', committee_minute: '', purchase_price: '', deposit_due: '', waiver_reason: '' })
+const cessionForm = reactive({ allocation_id: '', kind: 'ordinary', from_name: '', to_name: '', to_waiting_list_id: '', spouse_consent: true })
+const sittingForm = reactive({ minute_ref: '', notes: '' })
+const sittings = ref<any[]>([])
+const committeeItems = ref<any[]>([])
 const leaseForm = reactive({ parcel_id: '', tenant_name: '', kind: 'council_rental', rent: '' })
 const orderForm = reactive({ parcel_id: '', kind: 'repair', reason: '' })
 const announceForm = reactive({ title: '', body: '' })
@@ -72,12 +84,13 @@ async function loadAlloc() {
 async function loadAll() {
   err.value = null
   try {
-    const [o, s, w, i, a, c, l, co, or, ov, oc, t, r, an] = await Promise.all([
-      housingApi.overview(), housingApi.schemes(), housingApi.waitingList(), housingApi.interviews(),
+    const [d, o, s, w, i, a, c, l, co, or, ov, oc, t, r, an, ct] = await Promise.all([
+      housingApi.desk(), housingApi.overview(), housingApi.schemes(), housingApi.waitingList(), housingApi.interviews(),
       housingApi.allocations(), housingApi.cessions(), housingApi.leases(), housingApi.cooperatives(),
       housingApi.orders(), housingApi.overcrowding(), housingApi.occupation(), housingApi.title(),
-      housingApi.repossessions(), housingApi.announcements(),
+      housingApi.repossessions(), housingApi.announcements(), housingApi.committee(),
     ])
+    desk.value = d
     overview.value = o
     schemes.value = (s as any).schemes || []
     waiting.value = (w as any).entries || []
@@ -92,6 +105,8 @@ async function loadAll() {
     titles.value = (t as any).requests || []
     repos.value = (r as any).repossessions || []
     announcements.value = (an as any).announcements || []
+    sittings.value = (ct as any).sittings || []
+    committeeItems.value = (ct as any).items || []
     await loadAlloc()
   } catch { err.value = 'Housing could not be read. Try again in a moment.' }
 }
@@ -112,6 +127,9 @@ async function addWait() {
 async function allocate() {
   const r = await run(() => housingApi.allocate(allocForm))
   if (r) { banner.value = 'Stand reserved from the waiting list.'; await loadAll() }
+}
+async function openSitting() {
+  if (await run(() => housingApi.openSitting(sittingForm))) { banner.value = 'Committee sitting opened.'; await loadAll() }
 }
 async function offer(id: string) { if (await run(() => housingApi.issueOffer(id))) { banner.value = 'Offer letter issued.'; await loadAlloc() } }
 async function accept(id: string) { if (await run(() => housingApi.acceptOffer(id))) await loadAlloc() }
@@ -142,13 +160,13 @@ const k = computed(() => overview.value?.kpis || {})
     <header class="hsg-top">
       <div>
         <span class="hsg-eyebrow">Housing and Estates</span>
-        <h1>The waiting list, on the map</h1>
-        <p>Stands are allocated from the register, against the cadastre. A receipt, a file and a polygon are the same person and the same parcel.</p>
+        <h1>{{ desk?.title || 'The waiting list, on the map' }}</h1>
+        <p>Stands, receipts and planning files are the same parcel. This desk shows the work this post may do; Finance and Planning read the same stand file.</p>
       </div>
       <ProfileDropdown />
     </header>
     <nav class="hsg-rail" aria-label="Housing sections">
-      <button v-for="s in SECTIONS" :key="s.id" type="button" :class="{ on: section === s.id }" @click="go(s.id)">
+      <button v-for="s in visibleSections" :key="s.id" type="button" :class="{ on: section === s.id }" @click="go(s.id)">
         <component :is="s.icon" :size="16" />{{ s.label }}
       </button>
     </nav>
@@ -204,12 +222,16 @@ const k = computed(() => overview.value?.kpis || {})
         <p>{{ stand.stand.township_code }} · {{ stand.stand.map_status }} · {{ Number(stand.stand.area_m2).toFixed(0) }} m²</p>
         <p v-if="stand.stand.allottee_name">Allottee {{ stand.stand.allottee_name }}</p>
         <p>Services: water {{ stand.stand.water ? 'yes' : 'no' }} · sewer {{ stand.stand.sewer ? 'yes' : 'no' }} · road {{ stand.stand.road ? 'yes' : 'no' }} · power {{ stand.stand.electricity ? 'yes' : 'no' }}</p>
-        <button type="button" class="hsg-btn" @click="allocForm.parcel_id = stand.stand.parcel_id; go('allocations')">Allocate this stand</button>
+        <p v-if="stand.cross">Rates {{ stand.cross.rates_account || 'none' }} · {{ stand.cross.rates_band || 'unbilled' }} · deposit {{ stand.cross.deposit_receipt_no || 'unpaid' }} · {{ stand.cross.planning_files }} planning file(s)</p>
+        <ul v-if="stand.permits?.length">
+          <li v-for="p in stand.permits" :key="p.id">{{ p.tpd_reference || p.stand_number }} · {{ p.status }} · {{ p.applicant_name }}</li>
+        </ul>
+        <button v-if="can.allocate" type="button" class="hsg-btn" @click="allocForm.parcel_id = stand.stand.parcel_id; go('allocations')">Allocate this stand</button>
       </aside>
     </section>
 
     <section v-else-if="section === 'waiting'" class="hsg-main">
-      <form class="hsg-card hsg-form" @submit.prevent="addWait">
+      <form v-if="can.waiting" class="hsg-card hsg-form" @submit.prevent="addWait">
         <h2>Register on the waiting list</h2>
         <label>Applicant<input v-model="waitForm.applicant_name" required /></label>
         <label>Seeking
@@ -234,9 +256,10 @@ const k = computed(() => overview.value?.kpis || {})
               <td class="mono">{{ w.list_no }}</td><td>{{ w.applicant_name }}</td>
               <td>{{ w.sought }}</td><td class="num">{{ w.score ?? '—' }}</td><td>{{ w.status }}</td>
               <td>
-                <button type="button" class="link" @click="interview(w.id)">Interview</button>
-                <button type="button" class="link" @click="allocForm.waiting_list_id = w.id; go('allocations')">Allocate</button>
-                <button type="button" class="link" @click="housingApi.renew(w.id).then(loadWaiting)">Renew</button>
+                <button v-if="can.interview" type="button" class="link" @click="interview(w.id)">Interview</button>
+                <button v-if="can.allocate" type="button" class="link" @click="allocForm.waiting_list_id = w.id; go('allocations')">Allocate</button>
+                <button v-if="can.waiting" type="button" class="link" @click="housingApi.renew(w.id).then(loadWaiting)">Renew</button>
+                <button v-if="can.committee && sittings[0]" type="button" class="link" @click="housingApi.addCommitteeItem(sittings[0].id, { waiting_list_id: w.id, recommendation: 'allocate' }).then(loadAll)">Recommend</button>
               </td>
             </tr>
           </tbody>
@@ -262,12 +285,19 @@ const k = computed(() => overview.value?.kpis || {})
     </section>
 
     <section v-else-if="section === 'allocations'" class="hsg-main">
-      <form class="hsg-card hsg-form" @submit.prevent="allocate">
+      <form v-if="can.committee" class="hsg-card hsg-form" @submit.prevent="openSitting">
+        <h2>Allocations committee sitting</h2>
+        <label>Minute ref<input v-model="sittingForm.minute_ref" /></label>
+        <label class="full">Notes<input v-model="sittingForm.notes" /></label>
+        <button class="hsg-btn" type="submit">Open sitting</button>
+        <p class="mute full">{{ sittings.length }} sitting(s). Recommend names from the waiting list; only a recommended entry can take a stand.</p>
+      </form>
+      <form v-if="can.allocate" class="hsg-card hsg-form" @submit.prevent="allocate">
         <h2>Reserve a stand from the list</h2>
         <label>Waiting-list entry
           <select v-model="allocForm.waiting_list_id" required>
             <option value="" disabled>Choose</option>
-            <option v-for="w in waiting.filter(x => ['active','interviewed','recommended','invited'].includes(x.status))" :key="w.id" :value="w.id">
+            <option v-for="w in waiting.filter(x => x.status === 'recommended')" :key="w.id" :value="w.id">
               {{ w.list_no }} · {{ w.applicant_name }}
             </option>
           </select>
@@ -276,6 +306,7 @@ const k = computed(() => overview.value?.kpis || {})
         <label>Committee minute<input v-model="allocForm.committee_minute" /></label>
         <label>Price USD<input v-model="allocForm.purchase_price" /></label>
         <label>Deposit<input v-model="allocForm.deposit_due" /></label>
+        <label class="full">Written waiver (only if the committee authorised an exception)<input v-model="allocForm.waiver_reason" /></label>
         <button class="hsg-btn" type="submit">Allocate</button>
       </form>
       <div class="hsg-card">
@@ -287,8 +318,8 @@ const k = computed(() => overview.value?.kpis || {})
               <td class="mono">{{ a.stand_no || a.parcel_id }}</td>
               <td>{{ a.allottee_name }}</td><td class="mono">{{ a.list_no }}</td><td>{{ a.status }}</td>
               <td>
-                <button type="button" class="link" @click="offer(a.id)">Offer letter</button>
-                <button type="button" class="link" @click="agreement(a.id)">Agreement of sale</button>
+                <button v-if="can.offer" type="button" class="link" @click="offer(a.id)">Offer letter</button>
+                <button v-if="can.agreement" type="button" class="link" @click="agreement(a.id)">Agreement of sale</button>
               </td>
             </tr>
           </tbody>
@@ -297,14 +328,14 @@ const k = computed(() => overview.value?.kpis || {})
         <ul>
           <li v-for="o in offers" :key="o.id">
             {{ o.offer_no }} · {{ o.allottee_name }} · expires {{ o.expires_on }}
-            <button type="button" class="link" @click="accept(o.id)">Accept</button>
+            <button v-if="can.offer" type="button" class="link" @click="accept(o.id)">Accept</button>
           </li>
         </ul>
       </div>
     </section>
 
     <section v-else-if="section === 'cessions'" class="hsg-main">
-      <form class="hsg-card hsg-form" @submit.prevent="lodgeCession">
+      <form v-if="can.cession_lodge" class="hsg-card hsg-form" @submit.prevent="lodgeCession">
         <h2>Lodge a cession</h2>
         <label>Allocation
           <select v-model="cessionForm.allocation_id" required>
@@ -321,6 +352,14 @@ const k = computed(() => overview.value?.kpis || {})
         </label>
         <label>From<input v-model="cessionForm.from_name" required /></label>
         <label>To<input v-model="cessionForm.to_name" required /></label>
+        <label v-if="cessionForm.kind === 'ordinary'">Cessionary on the waiting list
+          <select v-model="cessionForm.to_waiting_list_id" required>
+            <option value="" disabled>Choose</option>
+            <option v-for="w in waiting.filter(x => ['active','recommended','interviewed'].includes(x.status))" :key="w.id" :value="w.id">
+              {{ w.list_no }} · {{ w.applicant_name }}
+            </option>
+          </select>
+        </label>
         <button class="hsg-btn" type="submit">Lodge</button>
       </form>
       <div class="hsg-card">
@@ -331,8 +370,8 @@ const k = computed(() => overview.value?.kpis || {})
               <td class="mono">{{ c.cession_no }}</td><td>{{ c.kind }}</td>
               <td>{{ c.from_name }} → {{ c.to_name }}</td><td>{{ c.status }}</td>
               <td>
-                <button type="button" class="link" @click="housingApi.decideCession(c.id,'approved').then(loadAll)">Approve</button>
-                <button type="button" class="link" @click="housingApi.decideCession(c.id,'completed').then(loadAll)">Complete</button>
+                <button v-if="can.cession_decide" type="button" class="link" @click="housingApi.decideCession(c.id,'approved').then(loadAll)">Approve</button>
+                <button v-if="can.cession_decide" type="button" class="link" @click="housingApi.decideCession(c.id,'completed').then(loadAll)">Complete</button>
               </td>
             </tr>
           </tbody>
@@ -341,12 +380,12 @@ const k = computed(() => overview.value?.kpis || {})
         <ul>
           <li v-for="t in titles" :key="t.id">{{ t.allottee_name }} · {{ t.status }} · {{ t.deed_ref || 'no deed yet' }}</li>
         </ul>
-        <button v-if="allocations[0]" type="button" class="hsg-btn" @click="housingApi.lodgeTitle({ allocation_id: allocations[0].id }).then(loadAll)">Lodge title for latest allocation</button>
+        <button v-if="can.title && allocations[0]" type="button" class="hsg-btn" @click="housingApi.lodgeTitle({ allocation_id: allocations[0].id }).then(loadAll)">Lodge title for latest allocation</button>
       </div>
     </section>
 
     <section v-else-if="section === 'estates'" class="hsg-main">
-      <form class="hsg-card hsg-form" @submit.prevent="addLease">
+      <form v-if="can.lease" class="hsg-card hsg-form" @submit.prevent="addLease">
         <h2>Council lease or staff housing</h2>
         <label>Parcel<input v-model="leaseForm.parcel_id" required /></label>
         <label>Tenant<input v-model="leaseForm.tenant_name" required /></label>
@@ -371,7 +410,7 @@ const k = computed(() => overview.value?.kpis || {})
           </tbody>
         </table>
         <h3>Cooperatives</h3>
-        <button type="button" class="hsg-btn" @click="housingApi.addCooperative({ name: 'Hertfordshire Housing Cooperative', scheme_id: schemes[0]?.id }).then(loadAll)">Register a cooperative</button>
+        <button v-if="can.lease" type="button" class="hsg-btn" @click="housingApi.addCooperative({ name: 'Hertfordshire Housing Cooperative', scheme_id: schemes[0]?.id }).then(loadAll)">Register a cooperative</button>
         <ul>
           <li v-for="c in coops" :key="c.id">{{ c.name }} · {{ c.members }} members · {{ c.status }}</li>
         </ul>
@@ -379,7 +418,7 @@ const k = computed(() => overview.value?.kpis || {})
     </section>
 
     <section v-else-if="section === 'standards'" class="hsg-main">
-      <form class="hsg-card hsg-form" @submit.prevent="addOrder">
+      <form v-if="can.standards" class="hsg-card hsg-form" @submit.prevent="addOrder">
         <h2>Housing Standards Control Act order</h2>
         <label>Parcel<input v-model="orderForm.parcel_id" required /></label>
         <label>Kind
@@ -404,7 +443,7 @@ const k = computed(() => overview.value?.kpis || {})
         <ul>
           <li v-for="r in repos" :key="r.id">
             {{ r.allottee_name }} · {{ r.reason }} · {{ r.status }}
-            <button v-if="r.status === 'noticed'" type="button" class="link" @click="housingApi.completeRepossession(r.id).then(loadAll)">Complete</button>
+            <button v-if="can.repossess && r.status === 'noticed'" type="button" class="link" @click="housingApi.completeRepossession(r.id).then(loadAll)">Complete</button>
           </li>
         </ul>
         <h3>Overcrowding</h3>
@@ -413,7 +452,7 @@ const k = computed(() => overview.value?.kpis || {})
     </section>
 
     <section v-else class="hsg-main">
-      <form class="hsg-card hsg-form" @submit.prevent="publish">
+      <form v-if="can.announce" class="hsg-card hsg-form" @submit.prevent="publish">
         <h2><Megaphone :size="16" /> Public allocation notice</h2>
         <label class="full">Title<input v-model="announceForm.title" required /></label>
         <label class="full">Body<textarea v-model="announceForm.body" rows="5" required /></label>

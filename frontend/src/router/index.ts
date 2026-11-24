@@ -773,7 +773,8 @@ const router = createRouter({
         title: 'Unit dashboard - Vungu RDC',
         requiresAuth: true,
         roles: ['accounting_officer', 'eo', 'finance_admin', 'engineer', 'hr_social_officer', 'auditor',
-          'civil_technician', 'roads_foreman', 'water_technician', 'housing_officer', 'housing_clerk'],
+          'civil_technician', 'roads_foreman', 'water_technician', 'housing_officer', 'housing_clerk',
+          'housing_research', 'housing_area', 'housing_legal', 'housing_committee'],
       }
     },
     {
@@ -783,7 +784,8 @@ const router = createRouter({
       meta: {
         title: 'Housing and Estates - Vungu RDC',
         requiresAuth: true,
-        roles: ['housing_officer', 'housing_clerk', 'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk', 'admin'],
+        roles: ['housing_officer', 'housing_clerk', 'housing_research', 'housing_area', 'housing_legal', 'housing_committee',
+          'accounting_officer', 'eo', 'planner', 'hr_social_officer', 'planning_clerk', 'admin', 'auditor', 'engineer'],
       },
     },
     {
@@ -1006,6 +1008,10 @@ const ROLE_HOME: Record<Role, string> = {
   water_technician:   '/units/engineering',
   housing_officer:    '/housing',
   housing_clerk:      '/housing',
+  housing_research:   '/housing',
+  housing_area:       '/housing',
+  housing_legal:      '/housing',
+  housing_committee:  '/housing',
   viewer:             '/citizen',
   registered:         '/citizen',
   public:             '/citizen',
