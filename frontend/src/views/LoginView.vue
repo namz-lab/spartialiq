@@ -251,10 +251,20 @@ const financeDemoAccounts: DemoAccount[] = showDemoLogins
       { label: 'Cash supervisor', email: 'demo.supervisor@vungu.test',    password: 'demo1234', role: 'cash_supervisor' },
       { label: 'Revenue',       email: 'demo.revenue@vungu.test',         password: 'demo1234', role: 'revenue_officer' },
       { label: 'CEO',           email: 'demo.ceo@vungu.test',             password: 'demo1234', role: 'accounting_officer' },
+    ]
+  : []
+
+const engineeringDemoAccounts: DemoAccount[] = showDemoLogins
+  ? [
       { label: 'Dist. Engineer', email: 'demo.engineer@vungu.test',        password: 'demo1234', role: 'engineer' },
       { label: 'Civil tech',    email: 'demo.civil-tech@vungu.test',      password: 'demo1234', role: 'civil_technician' },
       { label: 'Roads foreman', email: 'demo.roads-foreman@vungu.test',   password: 'demo1234', role: 'roads_foreman' },
       { label: 'Water tech',    email: 'demo.water-tech@vungu.test',      password: 'demo1234', role: 'water_technician' },
+    ]
+  : []
+
+const socialDemoAccounts: DemoAccount[] = showDemoLogins
+  ? [
       { label: 'HR & Social',   email: 'demo.hr-social@vungu.test',       password: 'demo1234', role: 'hr_social_officer' },
     ]
   : []
@@ -397,6 +407,26 @@ function fillDemo(account: DemoAccount) {
         <div class="auth-demo-grid">
           <button
             v-for="d in housingDemoAccounts"
+            :key="d.email"
+            type="button"
+            class="auth-demo-pill"
+            @click="fillDemo(d)"
+          >{{ d.label }}</button>
+        </div>
+        <p class="auth-demo-group">Roads and Works</p>
+        <div class="auth-demo-grid">
+          <button
+            v-for="d in engineeringDemoAccounts"
+            :key="d.email"
+            type="button"
+            class="auth-demo-pill"
+            @click="fillDemo(d)"
+          >{{ d.label }}</button>
+        </div>
+        <p class="auth-demo-group">HR, Social &amp; Administration</p>
+        <div class="auth-demo-grid">
+          <button
+            v-for="d in socialDemoAccounts"
             :key="d.email"
             type="button"
             class="auth-demo-pill"

@@ -20,7 +20,7 @@ const UNITS = [
     sections: ['engineering'],
     // Its registers, referrals and plant are views of its own dashboard. (The GIS officer's portal, linked here before,
     // is not open to the department or the Chief Executive.)
-    desks: [] },
+    desks: [{ label: 'Housing stand servicing', path: '/housing/servicing' }] },
   { key: 'social_admin', label: 'Human Resources, Social Services and Administration', post: 'Human Resources, Social Services & Administration Officer',
     headRole: 'hr_social_officer', section: 'social_services', sections: ['social_services', 'hr'], desks: [] },
   { key: 'housing', label: 'Housing and Estates', post: 'Housing and Estates Officer',

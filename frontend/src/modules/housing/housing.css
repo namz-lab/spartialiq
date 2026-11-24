@@ -1,0 +1,45 @@
+.hsg-app { min-height: 100vh; background: #f4efe6; color: #2c241c; display: grid; grid-template-columns: 15.5rem minmax(0, 1fr); }
+.hsg-side { background: #2c241c; color: #f4efe6; padding: 1.2rem 0.9rem 2rem; display: flex; flex-direction: column; gap: .35rem; }
+.hsg-side .brand { letter-spacing: .14em; text-transform: uppercase; font-size: .68rem; color: #e0a07a; font-weight: 700; margin: 0 0 .2rem .4rem; }
+.hsg-side .who { margin: 0 .4rem 1rem; font-size: .82rem; color: #d8cfc4; }
+.hsg-side a { display: flex; align-items: center; gap: .45rem; color: #efe6da; text-decoration: none; padding: .42rem .55rem; border-radius: .45rem; font-size: .86rem; }
+.hsg-side a.on, .hsg-side a:hover { background: #8c2f0d; color: #fffaf3; }
+.hsg-work { min-width: 0; }
+.hsg-top { display: flex; justify-content: space-between; gap: 1rem; padding: 1.2rem 1.5rem 0.4rem; align-items: flex-start; }
+.hsg-eyebrow { letter-spacing: .12em; text-transform: uppercase; font-size: .7rem; color: #8c2f0d; font-weight: 700; }
+.hsg-top h1 { margin: .2rem 0; font-family: Cambria, 'Palatino Linotype', serif; font-size: 1.65rem; }
+.hsg-top p { margin: 0; max-width: 44rem; color: #5c5148; }
+.hsg-main { padding: 0.6rem 1.5rem 2.5rem; display: grid; gap: 1rem; }
+.hsg-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .7rem; }
+.hsg-kpis article, .hsg-card { background: #fffaf3; border: 1px solid #e4d9cc; border-radius: .95rem; padding: .95rem 1.1rem; }
+.hsg-kpis span { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #7a6e64; }
+.hsg-kpis strong { font-size: 1.45rem; font-variant-numeric: tabular-nums; display: block; margin-top: .2rem; }
+.hsg-card h2 { display: flex; gap: .4rem; align-items: center; margin: 0 0 .8rem; font-size: 1.05rem; }
+.hsg-split { display: grid; gap: 1rem; }
+@media (min-width: 60rem) { .hsg-split { grid-template-columns: 1.35fr .85fr; } }
+.hsg-app table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.hsg-app th, .hsg-app td { text-align: left; padding: .4rem .3rem; border-bottom: 1px solid #efe6da; vertical-align: top; }
+.num, .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
+.hsg-form { display: grid; gap: .7rem; }
+@media (min-width: 40rem) { .hsg-form { grid-template-columns: 1fr 1fr; } .hsg-form h2, .hsg-form .full, .hsg-form .hsg-btn { grid-column: 1 / -1; } }
+.hsg-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .78rem; color: #5c5148; }
+.hsg-form input, .hsg-form select, .hsg-form textarea { border: 1px solid #d7cbbd; border-radius: .4rem; padding: .45rem .55rem; background: #fff; font: inherit; }
+.hsg-btn { background: #8c2f0d; color: #fffaf3; border: 0; border-radius: .55rem; padding: .55rem 1rem; cursor: pointer; justify-self: start; }
+.hsg-btn.ghost { background: #fffaf3; color: #8c2f0d; border: 1px solid #8c2f0d; }
+.link { background: none; border: 0; color: #8c2f0d; cursor: pointer; padding: 0 .45rem 0 0; font: inherit; }
+.mute { color: #7a6e64; }
+.hsg-banner { margin: 0 1.5rem .4rem; padding: .6rem .8rem; border-radius: .5rem; background: #e7f0e6; }
+.hsg-banner.neg { background: #f8e6dc; }
+.hsg-map-tools { display: flex; gap: 1rem; align-items: center; }
+.hsg-file { background: #fffaf3; border: 1px solid #e4d9cc; border-radius: 1rem; padding: 1rem 1.2rem; }
+.hsg-wards { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.hsg-wards li { display: flex; justify-content: space-between; border-bottom: 1px solid #efe6da; padding: .3rem 0; }
+.hsg-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .8rem; }
+.hsg-tiles a { display: block; background: #fffaf3; border: 1px solid #e4d9cc; border-radius: .9rem; padding: 1rem 1.1rem; color: inherit; text-decoration: none; }
+.hsg-tiles a:hover { border-color: #8c2f0d; }
+.hsg-tiles strong { display: block; margin-bottom: .3rem; }
+@media (max-width: 64rem) {
+  .hsg-app { grid-template-columns: 1fr; }
+  .hsg-side { flex-direction: row; flex-wrap: wrap; padding: .7rem; }
+  .hsg-side .who { margin: 0 1rem 0 auto; }
+}

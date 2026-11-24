@@ -77,6 +77,14 @@ const DESKS = {
 }
 function deskOf(role) {
   if (DESKS[role]) return { role, ...DESKS[role] }
+  if (role === 'engineer') {
+    return {
+      role,
+      title: 'District Engineer — stand servicing',
+      sections: ['overview', 'map'],
+      can: { ...Object.fromEntries(Object.keys(DESKS.housing_officer.can).map((k) => [k, false])), servicing: true },
+    }
+  }
   return {
     role,
     title: 'Housing registers (read only)',
@@ -89,6 +97,7 @@ function writers(...actions) {
   for (const [role, desk] of Object.entries(DESKS)) {
     if (actions.some((a) => desk.can[a])) roles.add(role)
   }
+  if (actions.includes('servicing')) roles.add('engineer')
   return [...roles]
 }
 const isUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)

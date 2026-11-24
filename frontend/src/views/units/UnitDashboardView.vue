@@ -67,6 +67,10 @@ const isChief = computed(() => auth.user?.role === 'accounting_officer')
 const MEMBER_LABEL: Record<string, string> = {
   civil_technician: 'Civil Engineering Technician', roads_foreman: 'Roads and Works Foreman/Technician', water_technician: 'Water and Sanitation Technician',
   housing_clerk: 'Housing Clerk',
+  housing_research: 'Housing Research Officer',
+  housing_area: 'Area Housing Officer',
+  housing_legal: 'Housing Legal Officer',
+  housing_committee: 'Allocations Committee member',
 }
 const roleLabel = computed(() => (isChief.value ? 'Chief Executive'
   : MEMBER_LABEL[auth.user?.role ?? ''] ?? (dash.value?.unit.post ?? 'Unit head')))
