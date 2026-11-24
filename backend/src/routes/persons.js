@@ -9,6 +9,8 @@
  *   POST  /api/persons                            register a person (search first: refused if the ID is already registered,
  *                                                and if a person with the same phone or name exists unless confirm_new)
  *   PATCH /api/persons/:id                        correct contact details; record that the identity document was seen
+ *   GET   /api/persons/me/records                 the signed-in resident's objections and cash-office receipts linked to them
+ *                                                (once their identity is verified, level 1)
  *   GET   /api/persons/unlinked                   applicants and objectors still recorded only as text
  *   PUT   /api/permit-applications/:id/applicant-person   link an application's applicant to the register
  *   PUT   /api/objections/:id/objector-person             link an objection's objector to the register
@@ -29,7 +31,8 @@
  * shown masked, revealed in full only to the posts that register people, and every reveal is logged.
  * Every query runs as the person asking (row-level security), so each council sees only its own register.
  */
-const { requireRole } = require('../middleware/jwtAuth')
+const { requireAuth, requireRole } = require('../middleware/jwtAuth')
+const { LINKED_RECORDS_MIN_LEVEL, linkedPersonId } = require('../lib/caseAccess')
 const assurance = require('../services/personAssurance')
 const registrarGeneral = require('../services/registrarGeneral')
 
@@ -265,6 +268,45 @@ async function personsRoutes(fastify) {
         ORDER BY recorded_at DESC LIMIT 200`, [role])
     const { rows: [t] } = await pg.query('SELECT count(*)::int AS n FROM registry.v_unlinked WHERE ($1::text IS NULL OR role = $1)', [role])
     return reply.send({ success: true, data: { total: t.n, records: rows } })
+  })
+
+  // The signed-in resident's own records that the council linked to them in the register: objections they made at the
+  // counter and payments at the cash office. (Applications lodged for them appear in their own list of applications,
+  // GET /permit-applications.) Shown only once their identity is verified (level 1, src/lib/caseAccess.js); below that
+  // the answer says why, and lists nothing.
+  fastify.get('/persons/me/records', { preHandler: requireAuth(fastify) }, async (request, reply) => {
+    const linked = await linkedPersonId(pg, request.user.id)
+    const { rows: [me] } = linked
+      ? await pg.query(
+        `SELECT id, assurance_level FROM registry.person WHERE id = $1 AND merged_into IS NULL AND status = 'active'`, [linked])
+      : { rows: [] }
+    const empty = { objections: [], receipts: [] }
+    if (!me) {
+      return reply.send({ success: true, data: { ...empty, level: null, shown: false, reason: 'not_in_register' } })
+    }
+    const level = { level: me.assurance_level, level_label: assurance.levelLabel(me.assurance_level) }
+    if (me.assurance_level < LINKED_RECORDS_MIN_LEVEL) {
+      return reply.send({ success: true, data: { ...empty, ...level, shown: false, reason: 'identity_not_verified' } })
+    }
+    const [objections, receipts] = await Promise.all([
+      pg.query(
+        `SELECT o.id, o.received_at, o.sustained, p.tpd_reference, p.stand_number
+           FROM spatial_planning.application_objection o JOIN spatial_planning.permit_application p ON p.id = o.permit_app_id
+          WHERE o.objector_person_id = $1 ORDER BY o.received_at DESC LIMIT 50`, [me.id]),
+      // What they paid at the cash office: their own payments, not what anyone owes (decision D13 is about arrears).
+      pg.query(
+        `SELECT r.id, r.receipt_no, r.amount, r.currency, r.received_on
+           FROM registry.receipt_payer x JOIN finance.cash_receipt r ON r.id = x.receipt_id
+          WHERE x.person_id = $1 ORDER BY r.received_on DESC LIMIT 50`, [me.id]),
+    ])
+    return reply.send({
+      success: true,
+      data: {
+        ...level, shown: true, reason: null,
+        objections: objections.rows,
+        receipts: receipts.rows.map((r) => ({ ...r, received_on: localDay(r.received_on) })),
+      },
+    })
   })
 
   fastify.get('/persons/:id', { preHandler: requireRole(fastify, READERS) }, async (request, reply) => {

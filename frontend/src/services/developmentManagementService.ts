@@ -56,6 +56,11 @@ export interface PermitApplication {
   description: string | null
   status: PermitStatus
   fee_paid: boolean
+  /**
+   * In a citizen's list: true when the council lodged this case for them at the counter (linked to their record in the
+   * register of persons), rather than they themselves online. Absent for staff.
+   */
+  lodged_for_you?: boolean
   received_at: string | null
   /** When the council acknowledged receipt — the start of the three-month clock (s.26(7)). */
   acknowledged_at?: string | null

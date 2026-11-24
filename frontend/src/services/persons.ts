@@ -137,7 +137,22 @@ export const MATCH_LABEL: Record<NonNullable<Person['match']>, string> = {
 /** A Zimbabwean national ID however written: 63-123456 X 27, 631234567x27. */
 export const looksLikeNationalId = (v: string) => /^[0-9]{2}[0-9]{6,7}[A-Z][0-9]{2}$/.test(v.replace(/[^A-Za-z0-9]/g, '').toUpperCase())
 
+/** The signed-in resident's own records linked to them in the register (GET /persons/me/records). */
+export interface MyLinkedRecords {
+  level: AssuranceLevel | null
+  level_label?: string
+  /** False below identity verified (level 1), or when the account is not in the register: nothing is listed, and reason says why. */
+  shown: boolean
+  reason: 'not_in_register' | 'identity_not_verified' | null
+  objections: { id: string; received_at: string; sustained: boolean | null; tpd_reference: string | null; stand_number: string | null }[]
+  receipts: { id: string; receipt_no: string; amount: string; currency: string; received_on: string }[]
+}
+
 export const personsApi = {
+  async myRecords(): Promise<MyLinkedRecords> {
+    const r = await api.get('/persons/me/records')
+    return r.data.data
+  },
   async search(q: string): Promise<Person[]> {
     const r = await api.get('/persons/search', { params: { q } })
     return r.data.data.persons

@@ -278,6 +278,7 @@ function downloadCasePdf() {
             <span class="pill" :class="statusMeta(p).cls">{{ statusMeta(p).label }}</span>
           </div>
           <h3 class="apps-item-title">{{ caseTitle(p) }}</h3>
+          <p v-if="p.lodged_for_you" class="apps-item-counter">Lodged for you at the council office</p>
           <p class="apps-item-loc"><MapPin :size="14" /> Stand {{ p.stand_number }} · {{ p.suburb_ward }}</p>
           <div class="apps-item-foot">
             <span class="apps-item-meta"><Calendar :size="13" /> {{ fmtDate(p.created_at) }}</span>
@@ -536,6 +537,7 @@ function downloadCasePdf() {
 .apps-ref { font-size:0.72rem; color:var(--cp-primary); font-weight:600; }
 .apps-item-title { margin:0; font-size:0.92rem; font-weight:600; color:var(--cp-text); text-transform:capitalize; }
 .apps-item-loc { display:flex; align-items:center; gap:0.3rem; margin:0.3rem 0 0; font-size:0.78rem; color:var(--cp-muted); }
+.apps-item-counter { margin:0.25rem 0 0; font-size:0.72rem; font-weight:600; color:var(--cp-muted); }
 .apps-item-foot { display:flex; align-items:center; gap:0.85rem; margin-top:0.75rem; padding-top:0.65rem; border-top:1px solid var(--cp-border); }
 .apps-item-meta { display:inline-flex; align-items:center; gap:0.25rem; font-size:0.7rem; color:var(--cp-faint); }
 .apps-item-action { margin-left:auto; padding:0.35rem 0.7rem; border:0; border-radius:var(--cp-radius-sm); font-size:0.74rem; font-weight:700; cursor:pointer;

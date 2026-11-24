@@ -9,6 +9,7 @@ import { useCitizenCase } from '@/composables/useCitizenCase'
 import { citizenPortalService } from '@/services/citizenPortalService'
 import { paymentsService, type Payment, type PaymentStatus } from '@/services/paymentsService'
 import type { PermitApplication } from '@/services/developmentManagementService'
+import { personsApi, type MyLinkedRecords } from '@/services/persons'
 import { AlertTriangle, Home, Info, ReceiptText, RefreshCw } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -18,6 +19,9 @@ const payments = ref<Payment[]>([])
 const loading = ref(false)
 const loadError = ref('')
 const applicationFee = ref<number | null>(null)
+// Payments made at the council's cash office, linked to this resident in the register of persons. Listed only once their
+// identity is verified (backend src/lib/caseAccess.js); null while loading or when the register cannot be reached.
+const office = ref<MyLinkedRecords | null>(null)
 
 async function load() {
   loading.value = true
@@ -32,6 +36,7 @@ async function load() {
 }
 onMounted(() => {
   load()
+  personsApi.myRecords().then(r => { office.value = r }).catch(() => { office.value = null })
   citizenPortalService.getCouncil()
     .then(c => { applicationFee.value = Number.isFinite(c.application_fee) ? c.application_fee : null })
     .catch(() => { /* fee line shows "confirmed at invoice" */ })
@@ -70,6 +75,9 @@ function amount(pay: Payment) {
   return pay.walletCcy === 'ZWG'
     ? `ZWG ${pay.amountZwg.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : `USD ${pay.amountUsd.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+function officeAmount(r: MyLinkedRecords['receipts'][number]) {
+  return `${r.currency} ${Number(r.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
@@ -150,6 +158,26 @@ function fmtDate(iso: string | null) {
                     <template v-else>Details</template>
                   </button>
                 </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Paid at the council office -->
+        <div v-if="office" class="cp-card">
+          <div class="cp-card-head between"><h2>Paid at the council office</h2><span v-if="office.shown">{{ office.receipts.length }}</span></div>
+          <div v-if="!office.shown" class="pay-empty">
+            <template v-if="office.reason === 'identity_not_verified'">Payments you make at the cash office appear here once your identity is verified. Upload your ID under Profile, or show it at the council office.</template>
+            <template v-else>Payments you make at the cash office appear here once the council has your record. Ask at the office.</template>
+          </div>
+          <div v-else-if="!office.receipts.length" class="pay-empty">No cash-office receipts are linked to you.</div>
+          <table v-else class="pay-table">
+            <thead><tr><th>Date</th><th>Receipt</th><th>Amount</th></tr></thead>
+            <tbody>
+              <tr v-for="r in office.receipts" :key="r.id">
+                <td class="pay-nowrap">{{ fmtDate(r.received_on) }}</td>
+                <td class="pay-mono-cell">{{ r.receipt_no }}</td>
+                <td class="pay-amount">{{ officeAmount(r) }}</td>
               </tr>
             </tbody>
           </table>
@@ -235,6 +263,7 @@ function fmtDate(iso: string | null) {
 .pay-amount { font-family:var(--cp-mono); white-space:nowrap; color:var(--cp-text); }
 .pay-nowrap { white-space:nowrap; color:var(--cp-text-2); }
 .pay-right { text-align:right; }
+.pay-mono-cell { font-family:var(--cp-mono); color:var(--cp-text-2); }
 .pay-link { display:inline-flex; align-items:center; gap:0.25rem; border:0; background:none; padding:0;
   color:var(--cp-primary); font-size:0.78rem; font-weight:600; cursor:pointer; }
 .pay-link:hover { text-decoration:underline; }
