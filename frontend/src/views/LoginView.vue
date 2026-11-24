@@ -256,12 +256,17 @@ const financeDemoAccounts: DemoAccount[] = showDemoLogins
       { label: 'Roads foreman', email: 'demo.roads-foreman@vungu.test',   password: 'demo1234', role: 'roads_foreman' },
       { label: 'Water tech',    email: 'demo.water-tech@vungu.test',      password: 'demo1234', role: 'water_technician' },
       { label: 'HR & Social',   email: 'demo.hr-social@vungu.test',       password: 'demo1234', role: 'hr_social_officer' },
-      { label: 'Housing',       email: 'demo.housing@vungu.test',         password: 'demo1234', role: 'housing_officer' },
-      { label: 'Housing clerk', email: 'demo.housing-clerk@vungu.test',   password: 'demo1234', role: 'housing_clerk' },
-      { label: 'Hsg research',  email: 'demo.housing-research@vungu.test', password: 'demo1234', role: 'housing_research' },
-      { label: 'Area housing',  email: 'demo.housing-area@vungu.test',    password: 'demo1234', role: 'housing_area' },
-      { label: 'Hsg legal',     email: 'demo.housing-legal@vungu.test',   password: 'demo1234', role: 'housing_legal' },
-      { label: 'Alloc. ctte',   email: 'demo.housing-committee@vungu.test', password: 'demo1234', role: 'housing_committee' },
+    ]
+  : []
+
+const housingDemoAccounts: DemoAccount[] = showDemoLogins
+  ? [
+      { label: 'Housing officer', email: 'demo.housing@vungu.test',           password: 'demo1234', role: 'housing_officer' },
+      { label: 'Housing clerk',   email: 'demo.housing-clerk@vungu.test',     password: 'demo1234', role: 'housing_clerk' },
+      { label: 'Research',       email: 'demo.housing-research@vungu.test',  password: 'demo1234', role: 'housing_research' },
+      { label: 'Area officer',   email: 'demo.housing-area@vungu.test',      password: 'demo1234', role: 'housing_area' },
+      { label: 'Legal',          email: 'demo.housing-legal@vungu.test',     password: 'demo1234', role: 'housing_legal' },
+      { label: 'Alloc. committee', email: 'demo.housing-committee@vungu.test', password: 'demo1234', role: 'housing_committee' },
     ]
   : []
 
@@ -382,6 +387,16 @@ function fillDemo(account: DemoAccount) {
         <div class="auth-demo-grid">
           <button
             v-for="d in financeDemoAccounts"
+            :key="d.email"
+            type="button"
+            class="auth-demo-pill"
+            @click="fillDemo(d)"
+          >{{ d.label }}</button>
+        </div>
+        <p class="auth-demo-group">Housing and Estates</p>
+        <div class="auth-demo-grid">
+          <button
+            v-for="d in housingDemoAccounts"
             :key="d.email"
             type="button"
             class="auth-demo-pill"
