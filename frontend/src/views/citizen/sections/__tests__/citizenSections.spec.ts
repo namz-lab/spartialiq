@@ -139,6 +139,13 @@ describe('ApplicationsSection case detail', () => {
     expect(text).toContain('Documents requested')
   })
 
+  it('marks a case the council lodged for the resident at the counter', async () => {
+    applications.value = [{ ...permit, lodged_for_you: true }, { ...permit, id: 'P2', lodged_for_you: false }]
+    const { w } = await mountWith(ApplicationsSection)
+    expect(w.findAll('.apps-item-counter')).toHaveLength(1)
+    expect(w.text()).toContain('Lodged for you at the council office')
+  })
+
   it('uploads a document straight to the case file', async () => {
     dmApi.uploadPermitDocument.mockResolvedValue({ id: 'D2', doc_type: 'site_plan', file_name: 'site.pdf', uploaded_at: '2026-09-05T00:00:00Z' })
     const { w } = await mountWith(ApplicationsSection)
@@ -199,6 +206,32 @@ describe('PaymentsSection', () => {
     await w.find('.pay-table .pay-link').trigger('click')
     await flushPromises()
     expect(r.currentRoute.value.fullPath).toBe('/payment/PAY1')
+  })
+
+  it('lists payments made at the cash office once the resident is verified', async () => {
+    getCouncil.mockResolvedValue({ name: 'Vungu RDC', application_fee: 25 })
+    listMine.mockResolvedValue([])
+    apiGet.mockImplementation((url: string) => Promise.resolve(url === '/persons/me/records'
+      ? { data: { data: { level: 1, shown: true, reason: null, objections: [],
+          receipts: [{ id: 'R1', receipt_no: 'CR-2026-000123', amount: '40.00', currency: 'USD', received_on: '2026-10-01' }] } } }
+      : { data: { data: [] } }))
+    const { w } = await mountWith(PaymentsSection)
+    const text = w.text()
+    expect(apiGet).toHaveBeenCalledWith('/persons/me/records')
+    expect(text).toContain('Paid at the council office')
+    expect(text).toContain('CR-2026-000123')
+    expect(text).toContain('USD 40.00')
+  })
+
+  it('explains why cash-office payments are not listed before the identity is verified', async () => {
+    getCouncil.mockResolvedValue({ name: 'Vungu RDC', application_fee: 25 })
+    listMine.mockResolvedValue([])
+    apiGet.mockImplementation((url: string) => Promise.resolve(url === '/persons/me/records'
+      ? { data: { data: { level: 0, shown: false, reason: 'identity_not_verified', objections: [], receipts: [] } } }
+      : { data: { data: [] } }))
+    const { w } = await mountWith(PaymentsSection)
+    expect(w.text()).toContain('once your identity is verified')
+    expect(w.text()).not.toContain('CR-')
   })
 
   it('shows a retry when history fails to load', async () => {

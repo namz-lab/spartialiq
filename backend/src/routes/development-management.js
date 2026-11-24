@@ -54,6 +54,7 @@ const path = require('path')
 const crypto = require('crypto')
 const { requireAuth, requireRole, optionalAuth } = require('../middleware/jwtAuth')
 const { tenantPool } = require('../lib/tenancy')
+const { personOfUser, ownsCase } = require('../lib/caseAccess')
 const notifier = require('../services/notifier')
 const { canTransition, allowedTransitions } = require('../config/permitWorkflow')
 const { scanBuffer } = require('../services/malwareScan')
@@ -503,6 +504,7 @@ async function developmentManagementRoutes(fastify) {
     const { status, development_type, search, limit = 50, offset = 0 } = request.query
     const isStaff = STAFF_ROLES.includes(request.user.role)
     const ownerFilter = isStaff ? null : request.user.id
+    const ownerPerson = isStaff ? null : await personOfUser(pg, request)
     const includePending = isStaff && request.query.includePendingPayment === 'true'
     const pageLimit = Math.min(Number(limit) || 50, 200)
     const pageOffset = Math.max(Number(offset) || 0, 0)
@@ -525,7 +527,9 @@ async function developmentManagementRoutes(fastify) {
                 p.applicant_phone, p.applicant_email,
                 p.acknowledged_at, p.statutory_due_date, p.assigned_to,
                 p.recommendation, p.classification,
-                (p.fee_paid_at IS NOT NULL) AS fee_paid
+                (p.fee_paid_at IS NOT NULL) AS fee_paid,
+                -- For a citizen: true when the council lodged this case for them (at the counter), not they themselves.
+                ($6::uuid IS NOT NULL AND v.created_by IS DISTINCT FROM $6) AS lodged_for_you
            FROM spatial_planning.v_application_summary v
            JOIN spatial_planning.permit_application p ON p.id = v.id
          WHERE ($1::text IS NULL OR v.status = $1)
@@ -537,15 +541,18 @@ async function developmentManagementRoutes(fastify) {
                  OR v.dev_register_no ILIKE '%' || $3 || '%'
                  OR v.suburb_ward ILIKE '%' || $3 || '%'
                ))
-           AND ($6::uuid IS NULL OR v.created_by = $6)
+           -- A citizen sees the cases they lodged, and those lodged for them at the counter once their identity is
+           -- verified (src/lib/caseAccess.js).
+           AND ($6::uuid IS NULL OR v.created_by = $6 OR ($8::uuid IS NOT NULL AND p.applicant_person_id = $8))
            AND ($7::boolean = true
                 OR v.created_by = COALESCE($6, '00000000-0000-0000-0000-000000000000'::uuid)
+                OR ($8::uuid IS NOT NULL AND p.applicant_person_id = $8)
                 OR v.status <> 'pending_payment')
          ORDER BY v.received_at DESC NULLS LAST
          LIMIT $4 OFFSET $5`,
         [status || null, development_type || null, search || null,
          pageLimit, pageOffset,
-         ownerFilter, includePending],
+         ownerFilter, includePending, ownerPerson],
       )
       const total = rows.length ? Number(rows[0].total_count) : 0
       return reply.send({
@@ -577,7 +584,7 @@ async function developmentManagementRoutes(fastify) {
         return reply.code(404).send({ success: false, error: 'not_found' })
       }
       const isStaff = STAFF_ROLES.includes(request.user.role)
-      if (!isStaff && rows[0].created_by !== request.user.id) {
+      if (!isStaff && !ownsCase(rows[0], request, await personOfUser(pg, request))) {
         // 404 not 403 so we don't leak the existence of someone else's row.
         return reply.code(404).send({ success: false, error: 'not_found' })
       }
@@ -599,10 +606,10 @@ async function developmentManagementRoutes(fastify) {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     try {
       const { rows: permit } = await db(request).query(
-        'SELECT id, created_by, parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1',
+        'SELECT id, created_by, applicant_person_id, parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1',
         [request.params.id])
       if (!permit[0]) return reply.code(404).send({ success: false, error: 'not_found' })
-      if (!STAFF_ROLES.includes(request.user.role) && permit[0].created_by !== request.user.id) {
+      if (!STAFF_ROLES.includes(request.user.role) && !ownsCase(permit[0], request, await personOfUser(pg, request))) {
         return reply.code(404).send({ success: false, error: 'not_found' })
       }
       const { rows } = await db(request).query(
@@ -663,9 +670,9 @@ async function developmentManagementRoutes(fastify) {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     try {
       const { rows: [permit] } = await db(request).query(
-        `SELECT id, created_by, parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1`, [request.params.id])
+        `SELECT id, created_by, applicant_person_id, parcel_layer, parcel_id, parcel_match, plan_instrument_id FROM spatial_planning.permit_application WHERE id = $1`, [request.params.id])
       if (!permit) return reply.code(404).send({ success: false, error: 'not_found' })
-      if (!STAFF_ROLES.includes(request.user.role) && permit.created_by !== request.user.id) return reply.code(404).send({ success: false, error: 'not_found' })
+      if (!STAFF_ROLES.includes(request.user.role) && !ownsCase(permit, request, await personOfUser(pg, request))) return reply.code(404).send({ success: false, error: 'not_found' })
       const out = { permit_id: permit.id, match: permit.parcel_match, parcel: null, plans: [], assessment: null }
       if (!permit.parcel_id) return reply.send({ success: true, data: out })
 
@@ -882,11 +889,11 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await db(request).query(
@@ -1106,11 +1113,11 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await db(request).query(
@@ -1257,11 +1264,11 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await db(request).query(
@@ -1315,10 +1322,10 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await db(request).query(
@@ -1537,11 +1544,11 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     // Citizens (non-staff) only see messages addressed to them or made public.
@@ -1815,11 +1822,11 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await db(request).query(
@@ -1841,7 +1848,7 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const { rows } = await db(request).query(
-      `SELECT d.*, pa.created_by AS permit_created_by
+      `SELECT d.*, pa.created_by AS permit_created_by, pa.applicant_person_id AS permit_applicant_person_id
          FROM spatial_planning.generated_document d
          JOIN spatial_planning.permit_application pa ON pa.id = d.permit_app_id
         WHERE d.id = $1`,
@@ -1849,11 +1856,12 @@ async function developmentManagementRoutes(fastify) {
     )
     if (!rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && rows[0].permit_created_by !== request.user.id) {
+    if (!isStaff && !ownsCase({ created_by: rows[0].permit_created_by, applicant_person_id: rows[0].permit_applicant_person_id }, request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const doc = rows[0]
     delete doc.permit_created_by
+    delete doc.permit_applicant_person_id
     return reply.send({ success: true, data: doc })
   })
 
@@ -2132,11 +2140,11 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await db(request).query(
@@ -2272,11 +2280,11 @@ async function developmentManagementRoutes(fastify) {
   }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await db(request).query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await db(request).query(
@@ -2491,7 +2499,7 @@ async function developmentManagementRoutes(fastify) {
       // not exist (or is not yours), so a missing route and a building still
       // under construction no longer look identical to the caller.
       const permit = await db(request).query(
-        'SELECT id, created_by FROM spatial_planning.permit_application WHERE id = $1',
+        'SELECT id, created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1',
         [request.params.id],
       )
       if (!permit.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
@@ -2499,7 +2507,7 @@ async function developmentManagementRoutes(fastify) {
       // GET /permit-applications/:id — 404 rather than 403 so the existence of
       // someone else's case is not disclosed.
       const isStaff = STAFF_ROLES.includes(request.user.role)
-      if (!isStaff && permit.rows[0].created_by !== request.user.id) {
+      if (!isStaff && !ownsCase(permit.rows[0], request, await personOfUser(pg, request))) {
         return reply.code(404).send({ success: false, error: 'not_found' })
       }
       const { rows } = await db(request).query(
@@ -2533,7 +2541,7 @@ async function developmentManagementRoutes(fastify) {
       return null
     }
     const { rows } = await db(request).query(
-      'SELECT id, created_by, status FROM spatial_planning.permit_application WHERE id = $1',
+      'SELECT id, created_by, applicant_person_id, status FROM spatial_planning.permit_application WHERE id = $1',
       [request.params.id],
     )
     const permit = rows[0]
@@ -2542,7 +2550,7 @@ async function developmentManagementRoutes(fastify) {
       return null
     }
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && permit.created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(permit, request, await personOfUser(pg, request))) {
       reply.code(404).send({ success: false, error: 'not_found' })
       return null
     }
@@ -3064,10 +3072,10 @@ async function developmentManagementRoutes(fastify) {
   fastify.get('/permit-applications/:id/meetings', { preHandler: requireRole(fastify, PERMIT_READERS) }, async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ success: false, error: 'bad_id' })
     const ownRow = await pg.query(
-      'SELECT created_by FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
+      'SELECT created_by, applicant_person_id FROM spatial_planning.permit_application WHERE id = $1', [request.params.id])
     if (!ownRow.rows[0]) return reply.code(404).send({ success: false, error: 'not_found' })
     const isStaff = STAFF_ROLES.includes(request.user.role)
-    if (!isStaff && ownRow.rows[0].created_by !== request.user.id) {
+    if (!isStaff && !ownsCase(ownRow.rows[0], request, await personOfUser(pg, request))) {
       return reply.code(404).send({ success: false, error: 'not_found' })
     }
     const { rows } = await pg.query(
