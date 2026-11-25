@@ -30,6 +30,22 @@ async function allocate() {
     await load()
   } catch (e: any) { err.value = e?.response?.data?.message || 'The stand could not be allocated.' }
 }
+
+async function issueOffer(id: string) {
+  try {
+    await housingApi.issueOffer(id)
+    banner.value = 'Offer issued.'
+    await load()
+  } catch (e: any) { err.value = e?.response?.data?.message }
+}
+
+async function signAgreement(id: string) {
+  try {
+    await housingApi.signAgreement({ allocation_id: id })
+    banner.value = 'Agreement signed.'
+    await load()
+  } catch (e: any) { err.value = e?.response?.data?.message }
+}
 </script>
 
 <template>
@@ -64,8 +80,8 @@ async function allocate() {
             <td>{{ a.allottee_name }}</td><td class="mono">{{ a.list_no }}</td><td>{{ a.status }}</td>
             <td>{{ a.deposit_receipt_id ? 'paid' : (a.deposit_due ? 'owing' : '—') }}</td>
             <td>
-              <button v-if="desk?.can.offer" type="button" class="link" @click="housingApi.issueOffer(a.id).then(() => { banner = 'Offer issued.'; load() })">Offer letter</button>
-              <button v-if="desk?.can.agreement" type="button" class="link" @click="housingApi.signAgreement({ allocation_id: a.id }).then(() => { banner = 'Agreement signed.'; load() }).catch((e: any) => { err = e?.response?.data?.message })">Agreement of sale</button>
+              <button v-if="desk?.can.offer" type="button" class="link" @click="issueOffer(a.id)">Offer letter</button>
+              <button v-if="desk?.can.agreement" type="button" class="link" @click="signAgreement(a.id)">Agreement of sale</button>
             </td>
           </tr>
         </tbody>

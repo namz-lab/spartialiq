@@ -223,7 +223,7 @@ async function goHome() {
   const dest = redirectTo.value
   if (dest) {
     const allowed = router.resolve(dest).meta?.roles
-    if (!allowed || (u?.role && allowed.includes(u.role))) {
+    if (!allowed || (u?.role && allowed.includes(u.role as Role))) {
       await router.push(dest)
       return
     }

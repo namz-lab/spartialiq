@@ -2,7 +2,7 @@
 FROM node:22-bookworm-slim AS web
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 # The Cloudflare Turnstile SITE key (public; it is in every page) is built into the app, so it must reach
 # this stage. Render passes a service's environment variables to a Docker build only as declared ARGs:
@@ -12,7 +12,10 @@ ARG VITE_TURNSTILE_SITE_KEY
 ENV VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
 ENV VITE_ALLOW_DEMO_LOGIN=1
 ENV DISABLE_PWA=1
-ENV NODE_OPTIONS=--max-old-space-size=2048
+ENV NODE_ENV=production
+# Cap the heap below a typical 2 GiB Render builder. 2048 left no room for npm/vite
+# native memory, so the kernel SIGKILL'd the step and the dashboard said BUILD FAILED.
+ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm run build:fast
 
 FROM node:22-bookworm-slim

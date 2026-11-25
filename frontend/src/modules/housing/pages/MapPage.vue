@@ -15,6 +15,10 @@ watch(selected, async (id) => {
   if (!id) { stand.value = null; return }
   try { stand.value = await housingApi.stand(id) } catch { stand.value = null }
 })
+
+function onSelect(id: string) {
+  selected.value = id
+}
 </script>
 
 <template>
@@ -28,7 +32,7 @@ watch(selected, async (id) => {
       </label>
       <p class="mute">Click a stand. Housing, rates and planning files are the same parcel.</p>
     </div>
-    <HousingMap :township="township" :selected="selected" @select="(id: string) => selected = id" />
+    <HousingMap :township="township" :selected="selected" @select="onSelect" />
     <aside v-if="stand" class="hsg-file">
       <h2>Stand {{ stand.stand.stand_no }}</h2>
       <p>{{ stand.stand.township_code }} · {{ stand.stand.map_status }} · {{ Number(stand.stand.area_m2).toFixed(0) }} m²</p>

@@ -51,8 +51,8 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Vite only. vue-tsc OOMs on this tree and is not needed to ship the SPA.
+RUN npm run build:fast
 
 # Production stage
 FROM nginx:alpine AS production
